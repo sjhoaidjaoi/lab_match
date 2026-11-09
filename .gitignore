@@ -1,0 +1,30 @@
+# 依赖与构建产物
+node_modules/
+dist/
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# 日志与临时文件
+*.log
+logs/
+.tmp/
+tmp/
+uploads/
+.screenshots/
+
+# IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+
+# 本地环境
+.env
+.env.local
+.env.*.local
+
+# 系统文件
+.DS_Store
+Thumbs.db
