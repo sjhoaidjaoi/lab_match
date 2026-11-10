@@ -28,8 +28,8 @@ export const ROLE_LABELS: Record<string, string> = {
 }
 
 export const ROLE_HOME: Record<string, string> = {
-  STUDENT: '/student',
-  LAB_TEACHER: '/teacher',
-  LAB_LEADER: '/leader',
-  COLLEGE_ADMIN: '/admin'
+  STUDENT: '/student/dashboard',
+  LAB_TEACHER: '/teacher/dashboard',
+  LAB_LEADER: '/leader/dashboard',
+  COLLEGE_ADMIN: '/college/dashboard'
 }

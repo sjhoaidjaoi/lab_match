@@ -27,7 +27,7 @@ service.interceptors.request.use((config) => {
 service.interceptors.response.use(
   (response) => {
     const body = response.data as Result<unknown>
-    if (body && body.code === 'OK') {
+    if (body && (body.code === 200 || body.code === 'OK')) {
       // 拦截器统一解包业务数据，调用方通过 http.get<T>() 得到 T
       return body.data as unknown as typeof response
     }

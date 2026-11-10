@@ -1,6 +1,6 @@
 // ========== 统一响应 + 用户/角色类型 ==========
 export interface Result<T> {
-  code: string
+  code: string | number
   message: string
   data: T
 }
