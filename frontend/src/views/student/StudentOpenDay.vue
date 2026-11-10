@@ -6,14 +6,13 @@
       <p class="page-desc">开放日期间线上沉浸式参观实训室环境与设备，配合线下开放日安排了解实训条件。</p>
     </div>
 
-    <el-card v-if="openDays.length > 0" shadow="never" class="panel schedule">
-      <template #header><span class="panel-title">开放日安排</span></template>
+    <el-card shadow="never" class="panel schedule">
+      <template #header><span class="panel-title">开放日时间</span></template>
       <div class="schedule-list">
-        <div v-for="day in openDays" :key="day.id" class="schedule-item">
-          <span class="date">{{ day.dateAt }}</span>
-          <span>{{ day.startTime }} - {{ day.endTime }}</span>
-          <span class="muted">{{ day.location }}</span>
-          <span v-if="day.note" class="muted note">{{ day.note }}</span>
+        <div class="schedule-item">
+          <span class="date">阶段二 · 实训室开放日</span>
+          <span>由学院统一设置开放日日期</span>
+          <span class="muted">开放日期间可前往各实训室实地参观，同时通过本页面 720° 全景云游沉浸式浏览</span>
         </div>
       </div>
     </el-card>
@@ -63,13 +62,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { mediaApi } from '@/api/media'
-import { catalogApi } from '@/api/catalog'
 import PanoramaViewer from '@/components/media/PanoramaViewer.vue'
-import type { OpenDayItem, PanoramaItem } from '@/types'
+import type { PanoramaItem } from '@/types'
 
 const loading = ref(false)
 const panoramas = ref<PanoramaItem[]>([])
-const openDays = ref<OpenDayItem[]>([])
 const active = ref<PanoramaItem | null>(null)
 const dialogVisible = ref(false)
 
@@ -93,12 +90,7 @@ function openExternal(item: PanoramaItem) {
 onMounted(async () => {
   loading.value = true
   try {
-    const [panoList, days] = await Promise.all([
-      mediaApi.panoramas(),
-      catalogApi.openDays().catch(() => [] as OpenDayItem[])
-    ])
-    panoramas.value = panoList
-    openDays.value = days
+    panoramas.value = await mediaApi.panoramas()
   } finally {
     loading.value = false
   }

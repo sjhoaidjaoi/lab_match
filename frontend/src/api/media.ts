@@ -8,7 +8,7 @@ import type {
 
 /**
  * 阶段一宣讲视频 / 阶段二 720° 全景云游。
- * 学生端接口只返回已发布资源；admin 系列需要 COLLEGE_ADMIN 或 LAB_HEAD 角色。
+ * 学生端接口只返回已发布资源；admin 系列需要 COLLEGE_ADMIN 或 LAB_LEADER 角色。
  */
 export const mediaApi = {
   videos: (labId?: number) => http.get<VideoItem[]>('/media/videos', labId ? { labId } : undefined),

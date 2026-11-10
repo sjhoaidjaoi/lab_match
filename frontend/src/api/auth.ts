@@ -2,7 +2,7 @@ import { http } from './request'
 import type { LoginResponse, MeResponse } from '@/types'
 
 export interface LoginPayload {
-  loginName: string
+  username: string
   password: string
 }
 
@@ -11,6 +11,5 @@ export const authApi = {
   me: () => http.get<MeResponse>('/auth/me'),
   switchRole: (roleCode: string) => http.post<LoginResponse>('/auth/switch-role', { roleCode }),
   logout: () => http.post<void>('/auth/logout'),
-  changePassword: (oldPassword: string, newPassword: string) =>
-    http.post<void>('/auth/change-password', { oldPassword, newPassword })
+  users: () => http.get<unknown[]>('/auth/users')
 }

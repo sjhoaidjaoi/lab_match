@@ -33,8 +33,8 @@
         <p class="form-sub">学生、导师、负责人与学院管理员使用同一入口</p>
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @keyup.enter="submit">
-          <el-form-item label="学号 / 工号" prop="loginName">
-            <el-input v-model="form.loginName" size="large" placeholder="请输入学号或工号" clearable>
+          <el-form-item label="学号 / 工号" prop="username">
+            <el-input v-model="form.username" size="large" placeholder="请输入学号或工号" clearable>
               <template #prefix><el-icon><User /></el-icon></template>
             </el-input>
           </el-form-item>
@@ -53,12 +53,12 @@
           <div class="demo-list">
             <el-tag
               v-for="account in demoAccounts"
-              :key="account.loginName"
+              :key="account.username"
               class="demo-tag"
               effect="plain"
-              @click="fill(account.loginName)"
+              @click="fill(account.username)"
             >
-              {{ account.label }} · {{ account.loginName }}
+              {{ account.label }} · {{ account.username }}
             </el-tag>
           </div>
         </div>
@@ -82,24 +82,24 @@ const auth = useAuthStore()
 const formRef = ref<FormInstance>()
 
 const form = reactive({
-  loginName: '2022001',
+  username: '2022001',
   password: '123456'
 })
 
 const rules: FormRules = {
-  loginName: [{ required: true, message: '请输入学号或工号', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入学号或工号', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
 }
 
 const demoAccounts = [
-  { label: '学生', loginName: '2022001' },
-  { label: '导师', loginName: 'T1001' },
-  { label: '负责人', loginName: 'T1000' },
-  { label: '学院管理员', loginName: 'admin' }
+  { label: '学生',       username: '2022001' },
+  { label: '实训室教师', username: 'T1001' },
+  { label: '实训室组长', username: 'L001' },
+  { label: '学院管理员', username: 'admin' }
 ]
 
-function fill(loginName: string) {
-  form.loginName = loginName
+function fill(username: string) {
+  form.username = username
   form.password = '123456'
 }
 
@@ -107,8 +107,8 @@ async function submit() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
   try {
-    const data = await auth.login({ loginName: form.loginName, password: form.password })
-    ElMessage.success(`欢迎回来，${data.user.name}`)
+    const data = await auth.login({ username: form.username, password: form.password })
+    ElMessage.success(`欢迎回来，${data.user.realName}`)
     router.replace(ROLE_HOME[data.activeRole] || '/')
   } catch {
     // 错误提示由请求拦截器统一处理

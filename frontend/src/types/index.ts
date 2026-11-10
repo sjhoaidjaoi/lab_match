@@ -1,3 +1,4 @@
+// ========== 统一响应 + 用户/角色类型 ==========
 export interface Result<T> {
   code: string
   message: string
@@ -6,20 +7,20 @@ export interface Result<T> {
 
 export interface UserInfo {
   id: number
-  loginName: string
-  name: string
+  username: string
+  realName: string
+  /** 兼容旧代码的别名 */
+  name?: string
+  studentNumber?: string | null
+  /** 兼容旧代码 */
   studentNo?: string
-  employeeNo?: string
-  phone?: string
-  email?: string
-  mustChangePassword?: boolean
+  role: string
+  phone?: string | null
 }
 
 export interface RoleInfo {
   roleCode: string
   roleName: string
-  scopeType: string
-  scopeId?: number
 }
 
 export interface LoginResponse {
@@ -36,142 +37,152 @@ export interface MeResponse {
 }
 
 export interface StageInfo {
-  stage: number
-  name: string
-  status: string
-  startAt?: string
-  endAt?: string
-  roundNo?: number
-}
-
-export interface RoundInfo {
   id: number
-  cycleId: number
-  roundNo: number
-  status: string
-  applyStart?: string
-  applyEnd?: string
-  interviewStart?: string
-  interviewEnd?: string
-  confirmStart?: string
-  confirmEnd?: string
+  batchId: number
+  stageNumber: number
+  stageName: string
+  stageKey: string
+  startTime: string
+  endTime: string
+  stageStatus: string
+  description?: string
 }
 
-export interface CycleInfo {
+export interface BatchInfo {
   id: number
-  name: string
-  cycleYear: number
+  batchName: string
+  academicYear: string
+  description?: string
   status: string
-  currentRound: number
-  announceAt?: string
-  openDayStart?: string
-  openDayEnd?: string
-  adjustStart?: string
-  adjustEnd?: string
-  publicityStart?: string
-  publicityEnd?: string
-}
-
-export interface CycleDetail {
-  cycle: CycleInfo | null
-  rounds: RoundInfo[]
-  stage: StageInfo
+  createdAt: string
+  stages?: StageInfo[]
+  currentStage?: { no: number; name: string; key: string } | null
 }
 
 export interface LabView {
   id: number
   name: string
-  department?: string
-  leaderName?: string
-  directions?: string
-  totalQuota: number
-  remaining: number
-  mentorCount: number
+  description?: string
+  projectDirection?: string
+  technologyStack?: string
+  recruitmentQuota: number
+  leaderId?: number | null
+  leaderName?: string | null
+  introductionVideo?: string | null
+  panoramicResource?: string | null
   status: string
+  createdAt?: string
 }
 
-export interface MentorView {
+export interface PreferenceItem {
   id: number
-  userId: number
-  name: string
-  title?: string
-  direction?: string
-  labId: number
-  labName?: string
-  quota: number
-  used: number
-  reserved: number
-  available: number
-}
-
-export interface IntentView {
-  mentorId: number
-  mentorName?: string
-  labId: number
-  labName?: string
-  direction?: string
-  available?: number
-}
-
-export interface ApplicationView {
-  id?: number
-  cycleId: number
-  round: number
+  batchId: number
+  studentId: number
+  laboratoryId: number
+  laboratoryName?: string
+  obeyInternalAdjustment: boolean
+  obeyCollegeAdjustment: boolean
+  submittedAt: string
   status: string
-  submittedAt?: string
-  receiptNo?: string
-  acceptL1: boolean
-  acceptL2: boolean
-  editable: boolean
-  applyEnd?: string
-  intents: IntentView[]
+}
+
+export interface InterviewItem {
+  id: number
+  batchId: number
+  studentId: number
+  studentName?: string
+  studentNumber?: string
+  laboratoryId: number
+  interviewerId: number
+  interviewerName?: string
+  interviewTime: string
+  interviewStatus: string
+  attitudeScore?: number | null
+  logicScore?: number | null
+  programmingScore?: number | null
+  timeCommitmentScore?: number | null
+  comprehensiveScore?: number | null
+  evaluation?: string
+  recommendation?: string
+  createdAt?: string
+}
+
+export interface AdmissionItem {
+  id: number
+  batchId: number
+  studentId: number
+  laboratoryId: number
+  laboratoryName?: string
+  admissionType: string
+  status: string
+  confirmationDeadline?: string | null
+  confirmedAt?: string | null
+}
+
+export interface AdjustmentItem {
+  id: number
+  batchId: number
+  studentId: number
+  studentName?: string
+  sourceLaboratoryId?: number | null
+  targetLaboratoryId: number
+  targetLabName?: string
+  adjustmentType: string
+  priorityLevel: number
+  reason?: string
+  operatorId: number
+  status: string
+  createdAt: string
+}
+
+export interface FinalAdmissionItem {
+  id: number
+  batchId: number
+  studentId: number
+  studentName?: string
+  studentNumber?: string
+  laboratoryId: number
+  admissionSource: string
+  finalStatus: string
+  confirmedAt: string
 }
 
 export interface AnnouncementItem {
   id: number
-  title: string
-  type: string
-  content?: string
-  publishAt?: string
-}
-
-export interface OpenDayItem {
-  id: number
-  labId: number
-  dateAt: string
-  startTime?: string
-  endTime?: string
-  location?: string
-  note?: string
-}
-
-export interface NotificationItem {
-  id: number
+  batchId?: number | null
   title: string
   content?: string
-  type?: string
-  isRead: boolean
+  status: string
+  createdBy?: number | null
   createdAt?: string
 }
 
-export interface PageResult<T> {
-  records: T[]
-  total: number
-  page: number
-  size: number
+export interface NoticeItem {
+  id: number
+  targetRole?: string | null
+  targetUserId?: number | null
+  title: string
+  content?: string
+  read: boolean
+  createdBy?: number | null
+  createdAt?: string
 }
 
-/** 集中宣讲视频（阶段一） */
+/** 阶段一宣讲视频 */
 export interface VideoItem {
   id: number
-  labId: number
+  laboratoryId: number
+  /** 兼容旧代码 */
+  labId?: number
+  laboratoryName?: string
+  /** 兼容旧代码 */
   labName?: string
   title: string
   description?: string
   videoType: string
   videoUrl: string
-  coverUrl?: string
-  durationSeconds?: number
+  coverUrl?: string | null
+  durationSeconds?: number | null
   sortNo: number
   status: string
   createdAt?: string
@@ -180,37 +191,45 @@ export interface VideoItem {
 /** 720° 全景云游（阶段二） */
 export interface PanoramaItem {
   id: number
-  labId: number
+  laboratoryId: number
+  /** 兼容旧代码 */
+  labId?: number
+  laboratoryName?: string
+  /** 兼容旧代码 */
   labName?: string
   name: string
   description?: string
   panoramaType: string
   panoramaUrl: string
-  coverUrl?: string
+  coverUrl?: string | null
   sortNo: number
   status: string
   createdAt?: string
 }
 
 export interface VideoPayload {
-  labId: number
+  laboratoryId?: number
+  /** 兼容旧代码（两者都可以，labId 存在时 laboratoryId 会在 API 层自动映射） */
+  labId?: number
   title: string
   description?: string
   videoType: string
   videoUrl: string
-  coverUrl?: string
-  durationSeconds?: number
-  sortNo: number
-  status: string
+  coverUrl?: string | null
+  durationSeconds?: number | null
+  sortNo?: number
+  status?: string
 }
 
 export interface PanoramaPayload {
-  labId: number
+  laboratoryId?: number
+  /** 兼容旧代码 */
+  labId?: number
   name: string
   description?: string
   panoramaType: string
   panoramaUrl: string
-  coverUrl?: string
-  sortNo: number
-  status: string
+  coverUrl?: string | null
+  sortNo?: number
+  status?: string
 }

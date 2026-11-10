@@ -6,13 +6,14 @@ target/
 *.jar
 !.mvn/wrapper/maven-wrapper.jar
 
-# 日志与临时文件
+# 临时文件
 *.log
 logs/
 .tmp/
 tmp/
 uploads/
 .screenshots/
+backend/data/.store.json
 
 # IDE
 .idea/

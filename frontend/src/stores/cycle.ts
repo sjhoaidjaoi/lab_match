@@ -1,24 +1,31 @@
 import { defineStore } from 'pinia'
 import { catalogApi } from '@/api/catalog'
-import type { CycleDetail } from '@/types'
+import type { BatchInfo, StageInfo } from '@/types'
 
 export const useCycleStore = defineStore('cycle', {
   state: () => ({
-    detail: null as CycleDetail | null,
+    batch: null as BatchInfo | null,
     loading: false,
     loaded: false
   }),
   getters: {
-    stage: (state) => state.detail?.stage ?? null,
-    cycle: (state) => state.detail?.cycle ?? null,
-    currentRound: (state) => state.detail?.cycle?.currentRound ?? 1
+    stages: (state): StageInfo[] => state.batch?.stages ?? [],
+    currentStage: (state): StageInfo | undefined =>
+      state.batch?.stages?.find((s) => s.stageStatus === 'IN_PROGRESS') ??
+      state.batch?.stages?.find((s) => s.stageStatus === 'NOT_STARTED'),
+    // --- 兼容旧组件的 getter ---
+    /** 当前活跃批次（别名） */
+    cycle: (state) => state.batch,
+    /** 当前阶段（别名） */
+    stage(): unknown { return this.currentStage ?? null },
+    currentRound: () => 1
   },
   actions: {
     async load(force = false) {
       if (this.loading || (this.loaded && !force)) return
       this.loading = true
       try {
-        this.detail = await catalogApi.currentCycle()
+        this.batch = await catalogApi.currentBatch()
         this.loaded = true
       } finally {
         this.loading = false

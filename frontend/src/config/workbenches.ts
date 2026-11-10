@@ -10,53 +10,55 @@ export interface WorkbenchConfig {
   cards: WorkbenchCard[]
 }
 
+// 工作台上的推荐卡片（按当前角色展示）
+// 路径与 router/index.ts 对齐；标题与文档 4.2 ~ 4.5 节一致
+
 export const workbenches: Record<string, WorkbenchConfig> = {
   STUDENT: {
     title: '学生工作台',
     subtitle: '查看选拔进度、完成意向填报与录取确认',
     cards: [
-      { title: '公告与导师目录', desc: '查看宣讲通知、开放日安排与导师方向', path: '/student/catalog' },
-      { title: '意向填报', desc: '选择至多 3 个平行意向并提交', path: '/student/application' },
-      { title: '面试与问卷', desc: '查看面试任务、限时完成导师问卷', path: '/student/interview' },
-      { title: '录取确认', desc: '接受或放弃拟录取通知', path: '/student/offer' },
-      { title: '调剂结果', desc: '查看统筹调剂分配结果', path: '/student/adjustment' },
-      { title: '公示与异议', desc: '核对公示名单并提交异议', path: '/student/publication' }
+      { title: '集中宣讲',     desc: '阅读实训室介绍、观看宣讲视频',      path: '/student/briefing' },
+      { title: '实训室开放日', desc: '720° 全景云游 + 开放日安排',         path: '/student/open-day' },
+      { title: '意向填报',     desc: '最多 3 个平行志愿 + 调剂意愿',       path: '/student/preferences' },
+      { title: '面试中心',     desc: '查看面试时间、地点与形式',           path: '/student/interview' },
+      { title: '录取中心',     desc: '拟录取通知 + 录取确认',              path: '/student/admission' },
+      { title: '我的结果',     desc: '最终录取状态 + 公示名单',            path: '/student/result' }
     ]
   },
-  MENTOR: {
-    title: '导师工作台',
-    subtitle: '筛选报名学生、组织问卷面试并提交拟录取名单',
+  LAB_TEACHER: {
+    title: '实训室教师工作台',
+    subtitle: '组织面试、记录评价、提交拟录取与递补名单',
     cards: [
-      { title: '报名学生', desc: '查看选择本人的学生与调剂意愿', path: '/mentor/applicants' },
-      { title: '问卷编排', desc: '维护问卷题目并在面试前冻结', path: '/mentor/questionnaires' },
-      { title: '评分与评语', desc: '按四维评分并填写面试评语', path: '/mentor/scoring' },
-      { title: '拟录取名单', desc: '编排拟录取与递补顺位', path: '/mentor/nomination' },
-      { title: '补录续招', desc: '查看剩余名额并参与补录轮', path: '/mentor/supplement' },
-      { title: '录取名单', desc: '查看最终录取与入组名单', path: '/mentor/result' }
+      { title: '本室信息',   desc: '实训室介绍、名额、项目方向',      path: '/teacher/lab' },
+      { title: '报名管理',   desc: '查看本室报名学生与调剂意愿',      path: '/teacher/applicants' },
+      { title: '面试管理',   desc: '创建面试安排、设置时间地点',      path: '/teacher/interviews' },
+      { title: '面试评价',   desc: '5 维度评分 + 评语 + 建议',        path: '/teacher/scoring' },
+      { title: '拟录取名单', desc: '提交 INTENDED / ALTERNATE 名单',  path: '/teacher/nomination' },
+      { title: '最终名单',   desc: '查看本室最终录取与入组名单',      path: '/teacher/result' }
     ]
   },
-  LAB_HEAD: {
-    title: '实训室负责人工作台',
-    subtitle: '统筹本室名额、面试安排与名单汇总',
+  LAB_LEADER: {
+    title: '实训室组长工作台',
+    subtitle: '统筹本室名额、汇总面试评价、组织内部调剂并提交学院',
     cards: [
-      { title: '导师与名额', desc: '查看本室导师名额与使用情况', path: '/leader/quotas' },
-      { title: '填报进度', desc: '监控本室各导师报名人数', path: '/leader/monitor' },
-      { title: '面试排期', desc: '安排本室统一面试场次', path: '/leader/interviews' },
-      { title: '名单汇总', desc: '汇总导师拟录取与递补名单', path: '/leader/nominations' },
-      { title: '本室调剂', desc: '优先完成实训室内部调剂', path: '/leader/reallocation' },
-      { title: '本室结果', desc: '查看本室最终录取与入组情况', path: '/leader/result' }
+      { title: '本室综合情况', desc: '报名 / 面试 / 确认 / 剩余名额一览', path: '/leader/overview' },
+      { title: '教师与面试',   desc: '汇总所有教师的面试评价',            path: '/leader/teachers' },
+      { title: '名单汇总',     desc: '协调拟录取与递补名单',              path: '/leader/aggregate' },
+      { title: '内部调剂',     desc: '优先完成本室空缺补录',              path: '/leader/internal' },
+      { title: '提交学院审核', desc: '提交本室结果 + 剩余名额给学院',     path: '/leader/submit' }
     ]
   },
   COLLEGE_ADMIN: {
-    title: '学院管理员工作台',
-    subtitle: '配置周期轮次与名额，监控全院进度并统筹调剂',
+    title: '学院总负责人工作台',
+    subtitle: '管理批次 / 阶段时间，统筹全院调剂，生成并发布最终名单',
     cards: [
-      { title: '周期与轮次', desc: '配置八阶段时间窗与当前轮次', path: '/admin/cycles' },
-      { title: '实训室与导师', desc: '维护实训室档案、导师与名额', path: '/admin/mentors' },
-      { title: '账号管理', desc: '导入账号、重置密码与禁用账号', path: '/admin/accounts' },
-      { title: '全院监控', desc: '查看填报、面试、确认实时进度', path: '/admin/monitor' },
-      { title: '统筹调剂', desc: '建立调剂池并执行跨室分配', path: '/admin/reallocation' },
-      { title: '公示与异议', desc: '发布公示名单并处理异议工单', path: '/admin/publication' }
+      { title: '批次管理',     desc: '创建选拔批次、配置八阶段时间窗',   path: '/admin/batches' },
+      { title: '实训室管理',   desc: '实训室档案、名额、负责人',          path: '/admin/laboratories' },
+      { title: '志愿填报管理', desc: '全院志愿分布与报名人数统计',        path: '/admin/preferences' },
+      { title: '全院调剂管理', desc: '跨实训室调剂 + 未落实学生安置',     path: '/admin/adjustments' },
+      { title: '最终名单',     desc: '合并确认 + 调剂 → 生成最终名单',   path: '/admin/final' },
+      { title: '公示与异议',   desc: '发布公示、管理异议、正式入组',      path: '/admin/publication' }
     ]
   }
 }

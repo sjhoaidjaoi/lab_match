@@ -1,19 +1,14 @@
 import { http } from './request'
-import type {
-  AnnouncementItem,
-  CycleDetail,
-  LabView,
-  MentorView,
-  OpenDayItem
-} from '@/types'
+import type { BatchInfo, LabView } from '@/types'
 
 export const catalogApi = {
-  currentCycle: () => http.get<CycleDetail>('/cycles/current'),
-  labs: () => http.get<LabView[]>('/labs'),
-  labDetail: (id: number) => http.get<unknown>(`/labs/${id}`),
-  mentors: (labId?: number) => http.get<MentorView[]>('/mentors', labId ? { labId } : undefined),
-  announcements: (cycleId?: number) =>
-    http.get<AnnouncementItem[]>('/announcements', cycleId ? { cycleId } : undefined),
-  openDays: (cycleId?: number) =>
-    http.get<OpenDayItem[]>('/open-day-plans', cycleId ? { cycleId } : undefined)
+  /** 当前活跃批次 + 八阶段时间窗 + 当前阶段 */
+  currentBatch: () => http.get<BatchInfo>('/batches/current'),
+  batches: () => http.get<unknown[]>('/batches'),
+  /** 实训室列表（已过滤 INACTIVE） */
+  labs: () => http.get<LabView[]>('/laboratories'),
+  /** 实训室详情（附带宣讲视频 + 全景） */
+  labDetail: (id: number) => http.get<LabView & { videos?: unknown[]; panoramas?: unknown[] }>(`/laboratories/${id}`),
+  /** 本室报名学生（教师/组长/学院） */
+  labPreferences: (labId: number) => http.get<unknown[]>(`/preferences/lab/${labId}`)
 }
