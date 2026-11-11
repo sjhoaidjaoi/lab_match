@@ -51,6 +51,16 @@
 | 429001 | 请求过于频繁 |
 | 500001 | 服务端异常 |
 
+### 1.3 状态枚举
+
+| 对象 | 字段 | 取值 |
+|---|---|---|
+| 选拔轮次 | selection_round.status | 1 未开始、2 填报中、3 面试中、4 拟录取确认中、5 已完成 |
+| 面试场次 | interview_session.status | 1 草稿、2 已发布、3 已结束 |
+| 面试排期 | interview_schedule.status | 1 待面试、2 已完成、3 缺席 |
+| 面试评分 | interview_score.status | 0 未评分、1 草稿、2 已提交 |
+| 拟录取汇总 | submitStatus | 0 未提交、1 待提交、2 已提交 |
+
 ## 2. 接口总览
 
 ### 2.1 认证
@@ -839,6 +849,7 @@
 ### 3.23 本室工作台 `GET /api/v1/leader/dashboard`
 
 - 鉴权：负责人
+- 查询参数：无
 - **盲选门禁**：`NOW() < 当前轮 apply_end` 时 `applicantCount = 0`；填报截止后仅返回本室聚合数量，不提供名单下钻与任何学生标识
 - 成功响应：
 
@@ -872,6 +883,7 @@
   - `round` 无当前轮次时为 `null`；`countdownSeconds` 无后续时间节点时为 `null`
   - `pendingScoreCount` 仅统计已保存草稿（status = 1）的评分，未录分学生不计入
   - `todo` 项固定包含 `type`、`text`，`count` 与 `target` 为可选字段，为 `null` 时不序列化
+- 失败响应：`{ "code": 403001, "message": "未绑定实训室" }`
 
 ### 3.23.1 本室导师与名额 `GET /api/v1/leader/mentors`
 
@@ -1022,6 +1034,9 @@
 }
 ```
 
+- 说明：按面试日期、开始时间升序返回
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可操作面试场次" }`
+
 ### 3.25.2 排期列表 `GET /api/v1/leader/interview-schedules`
 
 - 鉴权：负责人
@@ -1054,6 +1069,7 @@
 ```
 
 - 说明：按面试日期、开始时间升序返回；学号与姓名统一脱敏
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可操作面试排期" }`
 
 ### 3.25.3 自动分配排期 `POST /api/v1/leader/interview-schedules/auto`
 
@@ -1223,7 +1239,7 @@
 }
 ```
 
-- 说明：列表以本室本轮排期学生为基准；`status = 0` 时 `id` 与各项评分字段均为 `null`，`statusText = "未评分"`
+- 说明：列表以本室本轮排期学生为基准，按学号升序返回；`status = 0` 时 `id` 与各项评分字段均为 `null`，`statusText = "未评分"`
 - 失败响应：`{ "code": 403001, "message": "仅实训室负责人可录入评分" }`
 
 ### 3.27.2 Excel 批量导入评分 `POST /api/v1/leader/scores/import`
@@ -1295,6 +1311,12 @@
   - `nominatedCount` 为该导师本轮已提交与草稿拟录取记录数之和，即实际已勾选人数
   - `submitStatus`：1 待提交（存在草稿、无已提交）、2 已提交（存在已提交记录）、0 未提交（无记录）
   - `conflictCount` 与 `conflicts` 仅统计已提交记录，草稿不参与冲突判定
+- 失败响应：
+
+```json
+{ "code": 403001, "message": "仅实训室负责人可操作本室名单" }
+{ "code": 404001, "message": "当前无选拔轮次" }
+```
 
 ### 3.29 提交本室名单 `POST /api/v1/leader/nominations/submit`
 
