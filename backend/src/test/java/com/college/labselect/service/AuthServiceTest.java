@@ -3,8 +3,10 @@ package com.college.labselect.service;
 import com.college.labselect.dto.req.ChangePasswordReqDTO;
 import com.college.labselect.dto.req.LoginReqDTO;
 import com.college.labselect.dto.resp.LoginRespVO;
+import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.SysUser;
 import com.college.labselect.exception.BusinessException;
+import com.college.labselect.mapper.LabMapper;
 import com.college.labselect.mapper.SysUserMapper;
 import com.college.labselect.security.JwtUtils;
 import com.college.labselect.security.LoginUser;
@@ -31,6 +33,9 @@ class AuthServiceTest {
 
     @Mock
     private SysUserMapper sysUserMapper;
+
+    @Mock
+    private LabMapper labMapper;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -60,7 +65,28 @@ class AuthServiceTest {
         assertThat(resp.getExpiresIn()).isEqualTo(7200L);
         assertThat(resp.getNeedChangePwd()).isZero();
         assertThat(resp.getUser().getRealName()).isEqualTo("陈爱丽");
+        assertThat(resp.getUser().getLeader()).isFalse();
         verify(sysUserMapper, times(1)).selectOne(any());
+    }
+
+    /**
+     * 快乐路径：作为负责人的教师登录时返回 leader = true。
+     */
+    @Test
+    void login_teacherLeader_shouldMarkLeader() {
+        LoginReqDTO req = loginReq("20010001", "123456");
+        req.setLoginType(2);
+        SysUser user = user(2001L, "20010001", 2, 1, 0);
+        user.setPassword("$2a$10$mockedHash");
+        when(sysUserMapper.selectOne(any())).thenReturn(user);
+        when(passwordEncoder.matches("123456", user.getPassword())).thenReturn(true);
+        when(jwtUtils.generateToken(any(LoginUser.class))).thenReturn("jwt-token");
+        when(jwtUtils.getExpireSeconds()).thenReturn(7200L);
+        when(labMapper.selectOne(any())).thenReturn(new Lab());
+
+        LoginRespVO resp = authService.login(req);
+
+        assertThat(resp.getUser().getLeader()).isTrue();
     }
 
     /**

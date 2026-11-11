@@ -4,7 +4,9 @@ import com.college.labselect.common.Result;
 import com.college.labselect.common.ResultCode;
 import com.college.labselect.dto.req.AutoScheduleReqDTO;
 import com.college.labselect.dto.req.ScheduleAdjustReqDTO;
+import com.college.labselect.dto.req.ScheduleAssignReqDTO;
 import com.college.labselect.dto.resp.InterviewScheduleVO;
+import com.college.labselect.dto.resp.UnassignedStudentVO;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.security.LoginUser;
 import com.college.labselect.service.IInterviewScheduleService;
@@ -78,6 +80,36 @@ public class LeaderInterviewScheduleController {
                                         @Valid @RequestBody ScheduleAdjustReqDTO req) {
         interviewScheduleService.adjustSchedules(requireLogin(loginUser), req);
         return Result.success();
+    }
+
+    /**
+     * 待排学生列表。
+     *
+     * @param loginUser 当前登录用户
+     * @param roundId   轮次 ID
+     * @return 待排学生列表
+     */
+    @Operation(summary = "待排学生列表")
+    @GetMapping("/unassigned")
+    public Result<List<UnassignedStudentVO>> listUnassignedStudents(
+            @AuthenticationPrincipal LoginUser loginUser,
+            @RequestParam(required = false) Long roundId) {
+        return Result.success(interviewScheduleService.listUnassignedStudents(
+                requireLogin(loginUser), roundId));
+    }
+
+    /**
+     * 拖拽排期。
+     *
+     * @param loginUser 当前登录用户
+     * @param req       排期请求
+     * @return 排期 ID
+     */
+    @Operation(summary = "拖拽排期")
+    @PostMapping("/assign")
+    public Result<Long> assignSchedule(@AuthenticationPrincipal LoginUser loginUser,
+                                       @Valid @RequestBody ScheduleAssignReqDTO req) {
+        return Result.success(interviewScheduleService.assignSchedule(requireLogin(loginUser), req));
     }
 
     private Long requireLogin(LoginUser loginUser) {

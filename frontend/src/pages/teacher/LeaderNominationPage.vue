@@ -27,7 +27,12 @@
 
     <el-card shadow="never">
       <template #header><span class="section-title">本室导师拟录取</span></template>
-      <el-table v-loading="loading" :data="summary?.mentors ?? []" stripe>
+      <el-table
+        v-loading="loading"
+        :data="summary?.mentors ?? []"
+        :row-class-name="mentorRowClass"
+        stripe
+      >
         <el-table-column prop="mentorName" label="导师" width="140" />
         <el-table-column prop="quota" label="个人名额" width="110" />
         <el-table-column prop="nominatedCount" label="已勾选" width="110" />
@@ -71,7 +76,7 @@ import {
   submitLeaderNominations
 } from '@/api/leaderNomination'
 import { getCurrentRound } from '@/api/public'
-import type { LeaderNominationSummary } from '@/types/nomination'
+import type { LeaderNominationMentor, LeaderNominationSummary } from '@/types/nomination'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -83,6 +88,14 @@ const submitted = computed(() => {
   return mentors.some((item) => item.submitStatus === 2) &&
     !mentors.some((item) => item.submitStatus === 1)
 })
+
+const conflictMentorNames = computed(
+  () => new Set((summary.value?.conflicts ?? []).flatMap((item) => item.mentorNames))
+)
+
+function mentorRowClass({ row }: { row: LeaderNominationMentor }): string {
+  return conflictMentorNames.value.has(row.mentorName) ? 'conflict-row' : ''
+}
 
 async function loadSummary() {
   loading.value = true
@@ -180,5 +193,9 @@ onMounted(loadSummary)
   margin: 0;
   font-size: 13px;
   color: #909399;
+}
+
+:deep(.el-table .conflict-row > td) {
+  background: #fef0f0;
 }
 </style>

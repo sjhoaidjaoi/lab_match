@@ -4,7 +4,9 @@ import type {
   InterviewSession,
   InterviewSessionSaveReq,
   PublishScheduleResp,
-  ScheduleAdjustReq
+  ScheduleAdjustReq,
+  ScheduleAssignReq,
+  UnassignedStudent
 } from '@/types/interview'
 
 /**
@@ -48,6 +50,16 @@ export function publishInterviewSchedules(roundId: number): Promise<PublishSched
 }
 
 /**
+ * 取消发布并重排，已发布场次回退为草稿并通知学生。
+ */
+export function cancelInterviewPublish(
+  roundId: number,
+  reason: string
+): Promise<PublishScheduleResp> {
+  return post<PublishScheduleResp>('/leader/interview-sessions/publish/cancel', { roundId, reason })
+}
+
+/**
  * 本室面试排期列表。
  */
 export function listInterviewSchedules(roundId?: number): Promise<InterviewSchedule[]> {
@@ -68,4 +80,20 @@ export function autoScheduleInterviews(roundId: number): Promise<void> {
  */
 export function adjustInterviewSchedules(payload: ScheduleAdjustReq): Promise<void> {
   return put<void>('/leader/interview-schedules', payload)
+}
+
+/**
+ * 本室已提交意向但尚未排期的学生。
+ */
+export function listUnassignedStudents(roundId?: number): Promise<UnassignedStudent[]> {
+  return get<UnassignedStudent[]>('/leader/interview-schedules/unassigned', {
+    params: roundId ? { roundId } : undefined
+  })
+}
+
+/**
+ * 将未排期学生分配到草稿场次。
+ */
+export function assignInterviewSchedule(payload: ScheduleAssignReq): Promise<number> {
+  return post<number>('/leader/interview-schedules/assign', payload)
 }

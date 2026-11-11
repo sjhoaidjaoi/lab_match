@@ -17,6 +17,7 @@ import AdminLabsPage from '@/pages/admin/AdminLabsPage.vue'
 import AdminMentorsPage from '@/pages/admin/AdminMentorsPage.vue'
 import AdminStudentsPage from '@/pages/admin/AdminStudentsPage.vue'
 import AdminRoundsPage from '@/pages/admin/AdminRoundsPage.vue'
+import LeaderMentorPage from '@/pages/teacher/LeaderMentorPage.vue'
 import LeaderInterviewSchedulePage from '@/pages/teacher/LeaderInterviewSchedulePage.vue'
 import LeaderScoringPage from '@/pages/teacher/LeaderScoringPage.vue'
 import MentorNominationPage from '@/pages/teacher/MentorNominationPage.vue'
@@ -127,6 +128,12 @@ const routes: RouteRecordRaw[] = [
         name: 'leader-home',
         component: LeaderDashboardPage,
         meta: { title: '本室工作台' }
+      },
+      {
+        path: 'mentors',
+        name: 'leader-mentors',
+        component: LeaderMentorPage,
+        meta: { title: '本室导师与名额' }
       },
       {
         path: 'interview-schedule',
@@ -314,6 +321,9 @@ router.beforeEach((to) => {
   const requiredType = requiredUserType(to.path)
   if (userStore.isLoggedIn && requiredType !== null && userStore.user?.userType !== requiredType) {
     return { path: homeFor(userStore.user?.userType) }
+  }
+  if (userStore.isLoggedIn && to.path.startsWith('/leader') && !userStore.isLeader) {
+    return { path: '/teacher' }
   }
   if (userStore.isLoggedIn && to.path.endsWith('/login')) {
     return { path: homeFor(userStore.user?.userType) }

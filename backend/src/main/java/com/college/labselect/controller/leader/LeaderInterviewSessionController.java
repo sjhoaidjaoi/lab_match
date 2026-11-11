@@ -4,6 +4,7 @@ import com.college.labselect.common.Result;
 import com.college.labselect.common.ResultCode;
 import com.college.labselect.dto.req.AutoScheduleReqDTO;
 import com.college.labselect.dto.req.InterviewSessionSaveReqDTO;
+import com.college.labselect.dto.req.PublishCancelReqDTO;
 import com.college.labselect.dto.resp.InterviewSessionVO;
 import com.college.labselect.dto.resp.PublishScheduleRespVO;
 import com.college.labselect.exception.BusinessException;
@@ -110,6 +111,21 @@ public class LeaderInterviewSessionController {
     public Result<PublishScheduleRespVO> publish(@AuthenticationPrincipal LoginUser loginUser,
                                                  @Valid @RequestBody AutoScheduleReqDTO req) {
         return Result.success(interviewSessionService.publish(requireLogin(loginUser), req.getRoundId()));
+    }
+
+    /**
+     * 取消发布并重排。
+     *
+     * @param loginUser 当前登录用户
+     * @param req       取消请求
+     * @return 取消结果
+     */
+    @Operation(summary = "取消并重排")
+    @PostMapping("/publish/cancel")
+    public Result<PublishScheduleRespVO> cancelPublish(@AuthenticationPrincipal LoginUser loginUser,
+                                                       @Valid @RequestBody PublishCancelReqDTO req) {
+        return Result.success(interviewSessionService.cancelPublish(
+                requireLogin(loginUser), req.getRoundId(), req.getReason()));
     }
 
     private Long requireLogin(LoginUser loginUser) {

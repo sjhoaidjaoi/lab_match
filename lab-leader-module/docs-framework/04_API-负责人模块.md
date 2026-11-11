@@ -76,6 +76,9 @@
 | POST | /api/v1/leader/interview-schedules/auto | 自动分配 | 负责人 |
 | PUT | /api/v1/leader/interview-schedules | 手工调整排期 | 负责人 |
 | POST | /api/v1/leader/interview-sessions/publish | 发布排期 | 负责人 |
+| POST | /api/v1/leader/interview-sessions/publish/cancel | 取消并重排 | 负责人 |
+| GET | /api/v1/leader/interview-schedules/unassigned | 待排学生列表 | 负责人 |
+| POST | /api/v1/leader/interview-schedules/assign | 拖拽排期 | 负责人 |
 | GET | /api/v1/leader/scores | 本室评分列表 | 负责人 |
 | POST | /api/v1/leader/scores | 录入/更新评分 | 负责人 |
 | POST | /api/v1/leader/scores/import | Excel 批量导入评分 | 负责人 |
@@ -123,6 +126,7 @@
 - 字段说明：
   - `round` 无当前轮次时为 `null`；`countdownSeconds` 无后续时间节点时为 `null`
   - `pendingScoreCount` 仅统计已保存草稿（status = 1）的评分，未录分学生不计入
+  - `todo.type` 取 `SCHEDULE`（待发布面试排期）、`SCORE`（待录分）、`NOMINATION`（待汇总本室名单）
   - `todo` 项固定包含 `type`、`text`，`count` 与 `target` 为可选字段，为 `null` 时不序列化
 - 失败响应：`{ "code": 403001, "message": "未绑定实训室" }`
 
@@ -366,6 +370,60 @@
 { "code": 400002, "message": "场次超出容量" }
 ```
 
+### 3.25.5 待排学生列表 `GET /api/v1/leader/interview-schedules/unassigned`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选，默认最近轮次）
+- 说明：返回本室已提交意向、但尚无 `interview_schedule` 记录的学生；学号与姓名脱敏，供拖拽排期使用
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "studentId": 1002,
+      "studentNo": "2022****02",
+      "studentName": "张*",
+      "mentorNames": ["李海峰"]
+    }
+  ]
+}
+```
+
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可操作面试排期" }`
+
+### 3.25.6 拖拽排期 `POST /api/v1/leader/interview-schedules/assign`
+
+- 鉴权：负责人
+- 请求：
+
+```json
+{
+  "roundId": "BIGINT, 轮次ID, 必填",
+  "studentId": "BIGINT, 学生ID, 必填",
+  "sessionId": "BIGINT, 草稿场次ID, 必填"
+}
+```
+
+- 校验：轮次处于面试阶段；场次属于本室且为草稿；学生本轮已提交填报且含本室意向；同一学生在本室本轮仅一条排期；场次未超容量；与该生其他场次无时间重叠
+- 成功响应：`{ "code": 200, "message": "success", "data": 801 }`
+- 失败响应：
+
+```json
+{ "code": 404001, "message": "选拔轮次不存在" }
+{ "code": 404001, "message": "面试场次不存在" }
+{ "code": 400005, "message": "当前不在面试阶段" }
+{ "code": 400005, "message": "仅草稿场次可拖拽排期" }
+{ "code": 400002, "message": "该学生本轮未提交填报" }
+{ "code": 400002, "message": "场次已满，无法排期" }
+{ "code": 403001, "message": "该学生不属于本实训室" }
+{ "code": 403001, "message": "无权使用其他实训室的场次" }
+{ "code": 409001, "message": "该学生已在本室排期" }
+{ "code": 409001, "message": "与该生其他面试场次时间冲突" }
+```
+
 ### 3.26 发布排期 `POST /api/v1/leader/interview-sessions/publish`
 
 - 鉴权：负责人
@@ -388,6 +446,29 @@
 { "code": 409001, "message": "存在面试官时间冲突" }
 { "code": 400002, "message": "场次超出容量" }
 { "code": 400002, "message": "存在 3 名学生未排期" }
+```
+
+### 3.26.1 取消并重排 `POST /api/v1/leader/interview-sessions/publish/cancel`
+
+- 鉴权：负责人
+- 说明：将本室本轮已发布场次回退为草稿，并向学生推送「面试安排变更」；已推送通知不可撤回，重新发布后再次通知
+- 请求：
+
+```json
+{
+  "roundId": "BIGINT, 轮次ID, 必填",
+  "reason": "string, 取消原因, 必填, 最长200字"
+}
+```
+
+- 成功响应：`{ "code": 200, "message": "success", "data": { "sessionCount": 3, "studentCount": 56, "noticeCount": 56 } }`
+- 失败响应：
+
+```json
+{ "code": 404001, "message": "选拔轮次不存在" }
+{ "code": 400005, "message": "批次已锁定，不可取消排期" }
+{ "code": 400005, "message": "当前不在面试阶段" }
+{ "code": 400005, "message": "无可取消的已发布场次" }
 ```
 
 ### 3.27 录入评分 `POST /api/v1/leader/scores`
@@ -431,6 +512,9 @@
 ```json
 { "code": 400001, "message": "分数必须在 0-100 之间" }
 { "code": 400001, "message": "手动调整总分时必须填写理由" }
+{ "code": 400004, "message": "当前不在面试时间窗内" }
+{ "code": 400005, "message": "当前不在面试阶段" }
+{ "code": 400005, "message": "批次已锁定，不可录入评分" }
 { "code": 403001, "message": "该学生未在本室面试" }
 ```
 
@@ -501,15 +585,34 @@
 - 说明：
   - 使用最近轮次；仅处理本室已排期学生
   - 通过校验的行统一按 `submit = 1` 提交
-  - 失败行跳过并记录日志；全部失败时返回 400002
-- 成功响应：`{ "code": 200, "message": "success", "data": null }`
+  - 失败行跳过并返回明细；全部失败时仍返回 200 + `failList`
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "totalCount": 56,
+    "successCount": 54,
+    "failCount": 2,
+    "failList": [
+      { "rowNo": 17, "userNo": "20229999", "reason": "学号不存在或不是学生账号" },
+      { "rowNo": 23, "userNo": "20220023", "reason": "分数必须在 0-100 之间" }
+    ]
+  }
+}
+```
+
 - 失败响应：
 
 ```json
 { "code": 400001, "message": "仅支持 .xlsx 格式文件" }
 { "code": 400001, "message": "Excel 无有效数据" }
+{ "code": 400004, "message": "当前不在面试时间窗内" }
+{ "code": 400005, "message": "当前不在面试阶段" }
+{ "code": 400005, "message": "批次已锁定，不可录入评分" }
 { "code": 404001, "message": "当前无选拔轮次" }
-{ "code": 400002, "message": "评分导入全部失败，请检查学号、分数与排期" }
 ```
 
 ### 3.28 本室拟录取汇总 `GET /api/v1/leader/nominations`
@@ -583,7 +686,7 @@
   "roundId": "BIGINT, 轮次ID, 必填",
   "studentId": "BIGINT, 学生ID, 必填",
   "toMentorId": "BIGINT, 目标导师ID, 必填",
-  "reason": "string, 调剂说明, 可选"
+  "reason": "string, 调剂说明, 必填, 最长500字"
 }
 ```
 
@@ -591,6 +694,7 @@
 - 失败响应：
 
 ```json
+{ "code": 400001, "message": "调剂说明不能为空" }
 { "code": 400002, "message": "学生未勾选服从实训室内部调剂" }
 { "code": 400002, "message": "目标导师剩余名额不足" }
 { "code": 400004, "message": "当前不在调剂时间窗内" }

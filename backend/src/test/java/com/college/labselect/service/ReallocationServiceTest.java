@@ -110,6 +110,21 @@ class ReallocationServiceTest {
     }
 
     /**
+     * 边界：内部调剂未填写说明返回 400001。
+     */
+    @Test
+    void reallocateInner_blankReason_shouldThrow400001() {
+        LeaderReallocationReqDTO req = innerReq();
+        req.setReason(" ");
+
+        BusinessException exception = catchThrowableOfType(
+                () -> reallocationService.reallocateInner(2001L, req), BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(400001);
+    }
+
+    /**
      * 边界：学生未勾选服从内部调剂返回 400002。
      */
     @Test

@@ -112,6 +112,9 @@ public class ReallocationServiceImpl implements IReallocationService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LeaderReallocationRespVO reallocateInner(Long leaderUserId, LeaderReallocationReqDTO req) {
+        if (StrUtil.isBlank(req.getReason())) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "调剂说明不能为空");
+        }
         SelectionRound round = requireAdjustableRound(req.getRoundId());
         MentorProfile leader = mentorProfileMapper.selectOne(new LambdaQueryWrapper<MentorProfile>()
                 .eq(MentorProfile::getUserId, leaderUserId));

@@ -4,6 +4,7 @@ import com.college.labselect.common.PageResult;
 import com.college.labselect.dto.req.InterviewScoreSaveReqDTO;
 import com.college.labselect.dto.resp.InterviewScoreListVO;
 import com.college.labselect.dto.resp.InterviewScoreRespVO;
+import com.college.labselect.dto.resp.ScoreImportResultVO;
 import com.college.labselect.dto.resp.TeacherScoreDetailVO;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,8 +41,9 @@ public interface IInterviewScoreService {
      *
      * @param leaderUserId 负责人用户 ID
      * @param file         Excel 文件
+     * @return 导入结果，含成功数与失败明细
      */
-    void importScores(Long leaderUserId, MultipartFile file);
+    ScoreImportResultVO importScores(Long leaderUserId, MultipartFile file);
 
     /**
      * 导师查看某学生本室评分。

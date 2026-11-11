@@ -3,10 +3,19 @@
     <div class="page-header">
       <div>
         <h2>面试排期</h2>
-        <p class="subtitle">维护本室面试场次，自动或手工分配学生，发布后场次锁定</p>
+        <p class="subtitle">维护本室面试场次，自动分配或拖拽排期，发布后场次锁定</p>
       </div>
       <div class="header-actions">
         <el-button @click="handleAutoSchedule">自动分配</el-button>
+        <el-button
+          type="danger"
+          plain
+          :disabled="!hasPublished"
+          :loading="cancelling"
+          @click="handleCancelPublish"
+        >
+          取消并重排
+        </el-button>
         <el-button type="success" plain :loading="publishing" @click="handlePublish">发布排期</el-button>
         <el-button type="primary" @click="openCreate">新增场次</el-button>
       </div>
@@ -46,7 +55,22 @@
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span class="section-title">学生排期</span>
+          <span class="section-title">手工拖拽排期</span>
+          <span class="count">待排 {{ unassignedStudents.length }} 人</span>
+        </div>
+      </template>
+      <ScheduleDragBoard
+        :students="unassignedStudents"
+        :sessions="draftSessions"
+        :busy="assigning"
+        @assign="handleAssign"
+      />
+    </el-card>
+
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-header">
+          <span class="section-title">已排学生</span>
           <span class="count">共 {{ schedules.length }} 人</span>
         </div>
       </template>
@@ -114,21 +138,28 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import SessionFormDialog from '@/components/SessionFormDialog.vue'
+import ScheduleDragBoard from '@/components/ScheduleDragBoard.vue'
 import {
   adjustInterviewSchedules,
+  assignInterviewSchedule,
   autoScheduleInterviews,
+  cancelInterviewPublish,
   deleteInterviewSession,
   listInterviewSchedules,
   listInterviewSessions,
+  listUnassignedStudents,
   publishInterviewSchedules
 } from '@/api/leaderInterview'
 import { getCurrentRound } from '@/api/public'
-import type { InterviewSchedule, InterviewSession } from '@/types/interview'
+import type { InterviewSchedule, InterviewSession, UnassignedStudent } from '@/types/interview'
 
 const loading = ref(false)
 const publishing = ref(false)
+const cancelling = ref(false)
 const sessions = ref<InterviewSession[]>([])
 const schedules = ref<InterviewSchedule[]>([])
+const unassignedStudents = ref<UnassignedStudent[]>([])
+const assigning = ref(false)
 const dialogVisible = ref(false)
 const editingSession = ref<InterviewSession | null>(null)
 const roundId = ref<number | null>(null)
@@ -138,6 +169,8 @@ const adjustingSchedule = ref<InterviewSchedule | null>(null)
 const targetSessionId = ref<number | null>(null)
 
 const draftSessions = computed(() => sessions.value.filter((session) => session.status === 1))
+
+const hasPublished = computed(() => sessions.value.some((session) => session.status === 2))
 
 const targetSessions = computed(() =>
   draftSessions.value.filter((session) => session.id !== adjustingSchedule.value?.sessionId)
@@ -159,12 +192,14 @@ async function loadData() {
   try {
     const round = await getCurrentRound()
     roundId.value = round?.id ?? null
-    const [sessionList, scheduleList] = await Promise.all([
+    const [sessionList, scheduleList, unassignedList] = await Promise.all([
       listInterviewSessions(roundId.value ?? undefined),
-      listInterviewSchedules(roundId.value ?? undefined)
+      listInterviewSchedules(roundId.value ?? undefined),
+      listUnassignedStudents(roundId.value ?? undefined)
     ])
     sessions.value = sessionList
     schedules.value = scheduleList
+    unassignedStudents.value = unassignedList
   } catch {
     // 错误提示已由请求层统一处理
   } finally {
@@ -283,6 +318,58 @@ async function handlePublish() {
     // 错误提示已由请求层统一处理
   } finally {
     publishing.value = false
+  }
+}
+
+async function handleCancelPublish() {
+  const currentRoundId = requireRoundId()
+  if (!currentRoundId) {
+    return
+  }
+  let reason = ''
+  try {
+    const result = await ElMessageBox.prompt(
+      '取消后场次回到草稿，已推送通知不可撤回，重新发布后将再次通知学生',
+      '取消并重排',
+      {
+        confirmButtonText: '确认取消',
+        cancelButtonText: '返回',
+        inputPlaceholder: '请填写取消原因（必填）',
+        inputValidator: (value: string) => (value?.trim() ? true : '请填写取消原因')
+      }
+    )
+    reason = result.value.trim()
+  } catch {
+    return
+  }
+  cancelling.value = true
+  try {
+    const result = await cancelInterviewPublish(currentRoundId, reason)
+    ElMessage.success(
+      `已取消 ${result.sessionCount} 个场次，${result.studentCount} 名学生已收到变更通知`
+    )
+    await loadData()
+  } catch {
+    // 错误提示已由请求层统一处理
+  } finally {
+    cancelling.value = false
+  }
+}
+
+async function handleAssign(studentId: number, sessionId: number) {
+  const currentRoundId = requireRoundId()
+  if (!currentRoundId) {
+    return
+  }
+  assigning.value = true
+  try {
+    await assignInterviewSchedule({ roundId: currentRoundId, studentId, sessionId })
+    ElMessage.success('排期成功')
+    await loadData()
+  } catch {
+    // 错误提示已由请求层统一处理
+  } finally {
+    assigning.value = false
   }
 }
 

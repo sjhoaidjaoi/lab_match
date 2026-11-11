@@ -5,7 +5,7 @@
 - 来源分支：`feature/lab-leader`
 - 来源提交：`1be964e`
 - 提取范围：负责人端后端接口、服务、DTO/VO、单元测试、前端页面、API、类型、接口契约、数据库说明与流程文档
-- 文件数量：69（含 README 与模块文档）
+- 文件数量：76（含 README 与模块文档）
 
 ## 目录结构
 
@@ -21,7 +21,7 @@ lab-leader-module/
 │       └── test/java/.../service/       面试与拟录取单元测试
 ├── frontend/
 │   └── src/
-│       ├── pages/teacher/               负责人端 5 个页面
+│       ├── pages/teacher/               负责人端 6 个页面
 │       ├── components/                  场次表单、评分表单弹窗
 │       ├── api/                         负责人接口封装
 │       └── types/                       接口与页面类型
@@ -33,7 +33,7 @@ lab-leader-module/
 
 ## 模块文档
 
-- `docs-framework/04_API-负责人模块.md`：全局约定、错误码、18 个接口总览与请求/响应/失败码详述
+- `docs-framework/04_API-负责人模块.md`：全局约定、错误码、21 个接口总览与请求/响应/失败码详述
 - `docs-framework/03_Database-负责人相关表.md`：15 张相关表的字段说明与建表 DDL
 - `docs-framework/flow/`：面试排期与评分、拟录取与确认、统筹调剂、基础配置与账号管理（负责人相关部分）
 
@@ -48,7 +48,7 @@ lab-leader-module/
 
 ### 前端
 
-- 页面：`LeaderDashboardPage`、`LeaderInterviewSchedulePage`、`LeaderScoringPage`、`LeaderNominationPage`、`LeaderReallocationPage`
+- 页面：`LeaderDashboardPage`、`LeaderMentorPage`、`LeaderInterviewSchedulePage`、`LeaderScoringPage`、`LeaderNominationPage`、`LeaderReallocationPage`
 - 弹窗组件：`SessionFormDialog`、`ScoreFormDialog`
 - API：`leaderInterview.ts`、`leaderMentor.ts`、`leaderScore.ts`、`leaderNomination.ts`、`leaderReallocation.ts`
 - 类型：`interview.ts`、`nomination.ts`、`reallocation.ts`
@@ -71,7 +71,7 @@ lab-leader-module/
 - 登录态：`src/store/user.ts`
 - 本文件夹中标记为公共的文件：`api/dashboard.ts`、`api/public.ts`、`types/dashboard.ts`、`types/basic.ts`、`types/student.ts`
 
-## 后台接口清单（18 个）
+## 后台接口清单（21 个）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -83,6 +83,9 @@ lab-leader-module/
 | PUT | /api/v1/leader/interview-sessions/{id} | 修改场次 |
 | DELETE | /api/v1/leader/interview-sessions/{id} | 删除场次 |
 | POST | /api/v1/leader/interview-sessions/publish | 发布排期 |
+| POST | /api/v1/leader/interview-sessions/publish/cancel | 取消并重排 |
+| GET | /api/v1/leader/interview-schedules/unassigned | 待排学生列表 |
+| POST | /api/v1/leader/interview-schedules/assign | 拖拽排期 |
 | GET | /api/v1/leader/interview-schedules | 排期列表 |
 | POST | /api/v1/leader/interview-schedules/auto | 自动分配 |
 | PUT | /api/v1/leader/interview-schedules | 手工调整排期 |
@@ -101,6 +104,7 @@ lab-leader-module/
 | 路径 | 页面 |
 |---|---|
 | /leader | 本室工作台 |
+| /leader/mentors | 本室导师与名额 |
 | /leader/interview-schedule | 面试排期 |
 | /leader/scoring | 本室评分录入 |
 | /leader/nominations | 本室录取汇总 |
@@ -122,7 +126,9 @@ lab-leader-module/
 
 - 场次接口中的 `interviewerIds` 是 `sys_user.id`，不是 `mentor_profile.id`。
 - 只有草稿场次可以修改、删除或作为排期调整目标；已发布场次返回 400005。
+- 已发布场次可通过「取消并重排」回退为草稿，必须填写原因并写入操作日志；学生收到「面试安排变更」通知，重新发布后再次通知。
 - 排期手工调整会校验学生时间冲突（409001）与场次容量（400002）。
-- 评分导入仅支持 `.xlsx`，列顺序：学号、学习态度、逻辑思维、编程基础、时间投入、评语。
+- 待排学生支持拖拽到草稿场次；分配时校验本室意向、重复排期、容量与跨室时间冲突。
+- 评分导入仅支持 `.xlsx`，列顺序：学号、学习态度、逻辑思维、编程基础、时间投入、评语；返回成功数、失败数与失败明细。
 - 分数与金额以 JSON 数字返回，保留两位小数。
 - 拟录取汇总的状态文案：1 待提交、2 已提交、0 未提交；已勾选数量包含草稿与已提交。

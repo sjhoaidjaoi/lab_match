@@ -301,6 +301,18 @@ public class DashboardServiceImpl implements IDashboardService {
         if (pendingScoreCount > 0) {
             todo.add(todo("SCORE", "待录分 " + pendingScoreCount + " 人", pendingScoreCount, null));
         }
+        if (round != null && round.getNominationStart() != null && round.getNominationSubmitEnd() != null) {
+            LocalDateTime now = LocalDateTime.now();
+            if (!now.isBefore(round.getNominationStart()) && !now.isAfter(round.getNominationSubmitEnd())) {
+                long draftCount = nominationMapper.selectCount(new LambdaQueryWrapper<Nomination>()
+                        .eq(Nomination::getRoundId, round.getId())
+                        .eq(Nomination::getLabId, labId)
+                        .eq(Nomination::getStatus, NOMINATION_DRAFT));
+                if (draftCount > 0) {
+                    todo.add(todo("NOMINATION", "待汇总本室名单", (int) draftCount, "/leader/nominations"));
+                }
+            }
+        }
         return todo;
     }
 

@@ -8,6 +8,7 @@ import com.college.labselect.entity.InterviewSchedule;
 import com.college.labselect.entity.InterviewSession;
 import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
+import com.college.labselect.entity.OperationLog;
 import com.college.labselect.entity.SelectionRound;
 import com.college.labselect.entity.SysUser;
 import com.college.labselect.entity.UserNotice;
@@ -19,6 +20,7 @@ import com.college.labselect.mapper.InterviewSessionInterviewerMapper;
 import com.college.labselect.mapper.InterviewSessionMapper;
 import com.college.labselect.mapper.LabMapper;
 import com.college.labselect.mapper.MentorProfileMapper;
+import com.college.labselect.mapper.OperationLogMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
 import com.college.labselect.mapper.SysUserMapper;
 import com.college.labselect.mapper.UserNoticeMapper;
@@ -79,6 +81,9 @@ class InterviewSessionServiceTest {
 
     @Mock
     private UserNoticeMapper userNoticeMapper;
+
+    @Mock
+    private OperationLogMapper operationLogMapper;
 
     @InjectMocks
     private InterviewSessionServiceImpl interviewSessionService;
@@ -199,6 +204,47 @@ class InterviewSessionServiceTest {
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(400002);
+    }
+
+    /**
+     * 快乐路径：取消发布后场次回退草稿，学生收到变更通知并写入操作日志。
+     */
+    @Test
+    void cancelPublish_success_shouldRevertAndNotify() {
+        InterviewSession published = session(1L, 14, 0, 15, 30, 30);
+        published.setStatus(2);
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round());
+        when(interviewSessionMapper.selectList(any())).thenReturn(List.of(published));
+        when(interviewScheduleMapper.selectList(any())).thenReturn(List.of(
+                schedule(1L, 1L, 1001L),
+                schedule(2L, 1L, 1002L)));
+
+        PublishScheduleRespVO result = interviewSessionService.cancelPublish(2001L, 1L, "面试官临时调整");
+
+        assertThat(result.getSessionCount()).isEqualTo(1);
+        assertThat(result.getStudentCount()).isEqualTo(2);
+        assertThat(result.getNoticeCount()).isEqualTo(2);
+        verify(interviewSessionMapper).updateById(any(InterviewSession.class));
+        verify(userNoticeMapper, times(2)).insert(any(UserNotice.class));
+        verify(operationLogMapper).insert(any(OperationLog.class));
+    }
+
+    /**
+     * 边界：没有已发布场次时取消并重排返回 400005。
+     */
+    @Test
+    void cancelPublish_noPublishedSession_shouldThrow400005() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round());
+        when(interviewSessionMapper.selectList(any())).thenReturn(List.of());
+
+        BusinessException exception = catchThrowableOfType(
+                () -> interviewSessionService.cancelPublish(2001L, 1L, "面试官临时调整"),
+                BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(400005);
     }
 
     private Lab lab() {

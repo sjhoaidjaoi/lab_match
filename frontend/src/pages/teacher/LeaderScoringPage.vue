@@ -87,6 +87,28 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="resultVisible" title="导入结果" width="560px">
+      <div class="import-summary">
+        <el-tag type="success">成功 {{ importResult?.successCount ?? 0 }} 条</el-tag>
+        <el-tag type="danger">失败 {{ importResult?.failCount ?? 0 }} 条</el-tag>
+        <span class="upload-tip">共 {{ importResult?.totalCount ?? 0 }} 条</span>
+      </div>
+      <el-table
+        v-if="(importResult?.failList.length ?? 0) > 0"
+        :data="importResult?.failList ?? []"
+        size="small"
+        max-height="320"
+      >
+        <el-table-column prop="rowNo" label="行号" width="80" />
+        <el-table-column prop="userNo" label="学号" width="140" />
+        <el-table-column prop="reason" label="失败原因" min-width="220" />
+      </el-table>
+      <el-empty v-else description="全部导入成功" :image-size="60" />
+      <template #footer>
+        <el-button type="primary" @click="resultVisible = false">知道了</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -96,7 +118,7 @@ import { ElMessage, type UploadFile } from 'element-plus'
 import ScoreFormDialog from '@/components/ScoreFormDialog.vue'
 import { importLeaderScores, listLeaderScores } from '@/api/leaderScore'
 import { getCurrentRound } from '@/api/public'
-import type { InterviewScoreRow } from '@/types/interview'
+import type { InterviewScoreRow, ScoreImportResult } from '@/types/interview'
 
 const loading = ref(false)
 const importing = ref(false)
@@ -109,6 +131,8 @@ const roundId = ref<number | null>(null)
 
 const importVisible = ref(false)
 const importFile = ref<File | null>(null)
+const resultVisible = ref(false)
+const importResult = ref<ScoreImportResult | null>(null)
 
 function formatScore(value: number | null): string {
   return value === null ? '-' : value.toFixed(2)
@@ -167,9 +191,9 @@ async function handleImport() {
   }
   importing.value = true
   try {
-    await importLeaderScores(importFile.value)
-    ElMessage.success('导入完成')
+    importResult.value = await importLeaderScores(importFile.value)
     importVisible.value = false
+    resultVisible.value = true
     await loadScores()
   } catch {
     // 错误提示已由请求层统一处理
@@ -222,5 +246,12 @@ onMounted(loadScores)
   margin-top: 8px;
   font-size: 12px;
   color: #909399;
+}
+
+.import-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 </style>

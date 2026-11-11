@@ -8,8 +8,10 @@ import com.college.labselect.dto.req.LoginReqDTO;
 import com.college.labselect.dto.resp.LoginRespVO;
 import com.college.labselect.dto.resp.TokenRespVO;
 import com.college.labselect.dto.resp.UserInfoVO;
+import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.SysUser;
 import com.college.labselect.exception.BusinessException;
+import com.college.labselect.mapper.LabMapper;
 import com.college.labselect.mapper.SysUserMapper;
 import com.college.labselect.security.JwtUtils;
 import com.college.labselect.security.LoginUser;
@@ -33,12 +35,14 @@ import java.util.Objects;
 public class AuthServiceImpl implements IAuthService {
 
     private static final int STATUS_ENABLED = 1;
+    private static final int USER_TYPE_TEACHER = 2;
     private static final int NEED_CHANGE_PASSWORD = 1;
     private static final int PASSWORD_CHANGED = 0;
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String BLACKLIST_KEY_PREFIX = "auth:blacklist:";
 
     private final SysUserMapper sysUserMapper;
+    private final LabMapper labMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final StringRedisTemplate stringRedisTemplate;
@@ -142,6 +146,9 @@ public class AuthServiceImpl implements IAuthService {
         userInfo.setUserNo(user.getUserNo());
         userInfo.setRealName(user.getRealName());
         userInfo.setUserType(user.getUserType());
+        userInfo.setLeader(Integer.valueOf(USER_TYPE_TEACHER).equals(user.getUserType())
+                && labMapper.selectOne(new LambdaQueryWrapper<Lab>()
+                .eq(Lab::getLeaderId, user.getId())) != null);
         userInfo.setCollege(user.getCollege());
         userInfo.setMajor(user.getMajor());
         userInfo.setGrade(user.getGrade());

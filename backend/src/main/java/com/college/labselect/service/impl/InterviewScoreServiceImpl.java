@@ -9,6 +9,8 @@ import com.college.labselect.common.StatusTextUtils;
 import com.college.labselect.dto.req.InterviewScoreSaveReqDTO;
 import com.college.labselect.dto.resp.InterviewScoreListVO;
 import com.college.labselect.dto.resp.InterviewScoreRespVO;
+import com.college.labselect.dto.resp.ScoreImportFailVO;
+import com.college.labselect.dto.resp.ScoreImportResultVO;
 import com.college.labselect.dto.resp.TeacherScoreDetailVO;
 import com.college.labselect.entity.InterviewScore;
 import com.college.labselect.entity.InterviewSchedule;
@@ -37,6 +39,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -59,6 +62,8 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
     private static final int SCORE_SUBMITTED = 2;
     private static final int SUBMIT_FLAG = 1;
     private static final int USER_TYPE_STUDENT = 1;
+    private static final int ROUND_INTERVIEWING = 3;
+    private static final int LOCKED = 1;
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final BigDecimal DEFAULT_WEIGHT = new BigDecimal("25.00");
 
@@ -153,23 +158,26 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void importScores(Long leaderUserId, MultipartFile file) {
+    public ScoreImportResultVO importScores(Long leaderUserId, MultipartFile file) {
         Lab lab = requireLab(leaderUserId);
         SelectionRound round = currentRound();
         if (round == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "当前无选拔轮次");
         }
+        ensureScoreWritable(round);
         List<InterviewScoreExcelParser.Row> rows = scoreExcelParser.parse(file);
         if (rows.isEmpty()) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "Excel 无有效数据");
         }
         int success = 0;
+        List<ScoreImportFailVO> failList = new ArrayList<>();
         for (InterviewScoreExcelParser.Row row : rows) {
             try {
                 SysUser student = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
                         .eq(SysUser::getUserNo, StrUtil.trim(row.getUserNo())));
                 if (student == null || !Integer.valueOf(USER_TYPE_STUDENT).equals(student.getUserType())) {
                     log.warn("评分导入跳过，学号不存在，row={}，userNo={}", row.getRowNo(), row.getUserNo());
+                    failList.add(new ScoreImportFailVO(row.getRowNo(), row.getUserNo(), "学号不存在或不是学生账号"));
                     continue;
                 }
                 InterviewScoreSaveReqDTO req = new InterviewScoreSaveReqDTO();
@@ -186,12 +194,17 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
             } catch (BusinessException exception) {
                 log.warn("评分导入跳过，row={}，userNo={}，reason={}",
                         row.getRowNo(), row.getUserNo(), exception.getMessage());
+                failList.add(new ScoreImportFailVO(row.getRowNo(), row.getUserNo(), exception.getMessage()));
             }
         }
-        log.info("批量导入面试评分，labId={}，total={}，success={}", lab.getId(), rows.size(), success);
-        if (success == 0) {
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "评分导入全部失败，请检查学号、分数与排期");
-        }
+        log.info("批量导入面试评分，labId={}，total={}，success={}，fail={}",
+                lab.getId(), rows.size(), success, failList.size());
+        ScoreImportResultVO result = new ScoreImportResultVO();
+        result.setTotalCount(rows.size());
+        result.setSuccessCount(success);
+        result.setFailCount(failList.size());
+        result.setFailList(failList);
+        return result;
     }
 
     @Override
@@ -252,6 +265,7 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
         if (round == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "选拔轮次不存在");
         }
+        ensureScoreWritable(round);
         BigDecimal systemTotal = calculateTotal(round, req);
         BigDecimal manualTotal = req.getManualTotal() == null
                 ? null : req.getManualTotal().setScale(2, RoundingMode.HALF_UP);
@@ -321,6 +335,25 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
     private void checkScore(BigDecimal score) {
         if (score == null || score.compareTo(BigDecimal.ZERO) < 0 || score.compareTo(HUNDRED) > 0) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "分数必须在 0-100 之间");
+        }
+    }
+
+    /**
+     * 校验评分写操作的批次锁定、轮次阶段与面试时间窗。
+     *
+     * @param round 选拔轮次
+     */
+    private void ensureScoreWritable(SelectionRound round) {
+        if (Integer.valueOf(LOCKED).equals(round.getLocked())) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "批次已锁定，不可录入评分");
+        }
+        if (!Integer.valueOf(ROUND_INTERVIEWING).equals(round.getStatus())) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "当前不在面试阶段");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (round.getInterviewStart() == null || round.getInterviewEnd() == null
+                || now.isBefore(round.getInterviewStart()) || now.isAfter(round.getInterviewEnd())) {
+            throw new BusinessException(ResultCode.OUT_OF_TIME_WINDOW, "当前不在面试时间窗内");
         }
     }
 

@@ -1,8 +1,10 @@
 package com.college.labselect.service;
 
 import com.college.labselect.dto.req.ScheduleAdjustReqDTO;
+import com.college.labselect.dto.req.ScheduleAssignReqDTO;
 import com.college.labselect.dto.resp.InterviewScheduleVO;
 import com.college.labselect.dto.resp.StudentInterviewVO;
+import com.college.labselect.dto.resp.UnassignedStudentVO;
 
 import java.util.List;
 
@@ -35,6 +37,24 @@ public interface IInterviewScheduleService {
      * @param req          调整请求
      */
     void adjustSchedules(Long leaderUserId, ScheduleAdjustReqDTO req);
+
+    /**
+     * 查询本室已提交意向但尚未排期的学生。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param roundId      轮次 ID
+     * @return 待排学生列表
+     */
+    List<UnassignedStudentVO> listUnassignedStudents(Long leaderUserId, Long roundId);
+
+    /**
+     * 手工将未排期学生分配到草稿场次。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param req          排期请求
+     * @return 排期 ID
+     */
+    Long assignSchedule(Long leaderUserId, ScheduleAssignReqDTO req);
 
     /**
      * 查询学生本人的面试安排。

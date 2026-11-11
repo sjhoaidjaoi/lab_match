@@ -2,11 +2,13 @@ package com.college.labselect.service;
 
 import com.college.labselect.dto.req.InterviewScoreSaveReqDTO;
 import com.college.labselect.dto.resp.InterviewScoreRespVO;
+import com.college.labselect.dto.resp.ScoreImportResultVO;
 import com.college.labselect.entity.InterviewSchedule;
 import com.college.labselect.entity.InterviewScore;
 import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.OperationLog;
 import com.college.labselect.entity.SelectionRound;
+import com.college.labselect.entity.SysUser;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.mapper.InterviewScheduleMapper;
 import com.college.labselect.mapper.InterviewScoreMapper;
@@ -25,8 +27,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.mock.web.MockMultipartFile;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
@@ -171,6 +176,89 @@ class InterviewScoreServiceTest {
         verify(operationLogMapper).insert(any(OperationLog.class));
     }
 
+    /**
+     * 边界：批次锁定后录分返回 400005。
+     */
+    @Test
+    void saveScore_lockedRound_shouldThrow400005() {
+        SelectionRound round = round();
+        round.setLocked(1);
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round);
+
+        BusinessException exception = catchThrowableOfType(
+                () -> interviewScoreService.saveScore(2001L, scoreReq(1)), BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(400005);
+    }
+
+    /**
+     * 边界：面试时间窗结束后录分返回 400004。
+     */
+    @Test
+    void saveScore_outsideInterviewWindow_shouldThrow400004() {
+        SelectionRound round = round();
+        round.setInterviewEnd(LocalDateTime.now().minusMinutes(1));
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round);
+
+        BusinessException exception = catchThrowableOfType(
+                () -> interviewScoreService.saveScore(2001L, scoreReq(1)), BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(400004);
+    }
+
+    /**
+     * 快乐路径：Excel 导入部分失败时返回成功数与失败明细。
+     */
+    @Test
+    void importScores_partialFail_shouldReturnCountsAndFailList() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(selectionRoundMapper.selectOne(any())).thenReturn(round());
+        when(scoreExcelParser.parse(any())).thenReturn(List.of(
+                row(2, "20220001"), row(3, "20229999")));
+        SysUser student = new SysUser();
+        student.setId(1001L);
+        student.setUserNo("20220001");
+        student.setUserType(1);
+        when(sysUserMapper.selectOne(any())).thenReturn(student, (SysUser) null);
+        when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round());
+        when(interviewScoreMapper.selectOne(any())).thenReturn(null);
+        when(interviewScoreMapper.insert(any(InterviewScore.class))).thenAnswer(invocation -> {
+            InterviewScore score = invocation.getArgument(0);
+            score.setId(1001L);
+            return 1;
+        });
+        MockMultipartFile file = new MockMultipartFile("file", "scores.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[0]);
+
+        ScoreImportResultVO result = interviewScoreService.importScores(2001L, file);
+
+        assertThat(result.getTotalCount()).isEqualTo(2);
+        assertThat(result.getSuccessCount()).isEqualTo(1);
+        assertThat(result.getFailCount()).isEqualTo(1);
+        assertThat(result.getFailList()).hasSize(1);
+        assertThat(result.getFailList().get(0).getRowNo()).isEqualTo(3);
+        assertThat(result.getFailList().get(0).getUserNo()).isEqualTo("20229999");
+    }
+
+    private InterviewScoreExcelParser.Row row(int rowNo, String userNo) {
+        InterviewScoreExcelParser.Row row = new InterviewScoreExcelParser.Row();
+        row.setRowNo(rowNo);
+        row.setUserNo(userNo);
+        row.setAttitudeScore(new BigDecimal("90.00"));
+        row.setLogicScore(new BigDecimal("85.00"));
+        row.setProgrammingScore(new BigDecimal("88.00"));
+        row.setTimeScore(new BigDecimal("80.00"));
+        row.setComment("导入");
+        return row;
+    }
+
     private Lab lab() {
         Lab lab = new Lab();
         lab.setId(1L);
@@ -192,6 +280,10 @@ class InterviewScoreServiceTest {
     private SelectionRound round() {
         SelectionRound round = new SelectionRound();
         round.setId(1L);
+        round.setStatus(3);
+        round.setLocked(0);
+        round.setInterviewStart(LocalDateTime.now().minusDays(1));
+        round.setInterviewEnd(LocalDateTime.now().plusDays(1));
         round.setWeightAttitude(new BigDecimal("25.00"));
         round.setWeightLogic(new BigDecimal("25.00"));
         round.setWeightProgramming(new BigDecimal("25.00"));

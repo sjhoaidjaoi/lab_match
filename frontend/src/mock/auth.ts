@@ -27,6 +27,7 @@ const accounts: Record<string, MockAccount> = {
       userNo: '20220001',
       realName: '陈爱丽',
       userType: 1,
+      leader: false,
       college: '计算机学院',
       major: '软件工程',
       grade: '2022'
@@ -41,6 +42,7 @@ const accounts: Record<string, MockAccount> = {
       userNo: '20220002',
       realName: '张强',
       userType: 1,
+      leader: false,
       college: '计算机学院',
       major: '软件工程',
       grade: '2022'
@@ -55,6 +57,7 @@ const accounts: Record<string, MockAccount> = {
       userNo: '20010001',
       realName: '李海峰',
       userType: 2,
+      leader: true,
       college: '计算机学院',
       major: null,
       grade: null
@@ -69,6 +72,7 @@ const accounts: Record<string, MockAccount> = {
       userNo: '20010002',
       realName: '王建国',
       userType: 2,
+      leader: false,
       college: '计算机学院',
       major: null,
       grade: null
@@ -83,6 +87,7 @@ const accounts: Record<string, MockAccount> = {
       userNo: 'admin',
       realName: '系统管理员',
       userType: 3,
+      leader: false,
       college: null,
       major: null,
       grade: null

@@ -66,8 +66,8 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="调剂说明">
-          <el-input v-model="reason" type="textarea" :rows="3" maxlength="500" show-word-limit />
+        <el-form-item label="调剂说明" required>
+          <el-input v-model="reason" type="textarea" :rows="3" maxlength="500" show-word-limit placeholder="必填，将写入操作日志" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -137,6 +137,10 @@ async function handleReallocate() {
   }
   if (!current.value || !toMentorId.value) {
     ElMessage.warning('请选择目标导师')
+    return
+  }
+  if (!reason.value.trim()) {
+    ElMessage.warning('请填写调剂说明')
     return
   }
   try {

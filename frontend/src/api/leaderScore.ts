@@ -3,7 +3,8 @@ import type { PageResult } from '@/types/basic'
 import type {
   InterviewScoreResp,
   InterviewScoreRow,
-  InterviewScoreSaveReq
+  InterviewScoreSaveReq,
+  ScoreImportResult
 } from '@/types/interview'
 
 /**
@@ -29,8 +30,8 @@ export function saveLeaderScore(payload: InterviewScoreSaveReq): Promise<Intervi
 /**
  * Excel 批量导入评分，列顺序：学号、学习态度、逻辑思维、编程基础、时间投入、评语。
  */
-export function importLeaderScores(file: File): Promise<void> {
+export function importLeaderScores(file: File): Promise<ScoreImportResult> {
   const formData = new FormData()
   formData.append('file', file)
-  return post<void>('/leader/scores/import', formData)
+  return post<ScoreImportResult>('/leader/scores/import', formData)
 }

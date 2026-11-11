@@ -12,6 +12,7 @@ public class UserInfoVO {
     private String userNo;
     private String realName;
     private Integer userType;
+    private Boolean leader;
     private String college;
     private String major;
     private String grade;

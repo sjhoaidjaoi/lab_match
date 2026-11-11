@@ -15,6 +15,7 @@ import com.college.labselect.entity.InterviewSession;
 import com.college.labselect.entity.InterviewSessionInterviewer;
 import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
+import com.college.labselect.entity.OperationLog;
 import com.college.labselect.entity.SelectionRound;
 import com.college.labselect.entity.SysUser;
 import com.college.labselect.entity.UserNotice;
@@ -26,6 +27,7 @@ import com.college.labselect.mapper.InterviewSessionInterviewerMapper;
 import com.college.labselect.mapper.InterviewSessionMapper;
 import com.college.labselect.mapper.LabMapper;
 import com.college.labselect.mapper.MentorProfileMapper;
+import com.college.labselect.mapper.OperationLogMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
 import com.college.labselect.mapper.SysUserMapper;
 import com.college.labselect.mapper.UserNoticeMapper;
@@ -58,6 +60,7 @@ public class InterviewSessionServiceImpl implements IInterviewSessionService {
 
     private static final int SESSION_DRAFT = 1;
     private static final int SESSION_PUBLISHED = 2;
+    private static final int LOCKED = 1;
     private static final int ROUND_INTERVIEWING = 3;
     private static final int INTENTION_SUBMITTED = 2;
     private static final int USER_ENABLED = 1;
@@ -73,6 +76,7 @@ public class InterviewSessionServiceImpl implements IInterviewSessionService {
     private final SelectionRoundMapper selectionRoundMapper;
     private final SysUserMapper sysUserMapper;
     private final UserNoticeMapper userNoticeMapper;
+    private final OperationLogMapper operationLogMapper;
 
     @Override
     public List<InterviewSessionVO> listSessions(Long leaderUserId, Long roundId) {
@@ -231,6 +235,73 @@ public class InterviewSessionServiceImpl implements IInterviewSessionService {
         log.info("发布面试排期，labId={}，roundId={}，sessionCount={}，studentCount={}",
                 lab.getId(), roundId, sessions.size(), byStudent.size());
         return new PublishScheduleRespVO(sessions.size(), byStudent.size(), noticeCount);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PublishScheduleRespVO cancelPublish(Long leaderUserId, Long roundId, String reason) {
+        Lab lab = requireLab(leaderUserId);
+        SelectionRound round = selectionRoundMapper.selectById(roundId);
+        if (round == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "选拔轮次不存在");
+        }
+        if (Integer.valueOf(LOCKED).equals(round.getLocked())) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "批次已锁定，不可取消排期");
+        }
+        if (!Integer.valueOf(ROUND_INTERVIEWING).equals(round.getStatus())) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "当前不在面试阶段");
+        }
+        List<InterviewSession> sessions = interviewSessionMapper.selectList(
+                new LambdaQueryWrapper<InterviewSession>()
+                        .eq(InterviewSession::getRoundId, roundId)
+                        .eq(InterviewSession::getLabId, lab.getId())
+                        .eq(InterviewSession::getStatus, SESSION_PUBLISHED));
+        if (sessions.isEmpty()) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "无可取消的已发布场次");
+        }
+        List<InterviewSchedule> schedules = interviewScheduleMapper.selectList(
+                new LambdaQueryWrapper<InterviewSchedule>()
+                        .eq(InterviewSchedule::getRoundId, roundId)
+                        .eq(InterviewSchedule::getLabId, lab.getId()));
+        Map<Long, InterviewSession> sessionMap = sessions.stream()
+                .collect(Collectors.toMap(InterviewSession::getId, Function.identity(), (first, second) -> first));
+        for (InterviewSession session : sessions) {
+            InterviewSession update = new InterviewSession();
+            update.setId(session.getId());
+            update.setStatus(SESSION_DRAFT);
+            interviewSessionMapper.updateById(update);
+        }
+        int noticeCount = sendCancelNotices(schedules, sessionMap);
+        writeCancelLog(leaderUserId, roundId, reason);
+        long studentCount = schedules.stream()
+                .filter(schedule -> sessionMap.containsKey(schedule.getSessionId()))
+                .map(InterviewSchedule::getStudentId)
+                .distinct()
+                .count();
+        log.info("取消面试排期，labId={}，roundId={}，sessionCount={}，studentCount={}",
+                lab.getId(), roundId, sessions.size(), studentCount);
+        return new PublishScheduleRespVO(sessions.size(), (int) studentCount, noticeCount);
+    }
+
+    /**
+     * 写入取消并重排操作日志。
+     *
+     * @param operatorId 操作人用户 ID
+     * @param roundId    轮次 ID
+     * @param reason     取消原因
+     */
+    private void writeCancelLog(Long operatorId, Long roundId, String reason) {
+        SysUser operator = sysUserMapper.selectById(operatorId);
+        OperationLog operationLog = new OperationLog();
+        operationLog.setOperatorId(operatorId);
+        operationLog.setOperatorName(operator == null ? "" : operator.getRealName());
+        operationLog.setBizType("INTERVIEW_SESSION");
+        operationLog.setBizId(roundId);
+        operationLog.setAction("取消并重排");
+        operationLog.setBeforeValue("status=2");
+        operationLog.setAfterValue("status=1");
+        operationLog.setReason(reason);
+        operationLogMapper.insert(operationLog);
     }
 
     /**
@@ -477,24 +548,78 @@ public class InterviewSessionServiceImpl implements IInterviewSessionService {
             if (session == null || !sent.add(schedule.getId())) {
                 continue;
             }
-            UserNotice notice = new UserNotice();
-            notice.setUserId(schedule.getStudentId());
-            notice.setTitle("面试安排");
-            notice.setContent("你的面试安排：" + session.getSessionName() + "，"
+            String content = "你的面试安排：" + session.getSessionName() + "，"
                     + session.getInterviewDate() + " " + session.getStartTime() + "-" + session.getEndTime()
-                    + "，地点 " + session.getLocation() + "。请提前 10 分钟到场。");
-            notice.setNoticeType(NOTICE_TYPE_INTERVIEW);
-            notice.setBizType("INTERVIEW");
-            notice.setBizId(schedule.getId());
-            notice.setIsRead(0);
-            try {
-                userNoticeMapper.insert(notice);
+                    + "，地点 " + session.getLocation() + "。请提前 10 分钟到场。";
+            if (saveNotice(schedule.getStudentId(), schedule.getId(), "面试安排", content)) {
                 count++;
-            } catch (DuplicateKeyException exception) {
-                log.info("面试通知已存在，忽略重复推送，scheduleId={}", schedule.getId());
             }
         }
         return count;
+    }
+
+    /**
+     * 向学生推送面试取消通知，复用同一通知位以便重新发布时覆盖更新。
+     *
+     * @param schedules  排期列表
+     * @param sessionMap 场次映射
+     * @return 推送数量
+     */
+    private int sendCancelNotices(List<InterviewSchedule> schedules, Map<Long, InterviewSession> sessionMap) {
+        int count = 0;
+        Set<Long> sent = new HashSet<>();
+        for (InterviewSchedule schedule : schedules) {
+            InterviewSession session = sessionMap.get(schedule.getSessionId());
+            if (session == null || !sent.add(schedule.getId())) {
+                continue;
+            }
+            String content = "【已变更】原面试安排：" + session.getSessionName() + "，"
+                    + session.getInterviewDate() + " " + session.getStartTime() + "-" + session.getEndTime()
+                    + "，地点 " + session.getLocation() + "。该安排已取消，实训室将重新排期，请等待最新通知。";
+            if (saveNotice(schedule.getStudentId(), schedule.getId(), "面试安排变更", content)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * 写入或更新面试通知，重复发布时复用同一业务通知位。
+     *
+     * @param userId  学生用户 ID
+     * @param bizId   排期 ID
+     * @param title   通知标题
+     * @param content 通知内容
+     * @return 是否写入成功
+     */
+    private boolean saveNotice(Long userId, Long bizId, String title, String content) {
+        UserNotice existing = userNoticeMapper.selectOne(new LambdaQueryWrapper<UserNotice>()
+                .eq(UserNotice::getBizType, "INTERVIEW")
+                .eq(UserNotice::getBizId, bizId)
+                .eq(UserNotice::getUserId, userId)
+                .eq(UserNotice::getNoticeType, NOTICE_TYPE_INTERVIEW));
+        if (existing != null) {
+            existing.setTitle(title);
+            existing.setContent(content);
+            existing.setIsRead(0);
+            userNoticeMapper.updateById(existing);
+            return true;
+        }
+        UserNotice notice = new UserNotice();
+        notice.setUserId(userId);
+        notice.setTitle(title);
+        notice.setContent(content);
+        notice.setNoticeType(NOTICE_TYPE_INTERVIEW);
+        notice.setBizType("INTERVIEW");
+        notice.setBizId(bizId);
+        notice.setIsRead(0);
+        try {
+            userNoticeMapper.insert(notice);
+            return true;
+        } catch (DuplicateKeyException exception) {
+            log.info("面试通知已存在，忽略重复推送，scheduleId={}", bizId);
+            return false;
+        }
     }
 
     /**

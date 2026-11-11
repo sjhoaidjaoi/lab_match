@@ -52,6 +52,19 @@ export interface ScheduleAdjustReq {
   items: ScheduleAdjustItem[]
 }
 
+export interface ScheduleAssignReq {
+  roundId: number
+  studentId: number
+  sessionId: number
+}
+
+export interface UnassignedStudent {
+  studentId: number
+  studentNo: string
+  studentName: string
+  mentorNames: string[]
+}
+
 export interface InterviewScoreRow {
   id: number | null
   studentId: number
@@ -88,6 +101,19 @@ export interface InterviewScoreResp {
   manualTotal: number | null
   finalTotal: number
   status: number
+}
+
+export interface ScoreImportFailItem {
+  rowNo: number
+  userNo: string
+  reason: string
+}
+
+export interface ScoreImportResult {
+  totalCount: number
+  successCount: number
+  failCount: number
+  failList: ScoreImportFailItem[]
 }
 
 export interface StudentInterview {

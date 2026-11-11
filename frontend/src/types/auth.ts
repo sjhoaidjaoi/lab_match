@@ -13,6 +13,7 @@ export interface UserInfo {
   userNo: string
   realName: string
   userType: number
+  leader: boolean
   college: string | null
   major: string | null
   grade: string | null

@@ -6,6 +6,7 @@ import com.college.labselect.common.ResultCode;
 import com.college.labselect.dto.req.InterviewScoreSaveReqDTO;
 import com.college.labselect.dto.resp.InterviewScoreListVO;
 import com.college.labselect.dto.resp.InterviewScoreRespVO;
+import com.college.labselect.dto.resp.ScoreImportResultVO;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.security.LoginUser;
 import com.college.labselect.service.IInterviewScoreService;
@@ -79,14 +80,13 @@ public class LeaderScoreController {
      *
      * @param loginUser 当前登录用户
      * @param file      Excel 文件
-     * @return 统一响应
+     * @return 导入结果
      */
     @Operation(summary = "Excel 批量导入评分")
     @PostMapping("/import")
-    public Result<Void> importScores(@AuthenticationPrincipal LoginUser loginUser,
-                                     @RequestPart("file") MultipartFile file) {
-        interviewScoreService.importScores(requireLogin(loginUser), file);
-        return Result.success();
+    public Result<ScoreImportResultVO> importScores(@AuthenticationPrincipal LoginUser loginUser,
+                                                    @RequestPart("file") MultipartFile file) {
+        return Result.success(interviewScoreService.importScores(requireLogin(loginUser), file));
     }
 
     private Long requireLogin(LoginUser loginUser) {

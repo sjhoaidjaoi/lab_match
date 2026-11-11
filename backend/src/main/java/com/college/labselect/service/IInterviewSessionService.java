@@ -54,4 +54,14 @@ public interface IInterviewSessionService {
      * @return 发布结果
      */
     PublishScheduleRespVO publish(Long leaderUserId, Long roundId);
+
+    /**
+     * 取消发布并重排，已发布场次回退为草稿并通知学生。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param roundId      轮次 ID
+     * @param reason       取消原因
+     * @return 取消结果
+     */
+    PublishScheduleRespVO cancelPublish(Long leaderUserId, Long roundId, String reason);
 }

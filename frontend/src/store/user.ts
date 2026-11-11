@@ -33,6 +33,7 @@ export const useUserStore = defineStore('user', {
     isLoggedIn: (state): boolean => Boolean(state.token),
     isStudent: (state): boolean => state.user?.userType === 1,
     isTeacher: (state): boolean => state.user?.userType === 2,
+    isLeader: (state): boolean => state.user?.leader === true,
     isAdmin: (state): boolean => state.user?.userType === 3,
     displayName: (state): string => state.user?.realName ?? '未登录'
   },

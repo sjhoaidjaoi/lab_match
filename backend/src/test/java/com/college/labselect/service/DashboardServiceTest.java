@@ -263,6 +263,30 @@ class DashboardServiceTest {
     }
 
     /**
+     * 快乐路径：名单提交时间窗内存在草稿时生成待汇总待办。
+     */
+    @Test
+    void getLeaderDashboard_nominationWindow_shouldAddSubmitTodo() {
+        SelectionRound round = round(4, LocalDateTime.now().minusDays(1));
+        round.setNominationStart(LocalDateTime.now().minusHours(1));
+        round.setNominationSubmitEnd(LocalDateTime.now().plusHours(1));
+        when(selectionRoundMapper.selectOne(any())).thenReturn(round);
+        when(labMapper.selectOne(any())).thenReturn(lab(1L, 2001L, 20));
+        when(mentorProfileMapper.selectList(any())).thenReturn(List.of(
+                mentorProfile(11L, 1L, 4, 2), mentorProfile(12L, 1L, 6, 3)));
+        when(intentionItemMapper.selectCount(any())).thenReturn(0L);
+        when(interviewScoreMapper.selectCount(any())).thenReturn(0L);
+        when(nominationMapper.selectCount(any())).thenReturn(2L);
+
+        LeaderDashboardVO result = dashboardService.getLeaderDashboard(2001L);
+
+        assertThat(result.getTodo()).extracting(DashboardTodoVO::getType)
+                .containsExactly("NOMINATION");
+        assertThat(result.getTodo().get(0).getCount()).isEqualTo(2);
+        assertThat(result.getTodo().get(0).getTarget()).isEqualTo("/leader/nominations");
+    }
+
+    /**
      * 边界：负责人未绑定实训室返回 403001。
      */
     @Test
