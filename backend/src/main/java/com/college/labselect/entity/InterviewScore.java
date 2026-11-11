@@ -22,6 +22,8 @@ public class InterviewScore {
 
     private Long labId;
 
+    private Long mentorId;
+
     private Long studentId;
 
     private Long sessionId;

@@ -25,7 +25,13 @@
       <el-button type="primary" :loading="generating" @click="generate">生成快照</el-button>
     </div>
 
-    <el-table v-loading="loading" :data="snapshots" stripe max-height="320">
+    <el-table
+      v-loading="loading"
+      :data="snapshots"
+      stripe
+      max-height="320"
+      empty-text="暂无可展示的快照记录"
+    >
       <el-table-column label="类型" min-width="110">
         <template #default="{ row }">{{ row.snapshotTypeText }}</template>
       </el-table-column>
@@ -49,8 +55,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { MockError } from '@/mock/auth'
-import { mockGenerateSnapshot, mockSnapshotList } from '@/mock/archive'
+import { generateSnapshot, listSnapshots } from '@/api/adminArchive'
 import type { RoundListItem } from '@/types/basic'
 import type { RoundSnapshotItem, SnapshotType } from '@/types/archive'
 
@@ -74,8 +79,8 @@ const snapshotTypes = [
 
 const snapshotType = ref<SnapshotType>(4)
 const snapshots = ref<RoundSnapshotItem[]>([])
-const loading = ref(false)
 const generating = ref(false)
+const loading = ref(false)
 
 async function loadSnapshots() {
   if (!props.round) {
@@ -83,9 +88,9 @@ async function loadSnapshots() {
   }
   loading.value = true
   try {
-    snapshots.value = await mockSnapshotList(props.round.id)
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载快照失败')
+    snapshots.value = await listSnapshots(props.round.id)
+  } catch {
+    snapshots.value = []
   } finally {
     loading.value = false
   }
@@ -97,12 +102,12 @@ async function generate() {
   }
   generating.value = true
   try {
-    const result = await mockGenerateSnapshot(props.round.id, snapshotType.value)
+    const result = await generateSnapshot(props.round.id, snapshotType.value)
     ElMessage.success(`快照 v${result.version} 已生成，共 ${result.recordCount} 条记录`)
-    await loadSnapshots()
     emit('generated')
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '生成快照失败')
+    await loadSnapshots()
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     generating.value = false
   }

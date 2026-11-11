@@ -6,6 +6,7 @@ import com.college.labselect.dto.resp.ScoreImportResultVO;
 import com.college.labselect.entity.InterviewSchedule;
 import com.college.labselect.entity.InterviewScore;
 import com.college.labselect.entity.Lab;
+import com.college.labselect.entity.MentorProfile;
 import com.college.labselect.entity.OperationLog;
 import com.college.labselect.entity.SelectionRound;
 import com.college.labselect.entity.SysUser;
@@ -81,7 +82,7 @@ class InterviewScoreServiceTest {
      */
     @Test
     void saveScore_success_shouldCalculateSystemTotal() {
-        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor());
         when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
         when(selectionRoundMapper.selectById(1L)).thenReturn(round());
         when(interviewScoreMapper.selectOne(any())).thenReturn(null);
@@ -91,7 +92,7 @@ class InterviewScoreServiceTest {
             return 1;
         });
 
-        InterviewScoreRespVO result = interviewScoreService.saveScore(2001L, scoreReq(1));
+        InterviewScoreRespVO result = interviewScoreService.saveTeacherScore(2001L, scoreReq(1));
 
         assertThat(result.getSystemTotal()).isEqualByComparingTo("85.75");
         assertThat(result.getFinalTotal()).isEqualByComparingTo("85.75");
@@ -103,7 +104,7 @@ class InterviewScoreServiceTest {
      */
     @Test
     void saveScore_manualWithoutReason_shouldThrow400001() {
-        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor());
         when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
         when(selectionRoundMapper.selectById(1L)).thenReturn(round());
         InterviewScoreSaveReqDTO req = scoreReq(1);
@@ -111,7 +112,7 @@ class InterviewScoreServiceTest {
         req.setAdjustReason("");
 
         BusinessException exception = catchThrowableOfType(
-                () -> interviewScoreService.saveScore(2001L, req), BusinessException.class);
+                () -> interviewScoreService.saveTeacherScore(2001L, req), BusinessException.class);
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(400001);
@@ -122,14 +123,14 @@ class InterviewScoreServiceTest {
      */
     @Test
     void saveScore_outOfRange_shouldThrow400001() {
-        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor());
         when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
         when(selectionRoundMapper.selectById(1L)).thenReturn(round());
         InterviewScoreSaveReqDTO req = scoreReq(1);
         req.setAttitudeScore(new BigDecimal("101.00"));
 
         BusinessException exception = catchThrowableOfType(
-                () -> interviewScoreService.saveScore(2001L, req), BusinessException.class);
+                () -> interviewScoreService.saveTeacherScore(2001L, req), BusinessException.class);
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(400001);
@@ -140,11 +141,11 @@ class InterviewScoreServiceTest {
      */
     @Test
     void saveScore_studentNotInLab_shouldThrow403001() {
-        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor());
         when(interviewScheduleMapper.selectOne(any())).thenReturn(null);
 
         BusinessException exception = catchThrowableOfType(
-                () -> interviewScoreService.saveScore(2001L, scoreReq(1)), BusinessException.class);
+                () -> interviewScoreService.saveTeacherScore(2001L, scoreReq(1)), BusinessException.class);
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(403001);
@@ -155,7 +156,7 @@ class InterviewScoreServiceTest {
      */
     @Test
     void saveScore_manualOverride_shouldWriteLog() {
-        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor());
         when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
         when(selectionRoundMapper.selectById(1L)).thenReturn(round());
         when(interviewScoreMapper.selectOne(any())).thenReturn(null);
@@ -168,7 +169,7 @@ class InterviewScoreServiceTest {
         req.setManualTotal(new BigDecimal("88.00"));
         req.setAdjustReason("面试现场表现优秀");
 
-        InterviewScoreRespVO result = interviewScoreService.saveScore(2001L, req);
+        InterviewScoreRespVO result = interviewScoreService.saveTeacherScore(2001L, req);
 
         assertThat(result.getSystemTotal()).isEqualByComparingTo("85.75");
         assertThat(result.getManualTotal()).isEqualByComparingTo("88.00");
@@ -183,12 +184,12 @@ class InterviewScoreServiceTest {
     void saveScore_lockedRound_shouldThrow400005() {
         SelectionRound round = round();
         round.setLocked(1);
-        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor());
         when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
         when(selectionRoundMapper.selectById(1L)).thenReturn(round);
 
         BusinessException exception = catchThrowableOfType(
-                () -> interviewScoreService.saveScore(2001L, scoreReq(1)), BusinessException.class);
+                () -> interviewScoreService.saveTeacherScore(2001L, scoreReq(1)), BusinessException.class);
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(400005);
@@ -201,12 +202,12 @@ class InterviewScoreServiceTest {
     void saveScore_outsideInterviewWindow_shouldThrow400004() {
         SelectionRound round = round();
         round.setInterviewEnd(LocalDateTime.now().minusMinutes(1));
-        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor());
         when(interviewScheduleMapper.selectOne(any())).thenReturn(schedule());
         when(selectionRoundMapper.selectById(1L)).thenReturn(round);
 
         BusinessException exception = catchThrowableOfType(
-                () -> interviewScoreService.saveScore(2001L, scoreReq(1)), BusinessException.class);
+                () -> interviewScoreService.saveTeacherScore(2001L, scoreReq(1)), BusinessException.class);
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(400004);
@@ -217,7 +218,7 @@ class InterviewScoreServiceTest {
      */
     @Test
     void importScores_partialFail_shouldReturnCountsAndFailList() {
-        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor());
         when(selectionRoundMapper.selectOne(any())).thenReturn(round());
         when(scoreExcelParser.parse(any())).thenReturn(List.of(
                 row(2, "20220001"), row(3, "20229999")));
@@ -237,7 +238,7 @@ class InterviewScoreServiceTest {
         MockMultipartFile file = new MockMultipartFile("file", "scores.xlsx",
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", new byte[0]);
 
-        ScoreImportResultVO result = interviewScoreService.importScores(2001L, file);
+        ScoreImportResultVO result = interviewScoreService.importTeacherScores(2001L, file);
 
         assertThat(result.getTotalCount()).isEqualTo(2);
         assertThat(result.getSuccessCount()).isEqualTo(1);
@@ -271,10 +272,20 @@ class InterviewScoreServiceTest {
         schedule.setId(801L);
         schedule.setRoundId(1L);
         schedule.setLabId(1L);
+        schedule.setMentorId(11L);
         schedule.setSessionId(701L);
         schedule.setStudentId(1001L);
         schedule.setStatus(1);
         return schedule;
+    }
+
+    private MentorProfile mentor() {
+        MentorProfile mentor = new MentorProfile();
+        mentor.setId(11L);
+        mentor.setUserId(2001L);
+        mentor.setLabId(1L);
+        mentor.setStatus(1);
+        return mentor;
     }
 
     private SelectionRound round() {

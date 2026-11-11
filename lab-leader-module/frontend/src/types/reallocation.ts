@@ -28,6 +28,8 @@ export interface LeaderReallocationReq {
 export interface LeaderReallocationResp {
   reallocationId: number
   admissionId: number
+  status: number
+  confirmDeadline: string | null
 }
 
 export interface AdminReallocationItemReq {

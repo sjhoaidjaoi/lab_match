@@ -1,14 +1,9 @@
-import { get, post } from './request'
+import { get } from './request'
 import type { PageResult } from '@/types/basic'
-import type {
-  InterviewScoreResp,
-  InterviewScoreRow,
-  InterviewScoreSaveReq,
-  ScoreImportResult
-} from '@/types/interview'
+import type { InterviewScoreRow } from '@/types/interview'
 
 /**
- * 本室评分列表。
+ * 本室评分汇总列表，按学生与导师分别展示。
  */
 export function listLeaderScores(params: {
   roundId?: number
@@ -18,20 +13,4 @@ export function listLeaderScores(params: {
   pageSize?: number
 }): Promise<PageResult<InterviewScoreRow>> {
   return get<PageResult<InterviewScoreRow>>('/leader/scores', { params })
-}
-
-/**
- * 录入 / 更新本室学生评分。
- */
-export function saveLeaderScore(payload: InterviewScoreSaveReq): Promise<InterviewScoreResp> {
-  return post<InterviewScoreResp>('/leader/scores', payload)
-}
-
-/**
- * Excel 批量导入评分，列顺序：学号、学习态度、逻辑思维、编程基础、时间投入、评语。
- */
-export function importLeaderScores(file: File): Promise<ScoreImportResult> {
-  const formData = new FormData()
-  formData.append('file', file)
-  return post<ScoreImportResult>('/leader/scores/import', formData)
 }

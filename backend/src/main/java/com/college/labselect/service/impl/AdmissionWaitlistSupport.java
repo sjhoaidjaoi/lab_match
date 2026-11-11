@@ -1,6 +1,7 @@
 package com.college.labselect.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.college.labselect.entity.Admission;
 import com.college.labselect.entity.MentorProfile;
 import com.college.labselect.entity.SelectionRound;
@@ -12,6 +13,7 @@ import com.college.labselect.mapper.WaitlistMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,6 +29,7 @@ public class AdmissionWaitlistSupport {
     private static final int STATUS_PENDING = 1;
     private static final int STATUS_CONFIRMED = 2;
     private static final int STATUS_ENROLLED = 3;
+    private static final int STATUS_TIMEOUT = 5;
     private static final int PENDING_WAITLIST = 2;
     private static final int SOURCE_WAITLIST = 2;
     private static final int WAITLIST_PENDING = 1;
@@ -102,6 +105,38 @@ public class AdmissionWaitlistSupport {
                     roundId, mentorId, candidate.getStudentId());
             return;
         }
+    }
+
+    /**
+     * 将逾期的待确认录取置为逾期未确认，释放名额并触发同导师递补。
+     *
+     * @param admissionId 录取记录 ID
+     * @param now         判定时间
+     * @return 是否完成逾期处理
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public boolean expireIfPending(Long admissionId, LocalDateTime now) {
+        Admission admission = admissionMapper.selectById(admissionId);
+        if (admission == null || !Integer.valueOf(STATUS_PENDING).equals(admission.getStatus())) {
+            return false;
+        }
+        if (admission.getConfirmDeadline() == null || !now.isAfter(admission.getConfirmDeadline())) {
+            return false;
+        }
+        int updated = admissionMapper.update(null, new UpdateWrapper<Admission>()
+                .set("status", STATUS_TIMEOUT)
+                .set("active_flag", null)
+                .eq("id", admissionId)
+                .eq("status", STATUS_PENDING)
+                .lt("confirm_deadline", now));
+        if (updated == 0) {
+            return false;
+        }
+        releaseQuota(admission.getMentorId());
+        triggerWaitlist(admission.getRoundId(), admission.getMentorId());
+        log.info("录取确认逾期，admissionId={}，studentId={}，mentorId={}",
+                admissionId, admission.getStudentId(), admission.getMentorId());
+        return true;
     }
 
     /**

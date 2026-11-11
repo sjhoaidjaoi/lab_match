@@ -51,6 +51,18 @@ public class RoundBaseReqDTO {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime nominationEnd;
 
+    /**
+     * 阶段 6 内部调剂开始时间，可空；为空表示本轮不开放本室内部调剂。
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime innerAdjustStart;
+
+    /**
+     * 阶段 6 内部调剂结束时间，可空；必须与开始时间同时填写。
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime innerAdjustEnd;
+
     @NotNull(message = "调剂开始时间不能为空")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime adjustStart;

@@ -1,5 +1,6 @@
 package com.college.labselect.service;
 
+import com.college.labselect.dto.resp.LeaderApplicantPageVO;
 import com.college.labselect.dto.resp.TeacherApplicantPageVO;
 import com.college.labselect.dto.resp.TeacherStudentArchiveVO;
 import com.college.labselect.entity.Admission;
@@ -8,6 +9,7 @@ import com.college.labselect.entity.IntentionItem;
 import com.college.labselect.entity.InterviewScore;
 import com.college.labselect.entity.InterviewSchedule;
 import com.college.labselect.entity.InterviewSession;
+import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
 import com.college.labselect.entity.SelectionRound;
 import com.college.labselect.entity.StudentProfile;
@@ -19,6 +21,7 @@ import com.college.labselect.mapper.IntentionMapper;
 import com.college.labselect.mapper.InterviewScoreMapper;
 import com.college.labselect.mapper.InterviewScheduleMapper;
 import com.college.labselect.mapper.InterviewSessionMapper;
+import com.college.labselect.mapper.LabMapper;
 import com.college.labselect.mapper.MentorProfileMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
 import com.college.labselect.mapper.StudentProfileMapper;
@@ -81,8 +84,35 @@ class TeacherApplicantServiceTest {
     @Mock
     private StudentProfileMapper studentProfileMapper;
 
+    @Mock
+    private LabMapper labMapper;
+
     @InjectMocks
     private TeacherApplicantServiceImpl teacherApplicantService;
+
+    /**
+     * 边界：填报截止前负责人看不到本室报名学生。
+     */
+    @Test
+    void listLeaderApplicants_beforeApplyEnd_shouldHide() {
+        SelectionRound round = new SelectionRound();
+        round.setId(1L);
+        round.setApplyEnd(LocalDateTime.now().plusHours(1));
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(selectionRoundMapper.selectOne(any())).thenReturn(round);
+
+        LeaderApplicantPageVO result = teacherApplicantService.listLeaderApplicants(2001L, null, null, 1, 10);
+
+        assertThat(result.getVisible()).isZero();
+        assertThat(result.getList()).isEmpty();
+    }
+
+    private Lab lab() {
+        Lab lab = new Lab();
+        lab.setId(1L);
+        lab.setLeaderId(2001L);
+        return lab;
+    }
 
     /**
      * 边界：填报截止前盲选门禁，返回不可见且不查询意向。

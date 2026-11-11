@@ -47,6 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -74,10 +75,12 @@ public class ReallocationServiceImpl implements IReallocationService {
     private static final int STATUS_CONFIRMED = 2;
     private static final int STATUS_ENROLLED = 3;
     private static final int STATUS_ABANDONED = 4;
+    private static final int PENDING_INNER_ADJUST = 4;
     private static final int ACTIVE = 1;
     private static final int LOCKED = 1;
     private static final int MENTOR_ENABLED = 1;
     private static final int NOTICE_TYPE_CONFIRM = 4;
+    private static final DateTimeFormatter DEADLINE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final String ACTION_CONFIRM = "CONFIRM";
     private static final String ACTION_CANCEL = "CANCEL";
     private static final String ACTION_REASSIGN = "REASSIGN";
@@ -99,13 +102,13 @@ public class ReallocationServiceImpl implements IReallocationService {
     @Override
     public PageResult<ReallocationCandidateVO> listLeaderCandidates(Long leaderUserId, Long roundId,
                                                                     long pageNum, long pageSize) {
-        MentorProfile leader = mentorProfileMapper.selectOne(new LambdaQueryWrapper<MentorProfile>()
-                .eq(MentorProfile::getUserId, leaderUserId));
-        if (leader == null) {
+        Lab lab = labMapper.selectOne(new LambdaQueryWrapper<Lab>()
+                .eq(Lab::getLeaderId, leaderUserId));
+        if (lab == null) {
             throw new BusinessException(ResultCode.FORBIDDEN, "仅实训室负责人可查看本室调剂候选");
         }
         Long targetRoundId = resolveRoundId(roundId);
-        List<ReallocationCandidateVO> candidates = buildCandidates(targetRoundId, LEVEL_INNER, leader.getLabId());
+        List<ReallocationCandidateVO> candidates = buildCandidates(targetRoundId, LEVEL_INNER, lab.getId());
         return paginate(candidates, pageNum, pageSize);
     }
 
@@ -115,10 +118,10 @@ public class ReallocationServiceImpl implements IReallocationService {
         if (StrUtil.isBlank(req.getReason())) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "调剂说明不能为空");
         }
-        SelectionRound round = requireAdjustableRound(req.getRoundId());
-        MentorProfile leader = mentorProfileMapper.selectOne(new LambdaQueryWrapper<MentorProfile>()
-                .eq(MentorProfile::getUserId, leaderUserId));
-        if (leader == null) {
+        SelectionRound round = requireInnerAdjustableRound(req.getRoundId());
+        Lab lab = labMapper.selectOne(new LambdaQueryWrapper<Lab>()
+                .eq(Lab::getLeaderId, leaderUserId));
+        if (lab == null) {
             throw new BusinessException(ResultCode.FORBIDDEN, "仅实训室负责人可执行本室调剂");
         }
         Intention intention = requireIntention(round.getId(), req.getStudentId());
@@ -126,17 +129,17 @@ public class ReallocationServiceImpl implements IReallocationService {
             throw new BusinessException(ResultCode.BUSINESS_ERROR, "学生未勾选服从实训室内部调剂");
         }
         List<IntentionItem> items = listIntentionItems(intention.getId());
-        boolean belongs = items.stream().anyMatch(item -> Objects.equals(item.getLabId(), leader.getLabId()));
+        boolean belongs = items.stream().anyMatch(item -> Objects.equals(item.getLabId(), lab.getId()));
         if (!belongs) {
             throw new BusinessException(ResultCode.FORBIDDEN, "该学生不属于本实训室");
         }
         ensureNoActiveAdmission(round.getId(), req.getStudentId());
         MentorProfile target = requireTargetMentor(req.getToMentorId());
-        if (!Objects.equals(target.getLabId(), leader.getLabId())) {
+        if (!Objects.equals(target.getLabId(), lab.getId())) {
             throw new BusinessException(ResultCode.FORBIDDEN, "内部调剂只能选择本室导师");
         }
-        return applyReallocation(round, req.getStudentId(), leader.getLabId(), target, LEVEL_INNER,
-                leaderUserId, req.getReason(), items);
+        return applyReallocation(round, req.getStudentId(), lab.getId(), target, LEVEL_INNER,
+                leaderUserId, req.getReason(), items, true);
     }
 
     @Override
@@ -260,7 +263,7 @@ public class ReallocationServiceImpl implements IReallocationService {
         }
         Long fromLabId = Integer.valueOf(LEVEL_TALK).equals(level)
                 ? null : items.stream().map(IntentionItem::getLabId).filter(Objects::nonNull).findFirst().orElse(null);
-        applyReallocation(round, studentId, fromLabId, target, level, adminUserId, reason, items);
+        applyReallocation(round, studentId, fromLabId, target, level, adminUserId, reason, items, false);
     }
 
     /**
@@ -278,7 +281,8 @@ public class ReallocationServiceImpl implements IReallocationService {
      */
     private LeaderReallocationRespVO applyReallocation(SelectionRound round, Long studentId, Long fromLabId,
                                                        MentorProfile target, int level, Long operatorId,
-                                                       String reason, List<IntentionItem> items) {
+                                                       String reason, List<IntentionItem> items,
+                                                       boolean pendingConfirm) {
         if (mentorProfileMapper.increaseQuotaUsed(target.getId(), 1) == 0) {
             throw new BusinessException(ResultCode.BUSINESS_ERROR, "目标导师剩余名额不足");
         }
@@ -293,6 +297,7 @@ public class ReallocationServiceImpl implements IReallocationService {
         reallocation.setOperatorId(operatorId);
         reallocation.setReason(reason);
         reallocationMapper.insert(reallocation);
+        LocalDateTime confirmDeadline = null;
         Admission admission = new Admission();
         admission.setRoundId(round.getId());
         admission.setStudentId(studentId);
@@ -300,18 +305,40 @@ public class ReallocationServiceImpl implements IReallocationService {
         admission.setMentorId(target.getId());
         admission.setSourceType(level == LEVEL_INNER ? 3 : (level == LEVEL_CROSS ? 4 : 5));
         admission.setReallocationId(reallocation.getId());
-        admission.setStatus(STATUS_CONFIRMED);
-        admission.setActiveFlag(ACTIVE);
-        admission.setConfirmTime(LocalDateTime.now());
+        if (pendingConfirm) {
+            confirmDeadline = innerConfirmDeadline(round);
+            admission.setStatus(STATUS_PENDING);
+            admission.setPendingType(PENDING_INNER_ADJUST);
+            admission.setConfirmDeadline(confirmDeadline);
+        } else {
+            admission.setStatus(STATUS_CONFIRMED);
+            admission.setActiveFlag(ACTIVE);
+            admission.setConfirmTime(LocalDateTime.now());
+        }
         admissionMapper.insert(admission);
         writeLog(operatorId, "REALLOCATION", reallocation.getId(), "统筹调剂-level" + level,
                 "labId=" + fromLabId, "labId=" + toLabId + ",mentorId=" + target.getId(), reason);
-        sendReallocationNotice(studentId, reallocation.getId(), target, level);
-        log.info("调剂完成，studentId={}，level={}，toMentorId={}", studentId, level, target.getId());
+        sendReallocationNotice(studentId, reallocation.getId(), target, level, confirmDeadline);
+        log.info("调剂完成，studentId={}，level={}，toMentorId={}，pendingConfirm={}",
+                studentId, level, target.getId(), pendingConfirm);
         LeaderReallocationRespVO resp = new LeaderReallocationRespVO();
         resp.setReallocationId(reallocation.getId());
         resp.setAdmissionId(admission.getId());
+        resp.setStatus(admission.getStatus());
+        resp.setConfirmDeadline(confirmDeadline);
         return resp;
+    }
+
+    /**
+     * 计算内部调剂学生确认截止：取内部调剂结束与通知后 24 小时的较早者。
+     *
+     * @param round 轮次
+     * @return 确认截止时间
+     */
+    private LocalDateTime innerConfirmDeadline(SelectionRound round) {
+        LocalDateTime fallback = LocalDateTime.now().plusHours(24);
+        LocalDateTime innerEnd = round.getInnerAdjustEnd();
+        return innerEnd != null && innerEnd.isBefore(fallback) ? innerEnd : fallback;
     }
 
     /**
@@ -504,6 +531,30 @@ public class ReallocationServiceImpl implements IReallocationService {
         if (round.getAdjustStart() == null || round.getAdjustEnd() == null
                 || now.isBefore(round.getAdjustStart()) || now.isAfter(round.getAdjustEnd())) {
             throw new BusinessException(ResultCode.OUT_OF_TIME_WINDOW, "当前不在调剂时间窗内");
+        }
+        return round;
+    }
+
+    /**
+     * 查询可执行阶段 6 内部调剂的轮次，校验内部调剂时间窗与锁定状态。
+     *
+     * @param roundId 轮次 ID
+     * @return 轮次
+     */
+    private SelectionRound requireInnerAdjustableRound(Long roundId) {
+        SelectionRound round = selectionRoundMapper.selectById(roundId);
+        if (round == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "选拔轮次不存在");
+        }
+        if (Integer.valueOf(LOCKED).equals(round.getLocked())) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "批次已锁定，不可调剂");
+        }
+        if (round.getInnerAdjustStart() == null || round.getInnerAdjustEnd() == null) {
+            throw new BusinessException(ResultCode.OUT_OF_TIME_WINDOW, "本轮未配置内部调剂时间窗");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (now.isBefore(round.getInnerAdjustStart()) || now.isAfter(round.getInnerAdjustEnd())) {
+            throw new BusinessException(ResultCode.OUT_OF_TIME_WINDOW, "当前不在内部调剂时间窗内");
         }
         return round;
     }
@@ -708,19 +759,26 @@ public class ReallocationServiceImpl implements IReallocationService {
     /**
      * 发送调剂结果通知。
      *
-     * @param studentId    学生 ID
-     * @param reallocationId 调剂记录 ID
-     * @param target       目标导师
-     * @param level        级别
+     * @param studentId       学生 ID
+     * @param reallocationId  调剂记录 ID
+     * @param target          目标导师
+     * @param level           级别
+     * @param confirmDeadline 学生确认截止，为空表示无需确认
      */
     private void sendReallocationNotice(Long studentId, Long reallocationId,
-                                        MentorProfile target, int level) {
+                                        MentorProfile target, int level, LocalDateTime confirmDeadline) {
         SysUser mentorUser = sysUserMapper.selectById(target.getUserId());
+        String mentorName = mentorUser == null ? "" : mentorUser.getRealName();
         UserNotice notice = new UserNotice();
         notice.setUserId(studentId);
-        notice.setTitle("调剂结果已生效");
-        notice.setContent("你已被调剂至 " + (mentorUser == null ? "" : mentorUser.getRealName())
-                + " 导师，调剂级别：" + level + "。");
+        if (confirmDeadline == null) {
+            notice.setTitle("调剂结果已生效");
+            notice.setContent("你已被调剂至 " + mentorName + " 导师，调剂级别：" + level + "。");
+        } else {
+            notice.setTitle("内部调剂待确认");
+            notice.setContent("你已被调剂至 " + mentorName + " 导师，请在 "
+                    + confirmDeadline.format(DEADLINE_FORMATTER) + " 前确认，逾期视为放弃。");
+        }
         notice.setNoticeType(NOTICE_TYPE_CONFIRM);
         notice.setBizType("REALLOCATION");
         notice.setBizId(reallocationId);

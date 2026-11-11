@@ -11,9 +11,11 @@ const menus = [
   { label: '意向填报', to: '/student/intention' },
   { label: '补录填报', to: '/student/supplement' },
   { label: '面试安排', to: '/student/interview' },
+  { label: '在线笔试', to: '/student/exams' },
   { label: '待确认中心', to: '/student/confirm-center' },
   { label: '名单公示', to: '/student/publicity' },
   { label: '我的异议', to: '/student/disputes' },
-  { label: '消息通知', to: '/student/notices' }
+  { label: '消息通知', to: '/student/notices' },
+  { label: '个人中心', to: '/student/profile' }
 ]
 </script>

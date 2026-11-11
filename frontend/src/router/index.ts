@@ -5,6 +5,11 @@ import StudentLayout from '@/layouts/StudentLayout.vue'
 import TeacherLayout from '@/layouts/TeacherLayout.vue'
 import AdminLayout from '@/layouts/AdminLayout.vue'
 import HomePage from '@/pages/public/HomePage.vue'
+import LabsPage from '@/pages/public/LabsPage.vue'
+import LabDetailPage from '@/pages/public/LabDetailPage.vue'
+import MentorDetailPage from '@/pages/public/MentorDetailPage.vue'
+import NoticesPage from '@/pages/public/NoticesPage.vue'
+import NoticeDetailPage from '@/pages/public/NoticeDetailPage.vue'
 import StudentLogin from '@/pages/student/StudentLogin.vue'
 import TeacherLogin from '@/pages/teacher/TeacherLogin.vue'
 import AdminLogin from '@/pages/admin/AdminLogin.vue'
@@ -13,11 +18,18 @@ import StudentDashboardPage from '@/pages/student/StudentDashboardPage.vue'
 import StudentArchivePage from '@/pages/student/StudentArchivePage.vue'
 import StudentIntentionPage from '@/pages/student/StudentIntentionPage.vue'
 import StudentInterviewPage from '@/pages/student/StudentInterviewPage.vue'
+import StudentExamsPage from '@/pages/student/StudentExamsPage.vue'
+import StudentExamTakePage from '@/pages/student/StudentExamTakePage.vue'
 import AdminLabsPage from '@/pages/admin/AdminLabsPage.vue'
+import AdminLeadersPage from '@/pages/admin/AdminLeadersPage.vue'
 import AdminMentorsPage from '@/pages/admin/AdminMentorsPage.vue'
+import AdminQuotasPage from '@/pages/admin/AdminQuotasPage.vue'
 import AdminStudentsPage from '@/pages/admin/AdminStudentsPage.vue'
 import AdminRoundsPage from '@/pages/admin/AdminRoundsPage.vue'
 import LeaderMentorPage from '@/pages/teacher/LeaderMentorPage.vue'
+import LeaderApplicantPage from '@/pages/teacher/LeaderApplicantPage.vue'
+import LeaderAdmissionPage from '@/pages/teacher/LeaderAdmissionPage.vue'
+import LeaderWaitlistPage from '@/pages/teacher/LeaderWaitlistPage.vue'
 import LeaderInterviewSchedulePage from '@/pages/teacher/LeaderInterviewSchedulePage.vue'
 import LeaderScoringPage from '@/pages/teacher/LeaderScoringPage.vue'
 import MentorNominationPage from '@/pages/teacher/MentorNominationPage.vue'
@@ -26,17 +38,22 @@ import LeaderNominationPage from '@/pages/teacher/LeaderNominationPage.vue'
 import StudentConfirmCenterPage from '@/pages/student/StudentConfirmCenterPage.vue'
 import StudentSupplementPage from '@/pages/student/StudentSupplementPage.vue'
 import MentorApplicantsPage from '@/pages/teacher/MentorApplicantsPage.vue'
+import QuestionBankPage from '@/pages/teacher/QuestionBankPage.vue'
+import ExamPaperPage from '@/pages/teacher/ExamPaperPage.vue'
 import MentorReallocationPoolPage from '@/pages/teacher/MentorReallocationPoolPage.vue'
 import LeaderReallocationPage from '@/pages/teacher/LeaderReallocationPage.vue'
 import AdminReallocationPage from '@/pages/admin/AdminReallocationPage.vue'
 import StudentPublicityPage from '@/pages/student/StudentPublicityPage.vue'
 import StudentDisputesPage from '@/pages/student/StudentDisputesPage.vue'
 import StudentNoticesPage from '@/pages/student/StudentNoticesPage.vue'
+import StudentProfilePage from '@/pages/student/StudentProfilePage.vue'
 import AdminPublicityPage from '@/pages/admin/AdminPublicityPage.vue'
 import AdminDisputesPage from '@/pages/admin/AdminDisputesPage.vue'
 import AdminResultsPage from '@/pages/admin/AdminResultsPage.vue'
 import AdminNoticesPage from '@/pages/admin/AdminNoticesPage.vue'
 import TeacherDashboardPage from '@/pages/teacher/TeacherDashboardPage.vue'
+import TeacherProfilePage from '@/pages/teacher/TeacherProfilePage.vue'
+import MentorAdmissionPage from '@/pages/teacher/MentorAdmissionPage.vue'
 import LeaderDashboardPage from '@/pages/teacher/LeaderDashboardPage.vue'
 import AdminDashboardPage from '@/pages/admin/AdminDashboardPage.vue'
 
@@ -46,6 +63,11 @@ const routes: RouteRecordRaw[] = [
     component: PublicLayout,
     children: [
       { path: '', name: 'home', component: HomePage, meta: { title: '首页' } },
+      { path: 'labs', name: 'public-labs', component: LabsPage, meta: { title: '实训室' } },
+      { path: 'labs/:id', name: 'public-lab-detail', component: LabDetailPage, meta: { title: '实训室详情' } },
+      { path: 'mentors/:id', name: 'public-mentor-detail', component: MentorDetailPage, meta: { title: '导师详情' } },
+      { path: 'notices', name: 'public-notices', component: NoticesPage, meta: { title: '公告栏' } },
+      { path: 'notices/:id', name: 'public-notice-detail', component: NoticeDetailPage, meta: { title: '公告详情' } },
       { path: 'student/login', name: 'student-login', component: StudentLogin, meta: { title: '学生登录' } },
       { path: 'teacher/login', name: 'teacher-login', component: TeacherLogin, meta: { title: '教师登录' } },
       { path: 'admin/login', name: 'admin-login', component: AdminLogin, meta: { title: '管理员登录' } },
@@ -87,6 +109,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '面试安排' }
       },
       {
+        path: 'exams',
+        name: 'student-exams',
+        component: StudentExamsPage,
+        meta: { title: '在线笔试' }
+      },
+      {
+        path: 'exams/:paperId',
+        name: 'student-exam-take',
+        component: StudentExamTakePage,
+        meta: { title: '在线答题' }
+      },
+      {
         path: 'confirm-center',
         name: 'student-confirm-center',
         component: StudentConfirmCenterPage,
@@ -115,6 +149,12 @@ const routes: RouteRecordRaw[] = [
         name: 'student-notices',
         component: StudentNoticesPage,
         meta: { title: '消息通知' }
+      },
+      {
+        path: 'profile',
+        name: 'student-profile',
+        component: StudentProfilePage,
+        meta: { title: '个人中心' }
       }
     ]
   },
@@ -136,6 +176,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '本室导师与名额' }
       },
       {
+        path: 'applicants',
+        name: 'leader-applicants',
+        component: LeaderApplicantPage,
+        meta: { title: '本室报名学生' }
+      },
+      {
         path: 'interview-schedule',
         name: 'leader-interview-schedule',
         component: LeaderInterviewSchedulePage,
@@ -145,13 +191,33 @@ const routes: RouteRecordRaw[] = [
         path: 'scoring',
         name: 'leader-scoring',
         component: LeaderScoringPage,
-        meta: { title: '本室评分录入' }
+        meta: { title: '本室评分汇总' }
       },
       {
         path: 'nominations',
         name: 'leader-nominations',
         component: LeaderNominationPage,
         meta: { title: '本室录取汇总' }
+      },
+      {
+        path: 'admissions',
+        name: 'leader-admissions',
+        component: LeaderAdmissionPage,
+        props: { mode: 'summary' },
+        meta: { title: '录取确认汇总' }
+      },
+      {
+        path: 'final-list',
+        name: 'leader-final-list',
+        component: LeaderAdmissionPage,
+        props: { mode: 'final' },
+        meta: { title: '本室最终名单' }
+      },
+      {
+        path: 'waitlist',
+        name: 'leader-waitlist',
+        component: LeaderWaitlistPage,
+        meta: { title: '本室递补名单' }
       },
       {
         path: 'reallocation',
@@ -185,6 +251,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '报名学生' }
       },
       {
+        path: 'questions',
+        name: 'teacher-questions',
+        component: QuestionBankPage,
+        meta: { title: '题库管理' }
+      },
+      {
+        path: 'exam-papers',
+        name: 'teacher-exam-papers',
+        component: ExamPaperPage,
+        meta: { title: '在线试卷' }
+      },
+      {
         path: 'reallocation-pool',
         name: 'teacher-reallocation-pool',
         component: MentorReallocationPoolPage,
@@ -195,6 +273,18 @@ const routes: RouteRecordRaw[] = [
         name: 'teacher-waitlist',
         component: MentorWaitlistPage,
         meta: { title: '递补顺位' }
+      },
+      {
+        path: 'profile',
+        name: 'teacher-profile',
+        component: TeacherProfilePage,
+        meta: { title: '个人中心' }
+      },
+      {
+        path: 'admissions',
+        name: 'teacher-admissions',
+        component: MentorAdmissionPage,
+        meta: { title: '我的录取名单' }
       }
     ]
   },
@@ -216,10 +306,22 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '实训室管理' }
       },
       {
+        path: 'leaders',
+        name: 'admin-leaders',
+        component: AdminLeadersPage,
+        meta: { title: '负责人提拔' }
+      },
+      {
         path: 'mentors',
         name: 'admin-mentors',
         component: AdminMentorsPage,
         meta: { title: '导师与名额' }
+      },
+      {
+        path: 'quotas',
+        name: 'admin-quotas',
+        component: AdminQuotasPage,
+        meta: { title: '名额总览' }
       },
       {
         path: 'students',
@@ -265,7 +367,7 @@ const routes: RouteRecordRaw[] = [
       }
     ]
   },
-  { path: '/:pathMatch(.*)*', redirect: '/' }
+  { path: '/:pathMatch(.*)*', redirect: '/labs' }
 ]
 
 const router = createRouter({

@@ -9,6 +9,7 @@ export interface LabListItem {
   id: number
   labCode: string
   labName: string
+  department: string | null
   leaderName: string | null
   mentorCount: number
   totalQuota: number
@@ -22,6 +23,7 @@ export interface LabListItem {
 export interface LabSaveReq {
   labCode: string
   labName: string
+  department: string
   introduction: string
   researchDirection: string
   equipmentEnv: string
@@ -40,6 +42,8 @@ export interface LabDetail {
   id: number
   labCode: string
   labName: string
+  department: string | null
+  leaderName: string | null
   introduction: string | null
   researchDirection: string | null
   equipmentEnv: string | null
@@ -65,11 +69,31 @@ export interface MentorListItem {
   labName: string
   title: string | null
   researchDirection: string | null
+  researchProjects: string | null
+  phone: string | null
+  email: string | null
   quota: number
   quotaUsed: number
   remainQuota: number
   status: number
   accountStatus: number
+}
+
+export interface MentorSaveReq {
+  realName: string
+  labId: number
+  title: string
+  researchDirection: string
+  researchProjects: string
+  phone: string
+  email: string
+  quota: number
+  status: number
+}
+
+export interface MentorCreateReq extends MentorSaveReq {
+  userNo: string
+  leader?: boolean
 }
 
 export interface StudentListItem {
@@ -127,6 +151,8 @@ export interface RoundListItem {
   nominationSubmitEnd: string
   confirmStart: string
   nominationEnd: string
+  innerAdjustStart: string | null
+  innerAdjustEnd: string | null
   adjustStart: string
   adjustEnd: string
   weightAttitude: number
@@ -147,6 +173,8 @@ export interface RoundSaveReq {
   nominationSubmitEnd: string
   confirmStart: string
   nominationEnd: string
+  innerAdjustStart: string | null
+  innerAdjustEnd: string | null
   adjustStart: string
   adjustEnd: string
   weightAttitude: number

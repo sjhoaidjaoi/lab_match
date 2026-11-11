@@ -15,13 +15,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -37,6 +38,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String BLACKLIST_KEY_PREFIX = "auth:blacklist:";
     private static final int STATUS_ENABLED = 1;
     private static final int NEED_CHANGE_PASSWORD = 1;
+    private static final int USER_TYPE_STUDENT = 1;
+    private static final int USER_TYPE_TEACHER = 2;
+    private static final int USER_TYPE_ADMIN = 3;
+    private static final String ROLE_STUDENT = "ROLE_STUDENT";
+    private static final String ROLE_TEACHER = "ROLE_TEACHER";
+    private static final String ROLE_ADMIN = "ROLE_ADMIN";
+    private static final String ROLE_UNKNOWN = "ROLE_UNKNOWN";
     private static final Set<String> PASSWORD_CHANGE_PATHS =
             Set.of("/api/v1/auth/change-password", "/api/v1/auth/logout");
 
@@ -78,10 +86,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         UsernamePasswordAuthenticationToken authentication =
-                new UsernamePasswordAuthenticationToken(loginUser, null, Collections.emptyList());
+                new UsernamePasswordAuthenticationToken(loginUser, null,
+                        List.of(new SimpleGrantedAuthority(resolveRole(user.getUserType()))));
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         SecurityContextHolder.getContext().setAuthentication(authentication);
         filterChain.doFilter(request, response);
+    }
+
+    /**
+     * 将用户类型映射为 Spring Security 角色。
+     *
+     * @param userType 用户类型：1 学生 2 教师 3 管理员
+     * @return 角色标识
+     */
+    private String resolveRole(Integer userType) {
+        if (Objects.equals(userType, USER_TYPE_STUDENT)) {
+            return ROLE_STUDENT;
+        }
+        if (Objects.equals(userType, USER_TYPE_TEACHER)) {
+            return ROLE_TEACHER;
+        }
+        if (Objects.equals(userType, USER_TYPE_ADMIN)) {
+            return ROLE_ADMIN;
+        }
+        return ROLE_UNKNOWN;
     }
 
     /**

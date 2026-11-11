@@ -7,6 +7,9 @@ import com.college.labselect.dto.resp.ResultOverviewVO;
 import com.college.labselect.dto.resp.RoundLockRespVO;
 import com.college.labselect.dto.resp.RoundUnlockRespVO;
 import com.college.labselect.dto.resp.SnapshotCreateRespVO;
+import com.college.labselect.dto.resp.SnapshotListItemVO;
+
+import java.util.List;
 
 /**
  * 轮次快照与批次归档服务。
@@ -22,6 +25,15 @@ public interface IArchiveService {
      * @return 新快照 ID、版本号与记录数
      */
     SnapshotCreateRespVO generateSnapshot(Long operatorId, Long roundId, SnapshotCreateReqDTO req);
+
+    /**
+     * 查询轮次快照历史。
+     *
+     * @param roundId      轮次 ID
+     * @param snapshotType 快照类型，可为空
+     * @return 快照历史列表
+     */
+    List<SnapshotListItemVO> listSnapshots(Long roundId, Integer snapshotType);
 
     /**
      * 批次锁定，仅最后一轮在归档快照生成且公示确认后可锁定。

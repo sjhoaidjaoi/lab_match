@@ -1,6 +1,7 @@
 package com.college.labselect.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.college.labselect.common.DesensitizeUtils;
 import com.college.labselect.common.ResultCode;
 import com.college.labselect.common.StatusTextUtils;
@@ -10,6 +11,8 @@ import com.college.labselect.dto.resp.AdmissionListVO;
 import com.college.labselect.dto.resp.ConfirmCenterItemVO;
 import com.college.labselect.dto.resp.ConfirmCenterVO;
 import com.college.labselect.dto.resp.ConfirmRespondRespVO;
+import com.college.labselect.dto.resp.LeaderAdmissionItemVO;
+import com.college.labselect.dto.resp.LeaderAdmissionSummaryVO;
 import com.college.labselect.entity.Admission;
 import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
@@ -24,6 +27,7 @@ import com.college.labselect.mapper.SelectionRoundMapper;
 import com.college.labselect.mapper.SysUserMapper;
 import com.college.labselect.mapper.UserNoticeMapper;
 import com.college.labselect.service.IAdmissionService;
+import com.college.labselect.service.IArchiveService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -35,6 +39,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +60,7 @@ public class AdmissionServiceImpl implements IAdmissionService {
     private static final int STATUS_CONFIRMED = 2;
     private static final int STATUS_ENROLLED = 3;
     private static final int STATUS_ABANDONED = 4;
+    private static final int STATUS_TIMEOUT = 5;
     private static final int ACTIVE = 1;
     private static final int LOCKED = 1;
     private static final int NOTICE_TYPE_CONFIRM = 4;
@@ -68,6 +74,7 @@ public class AdmissionServiceImpl implements IAdmissionService {
     private final LabMapper labMapper;
     private final SysUserMapper sysUserMapper;
     private final UserNoticeMapper userNoticeMapper;
+    private final IArchiveService archiveService;
     private final AdmissionWaitlistSupport waitlistSupport;
 
     @Override
@@ -268,6 +275,120 @@ public class AdmissionServiceImpl implements IAdmissionService {
         }
     }
 
+    @Override
+    public LeaderAdmissionSummaryVO listLeaderAdmissions(Long leaderUserId, Long roundId, boolean finalOnly) {
+        Lab lab = requireLeaderLab(leaderUserId);
+        LeaderAdmissionSummaryVO result = new LeaderAdmissionSummaryVO();
+        result.setLabId(lab.getId());
+        result.setLabName(lab.getLabName());
+        int labQuota = Optional.ofNullable(lab.getTotalQuota()).orElse(0);
+        result.setLabQuota(labQuota);
+        result.setAllocatedQuota(0);
+        result.setQuotaUsed(0);
+        result.setRemainQuota(labQuota);
+        result.setTotalCount(0);
+        result.setPendingCount(0);
+        result.setConfirmedCount(0);
+        result.setEnrolledCount(0);
+        result.setAbandonedCount(0);
+        result.setItems(List.of());
+        SelectionRound round = resolveRound(roundId);
+        if (round == null) {
+            return result;
+        }
+        result.setRoundId(round.getId());
+        List<MentorProfile> mentors = mentorProfileMapper.selectList(new LambdaQueryWrapper<MentorProfile>()
+                .eq(MentorProfile::getLabId, lab.getId()));
+        int allocatedQuota = mentors.stream()
+                .mapToInt(mentor -> Optional.ofNullable(mentor.getQuota()).orElse(0)).sum();
+        int quotaUsed = mentors.stream()
+                .mapToInt(mentor -> Optional.ofNullable(mentor.getQuotaUsed()).orElse(0)).sum();
+        result.setAllocatedQuota(allocatedQuota);
+        result.setQuotaUsed(quotaUsed);
+        result.setRemainQuota(Math.max(Math.max(labQuota, allocatedQuota) - quotaUsed, 0));
+        List<Admission> records = admissionMapper.selectList(new LambdaQueryWrapper<Admission>()
+                .eq(Admission::getRoundId, round.getId())
+                .eq(Admission::getLabId, lab.getId())
+                .orderByAsc(Admission::getId));
+        result.setTotalCount(records.size());
+        result.setPendingCount((int) records.stream()
+                .filter(item -> Integer.valueOf(STATUS_PENDING).equals(item.getStatus())).count());
+        result.setConfirmedCount((int) records.stream()
+                .filter(item -> Integer.valueOf(STATUS_CONFIRMED).equals(item.getStatus())).count());
+        result.setEnrolledCount((int) records.stream()
+                .filter(item -> Integer.valueOf(STATUS_ENROLLED).equals(item.getStatus())).count());
+        result.setAbandonedCount((int) records.stream()
+                .filter(item -> Integer.valueOf(STATUS_ABANDONED).equals(item.getStatus())
+                        || Integer.valueOf(STATUS_TIMEOUT).equals(item.getStatus())).count());
+        List<Admission> visible = finalOnly
+                ? records.stream()
+                .filter(item -> Integer.valueOf(STATUS_CONFIRMED).equals(item.getStatus())
+                        || Integer.valueOf(STATUS_ENROLLED).equals(item.getStatus()))
+                .toList()
+                : records;
+        if (visible.isEmpty()) {
+            return result;
+        }
+        Map<Long, SysUser> studentMap = loadUsers(visible.stream()
+                .map(Admission::getStudentId).distinct().toList());
+        List<Long> mentorIds = visible.stream()
+                .map(Admission::getMentorId).filter(Objects::nonNull).distinct().toList();
+        Map<Long, MentorProfile> mentorMap = mentorIds.isEmpty() ? new HashMap<>()
+                : mentorProfileMapper.selectBatchIds(mentorIds).stream()
+                .collect(Collectors.toMap(MentorProfile::getId, Function.identity(), (first, second) -> first));
+        Map<Long, SysUser> mentorUserMap = loadUsers(mentorMap.values().stream()
+                .map(MentorProfile::getUserId).filter(Objects::nonNull).distinct().toList());
+        List<LeaderAdmissionItemVO> items = new ArrayList<>();
+        for (Admission admission : visible) {
+            SysUser student = studentMap.get(admission.getStudentId());
+            MentorProfile mentor = mentorMap.get(admission.getMentorId());
+            SysUser mentorUser = mentor == null ? null : mentorUserMap.get(mentor.getUserId());
+            LeaderAdmissionItemVO vo = new LeaderAdmissionItemVO();
+            vo.setId(admission.getId());
+            vo.setStudentId(admission.getStudentId());
+            vo.setStudentNo(student == null ? "" : DesensitizeUtils.maskUserNo(student.getUserNo()));
+            vo.setStudentName(student == null ? "" : DesensitizeUtils.maskName(student.getRealName()));
+            vo.setMentorId(admission.getMentorId());
+            vo.setMentorName(mentorUser == null ? "" : mentorUser.getRealName());
+            vo.setTotalScore(admission.getTotalScore());
+            vo.setStatus(admission.getStatus());
+            vo.setStatusText(StatusTextUtils.admissionStatus(admission.getStatus()));
+            vo.setSourceType(admission.getSourceType());
+            vo.setSourceTypeText(StatusTextUtils.sourceType(admission.getSourceType()));
+            vo.setConfirmTime(admission.getConfirmTime());
+            vo.setConfirmDeadline(admission.getConfirmDeadline());
+            items.add(vo);
+        }
+        items.sort(Comparator.comparing(LeaderAdmissionItemVO::getStatus,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(LeaderAdmissionItemVO::getMentorId,
+                        Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(LeaderAdmissionItemVO::getStudentId,
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        result.setItems(items);
+        return result;
+    }
+
+    @Override
+    public byte[] exportLeaderAdmissions(Long leaderUserId, Long roundId) {
+        Lab lab = requireLeaderLab(leaderUserId);
+        return archiveService.exportResults(roundId, lab.getId(), null);
+    }
+
+    /**
+     * 查询负责人所在实训室。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @return 实训室
+     */
+    private Lab requireLeaderLab(Long leaderUserId) {
+        Lab lab = labMapper.selectOne(new LambdaQueryWrapper<Lab>().eq(Lab::getLeaderId, leaderUserId));
+        if (lab == null) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "仅实训室负责人可查看本室录取情况");
+        }
+        return lab;
+    }
+
     /**
      * 接受录取并释放该生其他待确认记录。
      *
@@ -276,11 +397,15 @@ public class AdmissionServiceImpl implements IAdmissionService {
      */
     private int accept(Admission admission) {
         Admission update = new Admission();
-        update.setId(admission.getId());
         update.setStatus(STATUS_CONFIRMED);
         update.setActiveFlag(ACTIVE);
         update.setConfirmTime(LocalDateTime.now());
-        admissionMapper.updateById(update);
+        int updated = admissionMapper.update(update, new UpdateWrapper<Admission>()
+                .eq("id", admission.getId())
+                .eq("status", STATUS_PENDING));
+        if (updated == 0) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "该待确认记录已处理，不可重复响应");
+        }
         List<Admission> others = admissionMapper.selectList(new LambdaQueryWrapper<Admission>()
                 .eq(Admission::getRoundId, admission.getRoundId())
                 .eq(Admission::getStudentId, admission.getStudentId())
@@ -305,9 +430,13 @@ public class AdmissionServiceImpl implements IAdmissionService {
      */
     private int reject(Admission admission) {
         Admission update = new Admission();
-        update.setId(admission.getId());
         update.setStatus(STATUS_ABANDONED);
-        admissionMapper.updateById(update);
+        int updated = admissionMapper.update(update, new UpdateWrapper<Admission>()
+                .eq("id", admission.getId())
+                .eq("status", STATUS_PENDING));
+        if (updated == 0) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "该待确认记录已处理，不可重复响应");
+        }
         waitlistSupport.releaseQuota(admission.getMentorId());
         waitlistSupport.triggerWaitlist(admission.getRoundId(), admission.getMentorId());
         return STATUS_ABANDONED;

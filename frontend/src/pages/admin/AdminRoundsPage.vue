@@ -32,6 +32,15 @@
         <el-table-column label="确认截止" width="170">
           <template #default="{ row }">{{ row.nominationEnd }}</template>
         </el-table-column>
+        <el-table-column label="内部调剂窗口" min-width="190">
+          <template #default="{ row }">
+            <template v-if="row.innerAdjustStart && row.innerAdjustEnd">
+              <div>{{ row.innerAdjustStart }}</div>
+              <div class="muted">{{ row.innerAdjustEnd }}</div>
+            </template>
+            <span v-else class="muted">未配置</span>
+          </template>
+        </el-table-column>
         <el-table-column label="权重" width="150">
           <template #default="{ row }">
             {{ row.weightAttitude }} / {{ row.weightLogic }} /
@@ -45,7 +54,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="350" fixed="right">
           <template #default="{ row }">
             <el-button
               link
@@ -70,6 +79,15 @@
             </el-button>
             <el-button
               link
+              type="primary"
+              size="small"
+              :loading="issuingId === row.id"
+              @click="handleIssue(row)"
+            >
+              手动签发
+            </el-button>
+            <el-button
+              link
               :type="row.locked === 1 ? 'warning' : 'danger'"
               size="small"
               :disabled="row.locked === 0 && !isLastRound(row)"
@@ -91,7 +109,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listRounds, updateRoundStatus } from '@/api/adminRound'
+import { listRounds, issueRound, updateRoundStatus } from '@/api/adminRound'
 import RoundConfigDialog from '@/components/RoundConfigDialog.vue'
 import SnapshotDialog from '@/components/SnapshotDialog.vue'
 import RoundLockDialog from '@/components/RoundLockDialog.vue'
@@ -104,6 +122,7 @@ const editingRound = ref<RoundListItem | null>(null)
 const snapshotVisible = ref(false)
 const lockVisible = ref(false)
 const actionRound = ref<RoundListItem | null>(null)
+const issuingId = ref<number | null>(null)
 
 const lastRoundNo = computed(() =>
   rounds.value.reduce((max, item) => Math.max(max, item.roundNo), 0)
@@ -180,6 +199,28 @@ async function toggleStatus(round: RoundListItem) {
     await loadRounds()
   } catch {
     // 错误提示已由请求层统一处理
+  }
+}
+
+async function handleIssue(round: RoundListItem) {
+  try {
+    await ElMessageBox.confirm(
+      `确定对「${round.roundName}」手动签发吗？将按学生维度重新生成录取记录，重复执行结果一致。`,
+      '手动签发',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  issuingId.value = round.id
+  try {
+    await issueRound(round.id)
+    ElMessage.success('签发完成')
+    await loadRounds()
+  } catch {
+    // 错误提示已由请求层统一处理
+  } finally {
+    issuingId.value = null
   }
 }
 

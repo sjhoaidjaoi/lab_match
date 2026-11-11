@@ -8,6 +8,8 @@ import com.college.labselect.common.PageResult;
 import com.college.labselect.common.ResultCode;
 import com.college.labselect.common.StatusTextUtils;
 import com.college.labselect.dto.req.PublicityCreateReqDTO;
+import com.college.labselect.dto.resp.PublicityAdminDetailVO;
+import com.college.labselect.dto.resp.PublicityAdminRowVO;
 import com.college.labselect.dto.resp.PublicityConfirmRespVO;
 import com.college.labselect.dto.resp.PublicityCreateRespVO;
 import com.college.labselect.dto.resp.PublicityDetailVO;
@@ -119,6 +121,55 @@ public class PublicityServiceImpl implements IPublicityService {
     }
 
     @Override
+    public PublicityAdminDetailVO getAdminPublicityRows(Long id) {
+        Publicity publicity = requirePublicity(id);
+        List<Admission> admissions = admissionMapper.selectList(new LambdaQueryWrapper<Admission>()
+                .eq(Admission::getRoundId, publicity.getRoundId())
+                .in(Admission::getStatus, ADMISSION_CONFIRMED, ADMISSION_ENROLLED)
+                .orderByAsc(Admission::getId));
+        Map<Long, SysUser> studentMap = loadUsers(admissions.stream()
+                .map(Admission::getStudentId).distinct().toList());
+        Map<Long, Lab> labMap = loadLabs(admissions.stream()
+                .map(Admission::getLabId).distinct().toList());
+        Map<Long, MentorProfile> mentorMap = loadMentors(admissions.stream()
+                .map(Admission::getMentorId).distinct().toList());
+        Map<Long, SysUser> mentorUserMap = loadUsers(mentorMap.values().stream()
+                .map(MentorProfile::getUserId).toList());
+        List<PublicityAdminRowVO> rows = new ArrayList<>();
+        for (Admission admission : admissions) {
+            SysUser student = studentMap.get(admission.getStudentId());
+            Lab lab = labMap.get(admission.getLabId());
+            MentorProfile mentor = mentorMap.get(admission.getMentorId());
+            SysUser mentorUser = mentor == null ? null : mentorUserMap.get(mentor.getUserId());
+            PublicityAdminRowVO row = new PublicityAdminRowVO();
+            row.setAdmissionId(admission.getId());
+            row.setStudentId(admission.getStudentId());
+            row.setStudentNo(student == null ? "" : student.getUserNo());
+            row.setStudentName(student == null ? "" : student.getRealName());
+            row.setCollege(student == null ? "" : student.getCollege());
+            row.setMajor(student == null ? "" : student.getMajor());
+            row.setLabId(admission.getLabId());
+            row.setLabName(lab == null ? "" : lab.getLabName());
+            row.setMentorId(admission.getMentorId());
+            row.setMentorName(mentorUser == null ? "" : mentorUser.getRealName());
+            row.setFinalTotal(admission.getTotalScore());
+            row.setStatus(admission.getStatus());
+            row.setStatusText(StatusTextUtils.admissionStatus(admission.getStatus()));
+            row.setConfirmTime(admission.getConfirmTime());
+            rows.add(row);
+        }
+        PublicityAdminDetailVO vo = new PublicityAdminDetailVO();
+        vo.setId(publicity.getId());
+        vo.setTitle(publicity.getTitle());
+        vo.setStartTime(publicity.getStartTime());
+        vo.setEndTime(publicity.getEndTime());
+        vo.setStatus(publicity.getStatus());
+        vo.setTotal(rows.size());
+        vo.setList(rows);
+        return vo;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public PublicityCreateRespVO createPublicity(Long adminUserId, PublicityCreateReqDTO req) {
         SelectionRound round = selectionRoundMapper.selectById(req.getRoundId());
@@ -157,6 +208,7 @@ public class PublicityServiceImpl implements IPublicityService {
         notice.setStatus(2);
         notice.setPublishTime(startTime);
         notice.setPublisherId(adminUserId);
+        notice.setBizId(publicity.getId());
         noticeMapper.insert(notice);
 
         for (Long studentId : new LinkedHashSet<>(admissions.stream()

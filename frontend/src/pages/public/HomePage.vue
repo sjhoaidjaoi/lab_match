@@ -16,6 +16,8 @@
       </div>
     </section>
 
+    <QuickLoginPanel class="quick-panel" />
+
     <section class="cards">
       <el-card v-for="entry in entries" :key="entry.title" shadow="hover" class="entry-card">
         <h3>{{ entry.title }}</h3>
@@ -27,6 +29,8 @@
 </template>
 
 <script setup lang="ts">
+import QuickLoginPanel from '@/components/QuickLoginPanel.vue'
+
 const entries = [
   {
     title: '学生端',
@@ -36,7 +40,7 @@ const entries = [
   },
   {
     title: '教师端',
-    description: '查看本室报名、参与评分、提交拟录取与维护递补顺位。',
+    description: '导师与负责人共用入口；负责人登录后自动获得本室管理功能。',
     to: '/teacher/login',
     action: '进入教师端'
   },
@@ -83,6 +87,10 @@ const entries = [
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
+}
+
+.quick-panel {
+  margin-bottom: 24px;
 }
 
 .entry-card h3 {

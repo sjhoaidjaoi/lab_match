@@ -31,6 +31,8 @@ public class Notice {
 
     private Long publisherId;
 
+    private Long bizId;
+
     private LocalDateTime gmtCreate;
 
     private LocalDateTime gmtModified;

@@ -16,6 +16,8 @@ public class LabDetailVO {
     private Long id;
     private String labCode;
     private String labName;
+    private String department;
+    private String leaderName;
     private String introduction;
     private String researchDirection;
     private String equipmentEnv;

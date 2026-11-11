@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.college.labselect.dto.req.NoticeSaveReqDTO;
 import com.college.labselect.dto.req.NoticeStatusReqDTO;
 import com.college.labselect.dto.resp.NoticeAdminVO;
+import com.college.labselect.dto.resp.NoticeAttachmentVO;
 import com.college.labselect.dto.resp.PublicNoticeVO;
 import com.college.labselect.entity.Notice;
 import com.college.labselect.entity.SysUser;
@@ -19,19 +20,25 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -58,6 +65,9 @@ class NoticeManageServiceTest {
 
     @InjectMocks
     private NoticeManageServiceImpl noticeManageService;
+
+    @TempDir
+    private Path tempDir;
 
     /**
      * 快乐路径：新建草稿不写发布时间，状态落 1。
@@ -237,6 +247,66 @@ class NoticeManageServiceTest {
         assertThat(result.getTitle()).isEqualTo("集中宣讲通知");
         assertThat(result.getContent()).isEqualTo("宣讲时间与地点已确定。");
         assertThat(result.getPublishTime()).isNotNull();
+    }
+
+    /**
+     * 快乐路径：上传白名单附件成功落盘并返回访问地址。
+     */
+    @Test
+    void uploadAttachment_allowedType_shouldStoreFile() throws Exception {
+        ReflectionTestUtils.setField(noticeManageService, "uploadDir", tempDir.toString());
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "选拔方案.pdf", "application/pdf", "demo".getBytes());
+
+        NoticeAttachmentVO result = noticeManageService.uploadAttachment(file);
+
+        assertThat(result.getFileName()).isEqualTo("选拔方案.pdf");
+        assertThat(result.getUrl()).startsWith("/api/v1/files/notice/").endsWith(".pdf");
+        Path stored = tempDir.resolve(result.getUrl().substring("/api/v1/files/".length()));
+        assertThat(Files.exists(stored)).isTrue();
+    }
+
+    /**
+     * 边界：非白名单扩展名返回 400001。
+     */
+    @Test
+    void uploadAttachment_unsupportedType_shouldThrow400001() {
+        ReflectionTestUtils.setField(noticeManageService, "uploadDir", tempDir.toString());
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "demo.exe", "application/octet-stream", "demo".getBytes());
+
+        BusinessException exception = catchThrowableOfType(
+                () -> noticeManageService.uploadAttachment(file), BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(400001);
+    }
+
+    /**
+     * 快乐路径：删除草稿公告同时清理记录。
+     */
+    @Test
+    void deleteNotice_draft_shouldDeleteRecord() {
+        when(noticeMapper.selectById(1L)).thenReturn(notice(1L, 1, null));
+
+        noticeManageService.deleteNotice(1L);
+
+        verify(noticeMapper).deleteById(1L);
+    }
+
+    /**
+     * 边界：已发布公告不允许直接删除，返回 400005。
+     */
+    @Test
+    void deleteNotice_published_shouldThrow400005() {
+        when(noticeMapper.selectById(1L)).thenReturn(notice(1L, 2, LocalDateTime.of(2026, 11, 1, 9, 0)));
+
+        BusinessException exception = catchThrowableOfType(
+                () -> noticeManageService.deleteNotice(1L), BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(400005);
+        verify(noticeMapper, never()).deleteById(any(Long.class));
     }
 
     private NoticeSaveReqDTO req(int type, int status) {

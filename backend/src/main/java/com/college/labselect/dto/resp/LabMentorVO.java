@@ -10,9 +10,12 @@ public class LabMentorVO {
 
     private Long id;
     private Long userId;
+    private Long labId;
+    private String labName;
     private String realName;
     private String title;
     private String researchDirection;
+    private String researchProjects;
     private Integer quota;
     private Integer quotaUsed;
     private Integer remainQuota;

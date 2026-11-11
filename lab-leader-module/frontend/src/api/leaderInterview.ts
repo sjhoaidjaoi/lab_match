@@ -97,3 +97,10 @@ export function listUnassignedStudents(roundId?: number): Promise<UnassignedStud
 export function assignInterviewSchedule(payload: ScheduleAssignReq): Promise<number> {
   return post<number>('/leader/interview-schedules/assign', payload)
 }
+
+/**
+ * 登记面试状态：2 已完成、3 缺席。
+ */
+export function updateInterviewScheduleStatus(id: number, status: number): Promise<void> {
+  return put<void>(`/leader/interview-schedules/${id}/status`, { status })
+}

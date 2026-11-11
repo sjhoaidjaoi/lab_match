@@ -14,6 +14,7 @@ import com.college.labselect.dto.resp.ResultRowVO;
 import com.college.labselect.dto.resp.RoundLockRespVO;
 import com.college.labselect.dto.resp.RoundUnlockRespVO;
 import com.college.labselect.dto.resp.SnapshotCreateRespVO;
+import com.college.labselect.dto.resp.SnapshotListItemVO;
 import com.college.labselect.entity.Admission;
 import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
@@ -103,6 +104,47 @@ public class ArchiveServiceImpl implements IArchiveService {
         log.info("生成轮次快照，roundId={}，type={}，version={}，count={}", round.getId(),
                 snapshotType, snapshot.getVersion(), snapshot.getRecordCount());
         return resp;
+    }
+
+    @Override
+    public List<SnapshotListItemVO> listSnapshots(Long roundId, Integer snapshotType) {
+        SelectionRound round = selectionRoundMapper.selectById(roundId);
+        if (round == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "选拔轮次不存在");
+        }
+        List<RoundSnapshot> snapshots = roundSnapshotMapper.selectList(
+                new LambdaQueryWrapper<RoundSnapshot>()
+                        .eq(RoundSnapshot::getRoundId, roundId)
+                        .eq(snapshotType != null, RoundSnapshot::getSnapshotType, snapshotType)
+                        .orderByDesc(RoundSnapshot::getGmtCreate)
+                        .orderByDesc(RoundSnapshot::getVersion));
+        Map<Long, SysUser> operatorMap = new HashMap<>();
+        List<Long> operatorIds = snapshots.stream()
+                .map(RoundSnapshot::getOperatorId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (!operatorIds.isEmpty()) {
+            operatorMap = sysUserMapper.selectBatchIds(operatorIds).stream()
+                    .collect(Collectors.toMap(SysUser::getId, Function.identity(), (first, second) -> first));
+        }
+        List<SnapshotListItemVO> list = new ArrayList<>();
+        for (RoundSnapshot snapshot : snapshots) {
+            SysUser operator = operatorMap.get(snapshot.getOperatorId());
+            SnapshotListItemVO vo = new SnapshotListItemVO();
+            vo.setId(snapshot.getId());
+            vo.setRoundId(snapshot.getRoundId());
+            vo.setRoundName(round.getRoundName());
+            vo.setSnapshotType(snapshot.getSnapshotType());
+            vo.setSnapshotTypeText(StatusTextUtils.snapshotType(snapshot.getSnapshotType()));
+            vo.setRecordCount(snapshot.getRecordCount());
+            vo.setVersion(snapshot.getVersion());
+            vo.setIsCurrent(snapshot.getIsCurrent());
+            vo.setOperatorName(operator == null ? "" : operator.getRealName());
+            vo.setGmtCreate(snapshot.getGmtCreate());
+            list.add(vo);
+        }
+        return list;
     }
 
     @Override

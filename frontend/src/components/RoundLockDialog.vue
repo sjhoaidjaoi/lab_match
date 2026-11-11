@@ -36,7 +36,7 @@
           v-model="password"
           type="password"
           show-password
-          placeholder="请输入当前登录密码（Mock：123456）"
+          placeholder="请输入当前登录密码"
         />
       </el-form-item>
     </el-form>
@@ -53,8 +53,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { MockError } from '@/mock/auth'
-import { mockLockRound, mockUnlockRound } from '@/mock/archive'
+import { lockRound, unlockRound } from '@/api/adminArchive'
 import type { RoundListItem } from '@/types/basic'
 
 const props = defineProps<{ modelValue: boolean; round: RoundListItem | null }>()
@@ -88,18 +87,18 @@ async function submit() {
   submitting.value = true
   try {
     if (locked.value) {
-      await mockUnlockRound(props.round.id, password.value, reason.value)
+      await unlockRound(props.round.id, password.value, reason.value)
       ElMessage.success('批次已解锁，公示已退回进行中并重新生成归档快照')
     } else {
-      await mockLockRound(props.round.id, reason.value)
+      await lockRound(props.round.id, reason.value)
       ElMessage.success('批次已锁定，全系统进入只读状态')
     }
     emit('done')
     visible.value = false
     reason.value = ''
     password.value = ''
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '操作失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     submitting.value = false
   }

@@ -1,5 +1,7 @@
 package com.college.labselect.service.impl;
 
+import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -9,6 +11,7 @@ import com.college.labselect.common.StatusTextUtils;
 import com.college.labselect.dto.req.NoticeSaveReqDTO;
 import com.college.labselect.dto.req.NoticeStatusReqDTO;
 import com.college.labselect.dto.resp.NoticeAdminVO;
+import com.college.labselect.dto.resp.NoticeAttachmentVO;
 import com.college.labselect.dto.resp.PublicNoticeVO;
 import com.college.labselect.entity.Notice;
 import com.college.labselect.entity.SysUser;
@@ -18,13 +21,22 @@ import com.college.labselect.mapper.SysUserMapper;
 import com.college.labselect.service.INoticeManageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -42,10 +54,21 @@ public class NoticeManageServiceImpl implements INoticeManageService {
     private static final int TYPE_MIN = 1;
     private static final int TYPE_MAX = 4;
     private static final long MAX_PAGE_SIZE = 100L;
+    private static final long MAX_ATTACHMENT_SIZE = 10L * 1024 * 1024;
+    private static final String FILE_URL_PREFIX = "/api/v1/files/";
+    private static final Set<String> ALLOWED_EXTENSIONS = Set.of(
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "zip", "rar", "png", "jpg", "jpeg");
+    private static final DateTimeFormatter DATE_DIR_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private final NoticeMapper noticeMapper;
 
     private final SysUserMapper sysUserMapper;
+
+    /**
+     * 上传文件根目录。
+     */
+    @Value("${lab-select.upload-dir:./uploads}")
+    private String uploadDir;
 
     @Override
     public PageResult<NoticeAdminVO> pageAdminNotices(String keyword, Integer noticeType, Integer status,
@@ -118,6 +141,70 @@ public class NoticeManageServiceImpl implements INoticeManageService {
         notice.setStatus(target);
         noticeMapper.updateById(notice);
         log.info("更新公告状态，noticeId={}，status={}", id, target);
+    }
+
+    @Override
+    public NoticeAttachmentVO uploadAttachment(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "请选择需要上传的附件");
+        }
+        if (file.getSize() > MAX_ATTACHMENT_SIZE) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "附件大小不能超过 10MB");
+        }
+        String originalName = StrUtil.trim(file.getOriginalFilename());
+        String extension = FileUtil.extName(originalName).toLowerCase();
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "不支持的附件类型");
+        }
+        String dateDir = LocalDate.now().format(DATE_DIR_FORMATTER);
+        String storedName = IdUtil.fastSimpleUUID() + "." + extension;
+        Path targetDir = Paths.get(uploadDir, "notice", dateDir).toAbsolutePath().normalize();
+        try {
+            Files.createDirectories(targetDir);
+            file.transferTo(targetDir.resolve(storedName).toFile());
+        } catch (IOException e) {
+            log.error("公告附件写入失败，fileName={}", originalName, e);
+            throw new BusinessException(ResultCode.SERVER_ERROR, "附件上传失败");
+        }
+        NoticeAttachmentVO vo = new NoticeAttachmentVO();
+        vo.setFileName(StrUtil.blankToDefault(originalName, storedName));
+        vo.setUrl(FILE_URL_PREFIX + "notice/" + dateDir + "/" + storedName);
+        log.info("公告附件上传成功，fileName={}，size={}", originalName, file.getSize());
+        return vo;
+    }
+
+    @Override
+    public void deleteNotice(Long id) {
+        Notice notice = requireNotice(id);
+        if (Integer.valueOf(STATUS_PUBLISHED).equals(notice.getStatus())) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "已发布公告请先下线再删除");
+        }
+        noticeMapper.deleteById(id);
+        removeAttachment(notice.getAttachmentUrl());
+        log.info("删除公告，noticeId={}", id);
+    }
+
+    /**
+     * 清理本系统存储的附件文件，外部地址不处理。
+     *
+     * @param attachmentUrl 附件地址
+     */
+    private void removeAttachment(String attachmentUrl) {
+        if (StrUtil.isBlank(attachmentUrl) || !attachmentUrl.startsWith(FILE_URL_PREFIX)) {
+            return;
+        }
+        String relative = attachmentUrl.substring(FILE_URL_PREFIX.length());
+        Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path target = root.resolve(relative).normalize();
+        if (!target.startsWith(root)) {
+            log.warn("附件路径非法，跳过清理，attachmentUrl={}", attachmentUrl);
+            return;
+        }
+        try {
+            Files.deleteIfExists(target);
+        } catch (IOException e) {
+            log.warn("附件文件清理失败，attachmentUrl={}", attachmentUrl, e);
+        }
     }
 
     @Override
@@ -209,6 +296,7 @@ public class NoticeManageServiceImpl implements INoticeManageService {
         vo.setNoticeTypeText(StatusTextUtils.noticeType(notice.getNoticeType()));
         vo.setContent(notice.getContent());
         vo.setAttachmentUrl(notice.getAttachmentUrl());
+        vo.setPublicityId(Integer.valueOf(3).equals(notice.getNoticeType()) ? notice.getBizId() : null);
         vo.setPublishTime(notice.getPublishTime());
         return vo;
     }

@@ -31,20 +31,22 @@ public class PublicLabController {
     /**
      * 实训室列表。
      *
-     * @param keyword  名称关键词
-     * @param status   状态
-     * @param pageNum  页码
-     * @param pageSize 每页条数
+     * @param keyword    名称关键词
+     * @param department 所属系部
+     * @param status     状态
+     * @param pageNum    页码
+     * @param pageSize   每页条数
      * @return 分页结果
      */
     @Operation(summary = "实训室列表")
     @GetMapping("/labs")
     public Result<PageResult<LabListVO>> listLabs(
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String department,
             @RequestParam(required = false) Integer status,
             @RequestParam(defaultValue = "1") long pageNum,
             @RequestParam(defaultValue = "12") long pageSize) {
-        return Result.success(labService.pagePublicLabs(keyword, status, pageNum, pageSize));
+        return Result.success(labService.pagePublicLabs(keyword, department, status, pageNum, pageSize));
     }
 
     /**

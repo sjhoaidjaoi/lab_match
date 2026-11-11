@@ -518,18 +518,21 @@ public class InterviewSessionServiceImpl implements IInterviewSessionService {
         List<IntentionItem> items = intentionItemMapper.selectList(new LambdaQueryWrapper<IntentionItem>()
                 .in(IntentionItem::getIntentionId, intentionStudentMap.keySet())
                 .eq(IntentionItem::getLabId, labId));
-        Set<Long> expectedStudents = items.stream()
-                .map(item -> intentionStudentMap.get(item.getIntentionId()))
+        Set<String> expectedPairs = items.stream()
+                .map(item -> {
+                    Long studentId = intentionStudentMap.get(item.getIntentionId());
+                    return studentId == null ? null : studentId + ":" + item.getMentorId();
+                })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        Set<Long> scheduledStudents = schedules.stream()
-                .map(InterviewSchedule::getStudentId)
+        Set<String> scheduledPairs = schedules.stream()
+                .map(schedule -> schedule.getStudentId() + ":" + schedule.getMentorId())
                 .collect(Collectors.toSet());
-        long missing = expectedStudents.stream()
-                .filter(studentId -> !scheduledStudents.contains(studentId))
+        long missing = expectedPairs.stream()
+                .filter(pair -> !scheduledPairs.contains(pair))
                 .count();
         if (missing > 0) {
-            throw new BusinessException(ResultCode.BUSINESS_ERROR, "存在 " + missing + " 名学生未排期");
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "存在 " + missing + " 个学生-导师组合未排期");
         }
     }
 

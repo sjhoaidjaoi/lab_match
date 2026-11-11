@@ -31,3 +31,10 @@ export function updateRound(id: number, payload: Omit<RoundSaveReq, 'roundNo'>):
 export function updateRoundStatus(id: number, status: number): Promise<void> {
   return put<void>(`/admin/rounds/${id}/status`, { status })
 }
+
+/**
+ * 手动重跑批次签发（幂等）。
+ */
+export function issueRound(id: number): Promise<void> {
+  return post<void>(`/admin/rounds/${id}/issue`)
+}

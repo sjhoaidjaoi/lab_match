@@ -303,9 +303,28 @@ public final class StatusTextUtils {
     }
 
     /**
+     * 快照类型文案。
+     *
+     * @param snapshotType 1 拟录取 2 确认结果 3 调剂结果 4 最终归档
+     * @return 类型文案
+     */
+    public static String snapshotType(Integer snapshotType) {
+        if (snapshotType == null) {
+            return "";
+        }
+        return switch (snapshotType) {
+            case 1 -> "拟录取";
+            case 2 -> "确认结果";
+            case 3 -> "调剂结果";
+            case 4 -> "最终归档";
+            default -> "";
+        };
+    }
+
+    /**
      * 待确认类型文案。
      *
-     * @param pendingType 1 拟录取多选一 2 递补待确认 3 异议调整待确认
+     * @param pendingType 1 拟录取多选一 2 递补待确认 3 异议调整待确认 4 内部调剂待确认
      * @return 类型文案
      */
     public static String pendingType(Integer pendingType) {
@@ -316,6 +335,7 @@ public final class StatusTextUtils {
             case 1 -> "拟录取多选一";
             case 2 -> "递补待确认";
             case 3 -> "异议调整待确认";
+            case 4 -> "内部调剂待确认";
             default -> "";
         };
     }
@@ -336,6 +356,77 @@ public final class StatusTextUtils {
             case 3 -> "内部调剂";
             case 4 -> "跨室调剂";
             case 5 -> "座谈安置";
+            default -> "";
+        };
+    }
+
+    /**
+     * 题库题型文案。
+     *
+     * @param questionType 1 单选 2 多选 3 判断 4 填空
+     * @return 题型文案
+     */
+    public static String questionType(Integer questionType) {
+        if (questionType == null) {
+            return "";
+        }
+        return switch (questionType) {
+            case 1 -> "单选题";
+            case 2 -> "多选题";
+            case 3 -> "判断题";
+            case 4 -> "填空题";
+            default -> "";
+        };
+    }
+
+    /**
+     * 题库题目状态文案。
+     *
+     * @param status 1 启用 0 停用
+     * @return 状态文案
+     */
+    public static String questionStatus(Integer status) {
+        if (status == null) {
+            return "";
+        }
+        return switch (status) {
+            case 1 -> "启用";
+            case 0 -> "停用";
+            default -> "";
+        };
+    }
+
+    /**
+     * 在线试卷状态文案。
+     *
+     * @param status 1 草稿 2 已发布
+     * @return 状态文案
+     */
+    public static String examPaperStatus(Integer status) {
+        if (status == null) {
+            return "";
+        }
+        return switch (status) {
+            case 1 -> "草稿";
+            case 2 -> "已发布";
+            default -> "";
+        };
+    }
+
+    /**
+     * 在线答卷状态文案。
+     *
+     * @param status 0 未参加 1 答题中 2 已提交
+     * @return 状态文案
+     */
+    public static String examAnswerStatus(Integer status) {
+        if (status == null) {
+            return "";
+        }
+        return switch (status) {
+            case 0 -> "未参加";
+            case 1 -> "答题中";
+            case 2 -> "已提交";
             default -> "";
         };
     }

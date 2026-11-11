@@ -95,22 +95,25 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
         if (schedules.isEmpty()) {
             return new PageResult<>(0L, safePage, safeSize, List.of());
         }
-        Map<Long, InterviewScore> scoreMap = interviewScoreMapper.selectList(
+        Map<String, InterviewScore> scoreMap = interviewScoreMapper.selectList(
                         new LambdaQueryWrapper<InterviewScore>()
                                 .eq(InterviewScore::getRoundId, targetRoundId)
                                 .eq(InterviewScore::getLabId, lab.getId()))
                 .stream()
-                .collect(Collectors.toMap(InterviewScore::getStudentId, Function.identity(),
-                        (first, second) -> first));
+                .collect(Collectors.toMap(
+                        score -> score.getStudentId() + ":" + score.getMentorId(),
+                        Function.identity(), (first, second) -> first));
         Map<Long, SysUser> studentMap = loadUsers(schedules.stream()
                 .map(InterviewSchedule::getStudentId).distinct().toList());
         Map<Long, InterviewSession> sessionMap = loadSessions(schedules.stream()
                 .map(InterviewSchedule::getSessionId).distinct().toList());
+        Map<Long, String> mentorNameMap = loadMentorNames(schedules.stream()
+                .map(InterviewSchedule::getMentorId).filter(Objects::nonNull).distinct().toList());
         String text = StrUtil.trim(keyword);
         List<InterviewScoreListVO> all = new ArrayList<>();
         for (InterviewSchedule schedule : schedules) {
             SysUser student = studentMap.get(schedule.getStudentId());
-            InterviewScore score = scoreMap.get(schedule.getStudentId());
+            InterviewScore score = scoreMap.get(schedule.getStudentId() + ":" + schedule.getMentorId());
             int scoreStatus = score == null ? 0 : Optional.ofNullable(score.getStatus()).orElse(0);
             if (status != null && !Objects.equals(status, scoreStatus)) {
                 continue;
@@ -126,6 +129,8 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
             vo.setStudentId(schedule.getStudentId());
             vo.setStudentNo(student == null ? "" : DesensitizeUtils.maskUserNo(student.getUserNo()));
             vo.setStudentName(student == null ? "" : DesensitizeUtils.maskName(student.getRealName()));
+            vo.setMentorId(schedule.getMentorId());
+            vo.setMentorName(mentorNameMap.getOrDefault(schedule.getMentorId(), ""));
             vo.setSessionId(schedule.getSessionId());
             vo.setSessionName(session == null ? "" : session.getSessionName());
             if (score != null) {
@@ -151,15 +156,15 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public InterviewScoreRespVO saveScore(Long leaderUserId, InterviewScoreSaveReqDTO req) {
-        Lab lab = requireLab(leaderUserId);
-        return doSaveScore(leaderUserId, lab, req);
+    public InterviewScoreRespVO saveTeacherScore(Long teacherUserId, InterviewScoreSaveReqDTO req) {
+        MentorProfile mentor = requireMentor(teacherUserId);
+        return doSaveScore(teacherUserId, mentor, req);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ScoreImportResultVO importScores(Long leaderUserId, MultipartFile file) {
-        Lab lab = requireLab(leaderUserId);
+    public ScoreImportResultVO importTeacherScores(Long teacherUserId, MultipartFile file) {
+        MentorProfile mentor = requireMentor(teacherUserId);
         SelectionRound round = currentRound();
         if (round == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "当前无选拔轮次");
@@ -189,7 +194,7 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
                 req.setTimeScore(row.getTimeScore());
                 req.setComment(row.getComment());
                 req.setSubmit(SUBMIT_FLAG);
-                doSaveScore(leaderUserId, lab, req);
+                doSaveScore(teacherUserId, mentor, req);
                 success++;
             } catch (BusinessException exception) {
                 log.warn("评分导入跳过，row={}，userNo={}，reason={}",
@@ -197,8 +202,8 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
                 failList.add(new ScoreImportFailVO(row.getRowNo(), row.getUserNo(), exception.getMessage()));
             }
         }
-        log.info("批量导入面试评分，labId={}，total={}，success={}，fail={}",
-                lab.getId(), rows.size(), success, failList.size());
+        log.info("批量导入面试评分，mentorId={}，total={}，success={}，fail={}",
+                mentor.getId(), rows.size(), success, failList.size());
         ScoreImportResultVO result = new ScoreImportResultVO();
         result.setTotalCount(rows.size());
         result.setSuccessCount(success);
@@ -209,26 +214,25 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
 
     @Override
     public TeacherScoreDetailVO getTeacherScore(Long teacherUserId, Long studentId, Long roundId) {
-        MentorProfile mentor = mentorProfileMapper.selectOne(new LambdaQueryWrapper<MentorProfile>()
-                .eq(MentorProfile::getUserId, teacherUserId));
-        if (mentor == null) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "无权查看该学生评分");
-        }
+        MentorProfile mentor = requireMentor(teacherUserId);
         Long targetRoundId = roundId == null ? currentRoundId() : roundId;
         if (targetRoundId == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "当前无选拔轮次");
         }
         InterviewScore score = interviewScoreMapper.selectOne(new LambdaQueryWrapper<InterviewScore>()
                 .eq(InterviewScore::getRoundId, targetRoundId)
-                .eq(InterviewScore::getLabId, mentor.getLabId())
+                .eq(InterviewScore::getMentorId, mentor.getId())
                 .eq(InterviewScore::getStudentId, studentId));
         if (score == null) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "无权查看该学生评分");
+            return null;
         }
         SysUser student = sysUserMapper.selectById(studentId);
         TeacherScoreDetailVO vo = new TeacherScoreDetailVO();
         vo.setId(score.getId());
         vo.setStudentId(score.getStudentId());
+        vo.setMentorId(score.getMentorId());
+        SysUser mentorUser = mentor.getUserId() == null ? null : sysUserMapper.selectById(mentor.getUserId());
+        vo.setMentorName(mentorUser == null ? "" : mentorUser.getRealName());
         vo.setStudentNo(student == null ? "" : DesensitizeUtils.maskUserNo(student.getUserNo()));
         vo.setStudentName(student == null ? "" : DesensitizeUtils.maskName(student.getRealName()));
         vo.setAttitudeScore(score.getAttitudeScore());
@@ -247,19 +251,20 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
     /**
      * 执行评分计算与持久化。
      *
-     * @param leaderUserId 负责人用户 ID
-     * @param lab          实训室
-     * @param req          评分请求
+     * @param teacherUserId 导师用户 ID
+     * @param mentor        导师档案
+     * @param req           评分请求
      * @return 评分结果
      */
-    private InterviewScoreRespVO doSaveScore(Long leaderUserId, Lab lab, InterviewScoreSaveReqDTO req) {
+    private InterviewScoreRespVO doSaveScore(Long teacherUserId, MentorProfile mentor,
+                                             InterviewScoreSaveReqDTO req) {
         validateScores(req);
         InterviewSchedule schedule = interviewScheduleMapper.selectOne(new LambdaQueryWrapper<InterviewSchedule>()
                 .eq(InterviewSchedule::getRoundId, req.getRoundId())
-                .eq(InterviewSchedule::getLabId, lab.getId())
+                .eq(InterviewSchedule::getMentorId, mentor.getId())
                 .eq(InterviewSchedule::getStudentId, req.getStudentId()));
         if (schedule == null) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "该学生未在本室面试");
+            throw new BusinessException(ResultCode.FORBIDDEN, "该学生未选择该导师或尚未排期");
         }
         SelectionRound round = selectionRoundMapper.selectById(req.getRoundId());
         if (round == null) {
@@ -272,13 +277,14 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
         BigDecimal finalTotal = manualTotal == null ? systemTotal : manualTotal;
         InterviewScore existing = interviewScoreMapper.selectOne(new LambdaQueryWrapper<InterviewScore>()
                 .eq(InterviewScore::getRoundId, req.getRoundId())
-                .eq(InterviewScore::getLabId, lab.getId())
+                .eq(InterviewScore::getMentorId, mentor.getId())
                 .eq(InterviewScore::getStudentId, req.getStudentId()));
         BigDecimal beforeTotal = existing == null || existing.getFinalTotal() == null
                 ? systemTotal : existing.getFinalTotal();
         InterviewScore score = existing == null ? new InterviewScore() : existing;
         score.setRoundId(req.getRoundId());
-        score.setLabId(lab.getId());
+        score.setLabId(mentor.getLabId());
+        score.setMentorId(mentor.getId());
         score.setStudentId(req.getStudentId());
         score.setSessionId(schedule.getSessionId());
         score.setAttitudeScore(req.getAttitudeScore());
@@ -290,7 +296,7 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
         score.setFinalTotal(finalTotal);
         score.setAdjustReason(manualTotal == null ? null : req.getAdjustReason());
         score.setComment(req.getComment());
-        score.setScorerId(leaderUserId);
+        score.setScorerId(teacherUserId);
         score.setStatus(Integer.valueOf(SUBMIT_FLAG).equals(req.getSubmit()) ? SCORE_SUBMITTED : SCORE_DRAFT);
         if (existing == null) {
             interviewScoreMapper.insert(score);
@@ -298,7 +304,7 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
             interviewScoreMapper.updateById(score);
         }
         if (manualTotal != null) {
-            writeManualLog(leaderUserId, score.getId(), beforeTotal, finalTotal, req.getAdjustReason());
+            writeManualLog(teacherUserId, score.getId(), beforeTotal, finalTotal, req.getAdjustReason());
         }
         InterviewScoreRespVO resp = new InterviewScoreRespVO();
         resp.setId(score.getId());
@@ -404,6 +410,48 @@ public class InterviewScoreServiceImpl implements IInterviewScoreService {
         operationLog.setAfterValue(after == null ? null : after.toPlainString());
         operationLog.setReason(reason);
         operationLogMapper.insert(operationLog);
+    }
+
+    /**
+     * 查询导师档案。
+     *
+     * @param teacherUserId 教师用户 ID
+     * @return 导师档案
+     */
+    private MentorProfile requireMentor(Long teacherUserId) {
+        MentorProfile mentor = mentorProfileMapper.selectOne(new LambdaQueryWrapper<MentorProfile>()
+                .eq(MentorProfile::getUserId, teacherUserId));
+        if (mentor == null) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "仅导师可录入评分");
+        }
+        return mentor;
+    }
+
+    /**
+     * 批量加载导师姓名。
+     *
+     * @param mentorIds 导师档案 ID 列表
+     * @return 导师档案 ID 到姓名的映射
+     */
+    private Map<Long, String> loadMentorNames(List<Long> mentorIds) {
+        if (mentorIds.isEmpty()) {
+            return new HashMap<>();
+        }
+        Map<Long, MentorProfile> profiles = mentorProfileMapper.selectBatchIds(mentorIds).stream()
+                .collect(Collectors.toMap(MentorProfile::getId, Function.identity(), (first, second) -> first));
+        Map<Long, SysUser> users = loadUsers(profiles.values().stream()
+                .map(MentorProfile::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList());
+        Map<Long, String> result = new HashMap<>();
+        profiles.forEach((id, profile) -> {
+            SysUser user = users.get(profile.getUserId());
+            if (user != null) {
+                result.put(id, user.getRealName());
+            }
+        });
+        return result;
     }
 
     /**

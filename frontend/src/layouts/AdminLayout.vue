@@ -8,7 +8,9 @@ import PortalLayout from './PortalLayout.vue'
 const menus = [
   { label: '工作台', to: '/admin' },
   { label: '实训室管理', to: '/admin/labs' },
+  { label: '负责人提拔', to: '/admin/leaders' },
   { label: '导师与名额', to: '/admin/mentors' },
+  { label: '名额总览', to: '/admin/quotas' },
   { label: '学生账号', to: '/admin/students' },
   { label: '轮次配置', to: '/admin/rounds' },
   { label: '公告管理', to: '/admin/notices' },

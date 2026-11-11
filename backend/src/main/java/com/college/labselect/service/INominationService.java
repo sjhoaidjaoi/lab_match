@@ -1,6 +1,8 @@
 package com.college.labselect.service;
 
+import com.college.labselect.dto.req.LeaderNominationAdjustReqDTO;
 import com.college.labselect.dto.req.NominationSaveReqDTO;
+import com.college.labselect.dto.resp.LeaderNominationDetailVO;
 import com.college.labselect.dto.resp.NominationItemVO;
 import com.college.labselect.dto.resp.NominationSaveRespVO;
 
@@ -28,4 +30,25 @@ public interface INominationService {
      * @return 拟录取列表
      */
     List<NominationItemVO> listMyNominations(Long teacherUserId, Long roundId);
+
+    /**
+     * 负责人查看某导师拟录取名单与候选学生。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param mentorId     导师档案 ID
+     * @param roundId      轮次 ID
+     * @return 名单详情
+     */
+    LeaderNominationDetailVO getLeaderMentorNominations(Long leaderUserId, Long mentorId, Long roundId);
+
+    /**
+     * 负责人调整某导师拟录取名单。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param mentorId     导师档案 ID
+     * @param req          调整请求
+     * @return 名额占用结果
+     */
+    NominationSaveRespVO saveLeaderMentorNominations(Long leaderUserId, Long mentorId,
+                                                     LeaderNominationAdjustReqDTO req);
 }

@@ -4,6 +4,7 @@ import com.college.labselect.dto.req.ConfirmRespondReqDTO;
 import com.college.labselect.dto.resp.AdmissionListVO;
 import com.college.labselect.dto.resp.ConfirmCenterVO;
 import com.college.labselect.dto.resp.ConfirmRespondRespVO;
+import com.college.labselect.dto.resp.LeaderAdmissionSummaryVO;
 
 /**
  * 录取与确认服务。
@@ -44,4 +45,23 @@ public interface IAdmissionService {
      * @param admissionId   录取记录 ID
      */
     void remind(Long teacherUserId, Long admissionId);
+
+    /**
+     * 本室录取确认汇总与名单。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param roundId      轮次 ID
+     * @param finalOnly    是否仅返回已确认/已入组名单
+     * @return 汇总与名单
+     */
+    LeaderAdmissionSummaryVO listLeaderAdmissions(Long leaderUserId, Long roundId, boolean finalOnly);
+
+    /**
+     * 导出本室最终名单 Excel。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param roundId      轮次 ID
+     * @return Excel 字节流
+     */
+    byte[] exportLeaderAdmissions(Long leaderUserId, Long roundId);
 }

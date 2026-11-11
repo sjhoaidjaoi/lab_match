@@ -1,5 +1,10 @@
 import { get } from './request'
-import type { LeaderDashboard, StudentDashboard, TeacherDashboard } from '@/types/dashboard'
+import type {
+  AdminDashboard,
+  LeaderDashboard,
+  StudentDashboard,
+  TeacherDashboard
+} from '@/types/dashboard'
 
 /**
  * 学生工作台聚合数据。
@@ -20,4 +25,11 @@ export function getTeacherDashboard(): Promise<TeacherDashboard> {
  */
 export function getLeaderDashboard(): Promise<LeaderDashboard> {
   return get<LeaderDashboard>('/leader/dashboard')
+}
+
+/**
+ * 全院工作台聚合数据。
+ */
+export function getAdminDashboard(): Promise<AdminDashboard> {
+  return get<AdminDashboard>('/admin/dashboard')
 }

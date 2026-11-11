@@ -57,8 +57,9 @@ public class LabServiceImpl implements ILabService {
     private final UserNoticeMapper userNoticeMapper;
 
     @Override
-    public PageResult<LabListVO> pagePublicLabs(String keyword, Integer status, long pageNum, long pageSize) {
-        return pageLabs(keyword, status, pageNum, pageSize);
+    public PageResult<LabListVO> pagePublicLabs(String keyword, String department, Integer status,
+                                                long pageNum, long pageSize) {
+        return pageLabs(keyword, department, status, pageNum, pageSize);
     }
 
     @Override
@@ -72,12 +73,15 @@ public class LabServiceImpl implements ILabService {
         int quotaUsed = 0;
         for (MentorProfile mentor : mentors) {
             quotaUsed += Optional.ofNullable(mentor.getQuotaUsed()).orElse(0);
-            mentorVos.add(toMentorVO(mentor, userMap.get(mentor.getUserId())));
+            mentorVos.add(toMentorVO(mentor, userMap.get(mentor.getUserId()), lab.getLabName()));
         }
         LabDetailVO vo = new LabDetailVO();
         vo.setId(lab.getId());
         vo.setLabCode(lab.getLabCode());
         vo.setLabName(lab.getLabName());
+        vo.setDepartment(lab.getDepartment());
+        SysUser leader = lab.getLeaderId() == null ? null : sysUserMapper.selectById(lab.getLeaderId());
+        vo.setLeaderName(leader == null ? "" : leader.getRealName());
         vo.setIntroduction(lab.getIntroduction());
         vo.setResearchDirection(lab.getResearchDirection());
         vo.setEquipmentEnv(lab.getEquipmentEnv());
@@ -103,12 +107,14 @@ public class LabServiceImpl implements ILabService {
         if (mentor == null) {
             throw new BusinessException(ResultCode.NOT_FOUND, "导师不存在");
         }
-        return toMentorVO(mentor, sysUserMapper.selectById(mentor.getUserId()));
+        Lab lab = mentor.getLabId() == null ? null : labMapper.selectById(mentor.getLabId());
+        return toMentorVO(mentor, sysUserMapper.selectById(mentor.getUserId()),
+                lab == null ? "" : lab.getLabName());
     }
 
     @Override
     public PageResult<LabListVO> pageAdminLabs(String keyword, Integer status, long pageNum, long pageSize) {
-        return pageLabs(keyword, status, pageNum, pageSize);
+        return pageLabs(keyword, null, status, pageNum, pageSize);
     }
 
     @Override
@@ -197,11 +203,14 @@ public class LabServiceImpl implements ILabService {
      * @param pageSize 每页条数
      * @return 分页结果
      */
-    private PageResult<LabListVO> pageLabs(String keyword, Integer status, long pageNum, long pageSize) {
+    private PageResult<LabListVO> pageLabs(String keyword, String department, Integer status,
+                                           long pageNum, long pageSize) {
         String text = StrUtil.trim(keyword);
+        String dept = StrUtil.trim(department);
         Page<Lab> page = labMapper.selectPage(new Page<>(pageNum, pageSize),
                 new LambdaQueryWrapper<Lab>()
                         .like(StrUtil.isNotBlank(text), Lab::getLabName, text)
+                        .eq(StrUtil.isNotBlank(dept), Lab::getDepartment, dept)
                         .eq(status != null, Lab::getStatus, status)
                         .orderByAsc(Lab::getId));
         List<Long> labIds = page.getRecords().stream().map(Lab::getId).toList();
@@ -225,6 +234,7 @@ public class LabServiceImpl implements ILabService {
             vo.setId(lab.getId());
             vo.setLabCode(lab.getLabCode());
             vo.setLabName(lab.getLabName());
+            vo.setDepartment(lab.getDepartment());
             SysUser leader = leaderMap.get(lab.getLeaderId());
             vo.setLeaderName(leader == null ? "" : leader.getRealName());
             vo.setMentorCount(mentors.size());
@@ -275,6 +285,7 @@ public class LabServiceImpl implements ILabService {
     private void fillLab(Lab lab, LabSaveReqDTO req) {
         lab.setLabCode(StrUtil.trim(req.getLabCode()));
         lab.setLabName(StrUtil.trim(req.getLabName()));
+        lab.setDepartment(StrUtil.trim(req.getDepartment()));
         lab.setIntroduction(req.getIntroduction());
         lab.setResearchDirection(req.getResearchDirection());
         lab.setEquipmentEnv(req.getEquipmentEnv());
@@ -291,17 +302,21 @@ public class LabServiceImpl implements ILabService {
     /**
      * 导师档案转简要信息。
      *
-     * @param mentor 导师档案
-     * @param user   教师账号
+     * @param mentor  导师档案
+     * @param user    教师账号
+     * @param labName 所属实训室名称
      * @return 导师简要信息
      */
-    private LabMentorVO toMentorVO(MentorProfile mentor, SysUser user) {
+    private LabMentorVO toMentorVO(MentorProfile mentor, SysUser user, String labName) {
         LabMentorVO vo = new LabMentorVO();
         vo.setId(mentor.getId());
         vo.setUserId(mentor.getUserId());
+        vo.setLabId(mentor.getLabId());
+        vo.setLabName(labName);
         vo.setRealName(user == null ? "" : user.getRealName());
         vo.setTitle(user == null ? "" : user.getTitle());
         vo.setResearchDirection(mentor.getResearchDirection());
+        vo.setResearchProjects(mentor.getResearchProjects());
         int quota = Optional.ofNullable(mentor.getQuota()).orElse(0);
         int used = Optional.ofNullable(mentor.getQuotaUsed()).orElse(0);
         vo.setQuota(quota);

@@ -7,6 +7,7 @@ import com.college.labselect.dto.req.MentorStatusReqDTO;
 import com.college.labselect.dto.req.MentorUpdateReqDTO;
 import com.college.labselect.dto.resp.MentorListVO;
 import com.college.labselect.dto.resp.QuotaOverviewVO;
+import com.college.labselect.dto.resp.StudentImportResultVO;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -48,8 +49,9 @@ public interface IMentorService {
      * 批量导入教师。
      *
      * @param file Excel 文件
+     * @return 成功数、失败数与失败明细
      */
-    void importMentors(MultipartFile file);
+    StudentImportResultVO importMentors(MultipartFile file);
 
     /**
      * 重置教师密码。

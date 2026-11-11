@@ -40,9 +40,13 @@
             <span v-else>—</span>
           </template>
         </el-table-column>
-        <el-table-column v-if="isSupplement" label="操作" width="130" fixed="right">
+        <el-table-column label="操作" width="270" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" @click="openDialog(row)">直接录入</el-button>
+            <el-button size="small" @click="handleViewArchive(row)">查看档案</el-button>
+            <el-button size="small" type="primary" plain @click="openScore(row)">评分</el-button>
+            <el-button v-if="isSupplement" size="small" type="primary" @click="openDialog(row)">
+              直接录入
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -67,16 +71,75 @@
         <el-button type="primary" :loading="submitting" @click="handleAdmit">确认录入</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="archiveVisible" title="学生完整档案" width="720px">
+      <template v-if="archive">
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="学号">{{ archive.userNo }}</el-descriptions-item>
+          <el-descriptions-item label="姓名">{{ archive.realName }}</el-descriptions-item>
+          <el-descriptions-item label="学院">{{ archive.college || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="专业">{{ archive.major || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="年级">{{ archive.grade || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="班级">{{ archive.className || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="GPA">{{ archive.gpa ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="专业排名">{{ archive.ranking ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="英语等级">{{ archive.englishLevel || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="每周投入">{{ archive.weeklyHours ?? '—' }} 小时</el-descriptions-item>
+          <el-descriptions-item label="编程语言" :span="2">
+            {{ archive.programmingLanguages.join('、') || '—' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="工具链" :span="2">
+            {{ archive.techStack.join('、') || '—' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="可投入时段" :span="2">
+            {{ archive.availableSlots || '—' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="期望方向" :span="2">
+            {{ archive.expectedDirection || '—' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="项目经历" :span="2">
+            {{ archive.projectExperience || '—' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="竞赛经历" :span="2">
+            {{ archive.competitionExperience || '—' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="科研经历" :span="2">
+            {{ archive.researchExperience || '—' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="实习经历" :span="2">
+            {{ archive.internshipExperience || '—' }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <div class="archive-statement">
+          <div class="statement-label">个人陈述</div>
+          <p>{{ archive.statement || '—' }}</p>
+        </div>
+      </template>
+      <el-empty v-else description="该生尚未创建档案" />
+      <template #footer>
+        <el-button type="primary" @click="archiveVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <ScoreFormDialog
+      v-model="scoreDialogVisible"
+      :row="editingScoreRow"
+      :round-id="round?.id ?? null"
+      @saved="loadApplicants"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import ScoreFormDialog from '@/components/ScoreFormDialog.vue'
 import { getCurrentRound } from '@/api/public'
-import { directAdmit, listApplicants } from '@/api/teacherApplicant'
+import { getTeacherScore } from '@/api/teacherScore'
+import { directAdmit, getStudentArchive, listApplicants } from '@/api/teacherApplicant'
+import type { InterviewScoreRow } from '@/types/interview'
 import type { CurrentRound } from '@/types/student'
-import type { TeacherApplicant } from '@/types/teacher'
+import type { TeacherApplicant, TeacherStudentArchive } from '@/types/teacher'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -86,6 +149,10 @@ const applicants = ref<TeacherApplicant[]>([])
 const dialogVisible = ref(false)
 const current = ref<TeacherApplicant | null>(null)
 const reason = ref('')
+const scoreDialogVisible = ref(false)
+const editingScoreRow = ref<InterviewScoreRow | null>(null)
+const archiveVisible = ref(false)
+const archive = ref<TeacherStudentArchive | null>(null)
 
 const isSupplement = computed(() => (round.value?.roundNo ?? 0) > 1)
 
@@ -110,6 +177,47 @@ function openDialog(row: TeacherApplicant) {
   current.value = row
   reason.value = ''
   dialogVisible.value = true
+}
+
+async function handleViewArchive(row: TeacherApplicant) {
+  try {
+    archive.value = await getStudentArchive(row.studentId)
+    archiveVisible.value = true
+  } catch {
+    // 错误提示已由请求层统一处理
+  }
+}
+
+async function openScore(row: TeacherApplicant) {
+  if (!round.value) {
+    ElMessage.warning('当前无选拔轮次')
+    return
+  }
+  let detail = null
+  try {
+    detail = await getTeacherScore(row.studentId, round.value.id)
+  } catch {
+    detail = null
+  }
+  editingScoreRow.value = {
+    id: detail?.id ?? null,
+    studentId: row.studentId,
+    studentNo: row.studentNo,
+    studentName: row.studentName,
+    mentorId: detail?.mentorId ?? 0,
+    mentorName: detail?.mentorName ?? '',
+    sessionName: row.sessionName || '',
+    attitudeScore: detail?.attitudeScore ?? null,
+    logicScore: detail?.logicScore ?? null,
+    programmingScore: detail?.programmingScore ?? null,
+    timeScore: detail?.timeScore ?? null,
+    systemTotal: detail?.systemTotal ?? null,
+    manualTotal: detail?.manualTotal ?? null,
+    finalTotal: detail?.finalTotal ?? null,
+    status: detail?.status ?? 0,
+    statusText: detail ? '已评分' : '未评分'
+  }
+  scoreDialogVisible.value = true
 }
 
 async function handleAdmit() {
@@ -179,5 +287,26 @@ onMounted(loadApplicants)
   margin: 0 0 8px;
   font-size: 14px;
   color: #303133;
+}
+
+.archive-statement {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.statement-label {
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.archive-statement p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #606266;
+  white-space: pre-wrap;
 }
 </style>

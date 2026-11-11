@@ -3,8 +3,12 @@ package com.college.labselect.service;
 import com.college.labselect.dto.req.ConfirmRespondReqDTO;
 import com.college.labselect.dto.resp.ConfirmCenterVO;
 import com.college.labselect.dto.resp.ConfirmRespondRespVO;
+import com.college.labselect.dto.resp.LeaderAdmissionSummaryVO;
 import com.college.labselect.entity.Admission;
+import com.college.labselect.entity.Lab;
+import com.college.labselect.entity.MentorProfile;
 import com.college.labselect.entity.SelectionRound;
+import com.college.labselect.entity.SysUser;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.mapper.AdmissionMapper;
 import com.college.labselect.mapper.LabMapper;
@@ -24,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
@@ -62,6 +67,9 @@ class AdmissionServiceTest {
 
     @Mock
     private AdmissionWaitlistSupport admissionWaitlistSupport;
+
+    @Mock
+    private IArchiveService archiveService;
 
     @InjectMocks
     private AdmissionServiceImpl admissionService;
@@ -133,11 +141,12 @@ class AdmissionServiceTest {
         when(admissionMapper.selectById(901L)).thenReturn(admission(901L, 1001L, 1));
         when(admissionMapper.selectCount(any())).thenReturn(0L);
         when(admissionMapper.selectList(any())).thenReturn(java.util.List.of(admission(902L, 1001L, 1)));
+        when(admissionMapper.update(any(Admission.class), any())).thenReturn(1);
 
         ConfirmRespondRespVO result = admissionService.respond(1001L, 901L, acceptReq());
 
         assertThat(result.getStatus()).isEqualTo(2);
-        verify(admissionMapper, atLeastOnce()).updateById(any(Admission.class));
+        verify(admissionMapper, atLeastOnce()).update(any(Admission.class), any());
     }
 
     /**
@@ -146,11 +155,143 @@ class AdmissionServiceTest {
     @Test
     void respond_reject_shouldReturnAbandonedStatus() {
         when(admissionMapper.selectById(901L)).thenReturn(admission(901L, 1001L, 1));
+        when(admissionMapper.update(any(Admission.class), any())).thenReturn(1);
 
         ConfirmRespondRespVO result = admissionService.respond(1001L, 901L, rejectReq());
 
         assertThat(result.getStatus()).isEqualTo(4);
-        verify(admissionMapper, atLeastOnce()).updateById(any(Admission.class));
+        verify(admissionMapper, atLeastOnce()).update(any(Admission.class), any());
+        verify(admissionWaitlistSupport, atLeastOnce()).releaseQuota(any());
+        verify(admissionWaitlistSupport, atLeastOnce()).triggerWaitlist(any(), any());
+    }
+
+    /**
+     * 边界：记录已被逾期任务处理时，学生响应返回 400005。
+     */
+    @Test
+    void respond_alreadyExpired_shouldThrow400005() {
+        when(admissionMapper.selectById(901L)).thenReturn(admission(901L, 1001L, 1));
+        when(admissionMapper.update(any(Admission.class), any())).thenReturn(0);
+
+        BusinessException exception = catchThrowableOfType(
+                () -> admissionService.respond(1001L, 901L, acceptReq()), BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(400005);
+    }
+
+    /**
+     * 快乐路径：内部调剂待确认记录可被学生接受并转为已确认。
+     */
+    @Test
+    void respond_innerAdjustPending_accept_shouldConfirm() {
+        Admission admission = admission(901L, 1001L, 1);
+        admission.setPendingType(4);
+        admission.setSourceType(3);
+        admission.setConfirmDeadline(LocalDateTime.now().plusHours(1));
+        when(admissionMapper.selectById(901L)).thenReturn(admission);
+        when(admissionMapper.selectCount(any())).thenReturn(0L);
+        when(admissionMapper.selectList(any())).thenReturn(List.of());
+        when(admissionMapper.update(any(Admission.class), any())).thenReturn(1);
+
+        ConfirmRespondRespVO result = admissionService.respond(1001L, 901L, acceptReq());
+
+        assertThat(result.getStatus()).isEqualTo(2);
+    }
+
+    /**
+     * 快乐路径：本室录取汇总统计各状态并脱敏学生信息。
+     */
+    @Test
+    void listLeaderAdmissions_shouldSummarizeAndMask() {
+        stubLeaderAdmissions();
+        when(admissionMapper.selectList(any())).thenReturn(List.of(
+                admission(901L, 1001L, 2), admission(902L, 1002L, 1),
+                admission(903L, 1003L, 4), admission(904L, 1004L, 3)));
+
+        LeaderAdmissionSummaryVO result = admissionService.listLeaderAdmissions(9001L, 1L, false);
+
+        assertThat(result.getLabId()).isEqualTo(1L);
+        assertThat(result.getPendingCount()).isEqualTo(1);
+        assertThat(result.getConfirmedCount()).isEqualTo(1);
+        assertThat(result.getEnrolledCount()).isEqualTo(1);
+        assertThat(result.getAbandonedCount()).isEqualTo(1);
+        assertThat(result.getItems()).hasSize(4);
+        var first = result.getItems().stream()
+                .filter(item -> item.getStudentId().equals(1001L))
+                .findFirst().orElseThrow();
+        assertThat(first.getStudentName()).isEqualTo("陈*丽");
+        assertThat(first.getMentorName()).isEqualTo("李海峰");
+    }
+
+    /**
+     * 快乐路径：最终名单只返回已确认与已入组记录。
+     */
+    @Test
+    void listLeaderAdmissions_finalOnly_shouldFilterItems() {
+        stubLeaderAdmissions();
+        when(admissionMapper.selectList(any())).thenReturn(List.of(
+                admission(901L, 1001L, 2), admission(902L, 1002L, 1),
+                admission(903L, 1003L, 4), admission(904L, 1004L, 3)));
+
+        LeaderAdmissionSummaryVO result = admissionService.listLeaderAdmissions(9001L, 1L, true);
+
+        assertThat(result.getItems()).hasSize(2);
+        assertThat(result.getItems()).extracting("status").containsExactly(2, 3);
+    }
+
+    /**
+     * 边界：非负责人查询本室录取汇总返回 403001。
+     */
+    @Test
+    void listLeaderAdmissions_notLeader_shouldThrow403001() {
+        when(labMapper.selectOne(any())).thenReturn(null);
+
+        BusinessException exception = catchThrowableOfType(
+                () -> admissionService.listLeaderAdmissions(9001L, 1L, false), BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(403001);
+    }
+
+    private void stubLeaderAdmissions() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round(LocalDateTime.now().minusHours(1)));
+        when(mentorProfileMapper.selectList(any())).thenReturn(List.of(
+                mentor(11L, 2001L, 5, 3), mentor(12L, 2002L, 5, 2)));
+        when(mentorProfileMapper.selectBatchIds(any())).thenReturn(List.of(
+                mentor(11L, 2001L, 5, 3), mentor(12L, 2002L, 5, 2)));
+        when(sysUserMapper.selectBatchIds(any())).thenReturn(List.of(
+                user(1001L, "20220001", "陈爱丽"), user(1002L, "20220002", "张强"),
+                user(1003L, "20220003", "王敏"), user(1004L, "20220004", "李雷"),
+                user(2001L, "20010001", "李海峰"), user(2002L, "20010002", "王建国")));
+    }
+
+    private Lab lab() {
+        Lab lab = new Lab();
+        lab.setId(1L);
+        lab.setLabName("人工智能实训室");
+        lab.setLeaderId(9001L);
+        lab.setTotalQuota(20);
+        return lab;
+    }
+
+    private MentorProfile mentor(Long id, Long userId, int quota, int quotaUsed) {
+        MentorProfile mentor = new MentorProfile();
+        mentor.setId(id);
+        mentor.setUserId(userId);
+        mentor.setLabId(1L);
+        mentor.setQuota(quota);
+        mentor.setQuotaUsed(quotaUsed);
+        return mentor;
+    }
+
+    private SysUser user(Long id, String userNo, String realName) {
+        SysUser user = new SysUser();
+        user.setId(id);
+        user.setUserNo(userNo);
+        user.setRealName(realName);
+        return user;
     }
 
     private SelectionRound round(LocalDateTime confirmStart) {

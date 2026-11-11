@@ -46,6 +46,11 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openAdjust(row)">调整名单</el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
 
@@ -65,6 +70,49 @@
       </el-alert>
       <p class="conflict-tip">冲突仅提示，不阻断提交；需学生自主确认或负责人协调。</p>
     </el-card>
+
+    <el-dialog v-model="adjustVisible" title="调整导师拟录取名单" width="640px">
+      <div class="adjust-header">
+        <span class="adjust-mentor">{{ detail?.mentorName || adjustingMentor?.mentorName }}</span>
+        <span class="adjust-quota">名额 {{ detail?.quota ?? 0 }} 人 · 已选 {{ selectedIds.length }} 人</span>
+      </div>
+      <el-alert
+        v-if="selectedIds.length > (detail?.quota ?? 0)"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="已超出个人名额上限，无法保存"
+        class="quota-alert"
+      />
+      <div class="candidate-list">
+        <el-checkbox-group v-model="selectedIds">
+          <div v-for="candidate in detail?.candidates ?? []" :key="candidate.studentId" class="candidate-row">
+            <el-checkbox :value="candidate.studentId">
+              {{ candidate.studentNo }} {{ candidate.studentName }}
+              · 总分 {{ formatScore(candidate.totalScore) }}
+              <el-tag v-if="candidate.nominated" size="small" type="success" class="current-tag">当前</el-tag>
+            </el-checkbox>
+          </div>
+        </el-checkbox-group>
+        <el-empty v-if="(detail?.candidates.length ?? 0) === 0" description="暂无可选学生" :image-size="60" />
+      </div>
+      <el-form label-width="80px" class="reason-form">
+        <el-form-item label="调整理由" required>
+          <el-input
+            v-model="reason"
+            type="textarea"
+            :rows="2"
+            maxlength="200"
+            show-word-limit
+            placeholder="必填，将写入操作日志"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="adjustVisible = false">取消</el-button>
+        <el-button type="primary" :loading="adjustSaving" @click="handleAdjust">保存名单</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -72,16 +120,29 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  adjustLeaderMentorNominations,
+  getLeaderMentorNominations,
   getLeaderNominationSummary,
   submitLeaderNominations
 } from '@/api/leaderNomination'
 import { getCurrentRound } from '@/api/public'
-import type { LeaderNominationMentor, LeaderNominationSummary } from '@/types/nomination'
+import type {
+  LeaderNominationDetail,
+  LeaderNominationMentor,
+  LeaderNominationSummary
+} from '@/types/nomination'
 
 const loading = ref(false)
 const submitting = ref(false)
 const roundId = ref<number | null>(null)
 const summary = ref<LeaderNominationSummary | null>(null)
+
+const adjustVisible = ref(false)
+const adjustSaving = ref(false)
+const adjustingMentor = ref<LeaderNominationMentor | null>(null)
+const detail = ref<LeaderNominationDetail | null>(null)
+const selectedIds = ref<number[]>([])
+const reason = ref('')
 
 const submitted = computed(() => {
   const mentors = summary.value?.mentors ?? []
@@ -107,6 +168,58 @@ async function loadSummary() {
     // 错误提示已由请求层统一处理
   } finally {
     loading.value = false
+  }
+}
+
+function formatScore(value: number | null): string {
+  return value === null ? '-' : value.toFixed(2)
+}
+
+async function openAdjust(row: LeaderNominationMentor) {
+  if (!roundId.value) {
+    ElMessage.warning('当前无选拔轮次')
+    return
+  }
+  adjustingMentor.value = row
+  detail.value = null
+  selectedIds.value = []
+  reason.value = ''
+  adjustVisible.value = true
+  try {
+    const data = await getLeaderMentorNominations(row.mentorId, roundId.value)
+    detail.value = data
+    selectedIds.value = [...data.selectedStudentIds]
+  } catch {
+    // 错误提示已由请求层统一处理
+  }
+}
+
+async function handleAdjust() {
+  if (!roundId.value || !adjustingMentor.value) {
+    return
+  }
+  if (!reason.value.trim()) {
+    ElMessage.warning('请填写调整理由')
+    return
+  }
+  if (selectedIds.value.length > (detail.value?.quota ?? 0)) {
+    ElMessage.warning('已超出个人名额上限')
+    return
+  }
+  adjustSaving.value = true
+  try {
+    await adjustLeaderMentorNominations(adjustingMentor.value.mentorId, {
+      roundId: roundId.value,
+      studentIds: selectedIds.value,
+      reason: reason.value.trim()
+    })
+    ElMessage.success('拟录取名单已调整')
+    adjustVisible.value = false
+    await loadSummary()
+  } catch {
+    // 错误提示已由请求层统一处理
+  } finally {
+    adjustSaving.value = false
   }
 }
 
@@ -197,5 +310,47 @@ onMounted(loadSummary)
 
 :deep(.el-table .conflict-row > td) {
   background: #fef0f0;
+}
+
+.adjust-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.adjust-mentor {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f2d3d;
+}
+
+.adjust-quota {
+  font-size: 13px;
+  color: #909399;
+}
+
+.quota-alert {
+  margin-bottom: 10px;
+}
+
+.candidate-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px 8px;
+  border: 1px solid #ebeef5;
+  border-radius: 6px;
+}
+
+.candidate-row {
+  padding: 4px 0;
+}
+
+.current-tag {
+  margin-left: 6px;
+}
+
+.reason-form {
+  margin-top: 16px;
 }
 </style>

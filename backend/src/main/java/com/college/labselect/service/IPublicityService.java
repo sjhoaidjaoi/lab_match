@@ -3,6 +3,7 @@ package com.college.labselect.service;
 import com.college.labselect.common.PageResult;
 import com.college.labselect.dto.req.PublicityCreateReqDTO;
 import com.college.labselect.dto.resp.PublicityConfirmRespVO;
+import com.college.labselect.dto.resp.PublicityAdminDetailVO;
 import com.college.labselect.dto.resp.PublicityCreateRespVO;
 import com.college.labselect.dto.resp.PublicityDetailVO;
 import com.college.labselect.dto.resp.PublicityListVO;
@@ -22,6 +23,14 @@ public interface IPublicityService {
      * @return 公示批次分页
      */
     PageResult<PublicityListVO> listPublicities(Long roundId, Integer status, long pageNum, long pageSize);
+
+    /**
+     * 管理员查看公示名单明细，返回完整学号与姓名。
+     *
+     * @param id 公示批次 ID
+     * @return 公示名单明细
+     */
+    PublicityAdminDetailVO getAdminPublicityRows(Long id);
 
     /**
      * 发起公示。

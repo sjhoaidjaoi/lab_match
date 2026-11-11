@@ -57,6 +57,15 @@ public interface IInterviewScheduleService {
     Long assignSchedule(Long leaderUserId, ScheduleAssignReqDTO req);
 
     /**
+     * 登记面试排期状态（已完成/缺席）。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param scheduleId   排期 ID
+     * @param status       2 已完成、3 缺席
+     */
+    void updateScheduleStatus(Long leaderUserId, Long scheduleId, Integer status);
+
+    /**
      * 查询学生本人的面试安排。
      *
      * @param studentUserId 学生用户 ID

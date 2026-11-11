@@ -4,7 +4,9 @@ import com.college.labselect.common.PageResult;
 import com.college.labselect.dto.req.NoticeSaveReqDTO;
 import com.college.labselect.dto.req.NoticeStatusReqDTO;
 import com.college.labselect.dto.resp.NoticeAdminVO;
+import com.college.labselect.dto.resp.NoticeAttachmentVO;
 import com.college.labselect.dto.resp.PublicNoticeVO;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 公告管理服务，维护 notice 表（宣讲 / 开放日 / 公示 / 通知）。
@@ -48,6 +50,21 @@ public interface INoticeManageService {
      * @param req 目标状态：2 已发布 3 已下线
      */
     void updateStatus(Long id, NoticeStatusReqDTO req);
+
+    /**
+     * 上传公告附件，限制 10MB 与白名单扩展名。
+     *
+     * @param file 上传文件
+     * @return 附件名称与访问地址
+     */
+    NoticeAttachmentVO uploadAttachment(MultipartFile file);
+
+    /**
+     * 删除公告，已发布公告须先下线；同时清理本系统存储的附件。
+     *
+     * @param id 公告 ID
+     */
+    void deleteNotice(Long id);
 
     /**
      * 公共端公告列表，仅返回已发布公告。

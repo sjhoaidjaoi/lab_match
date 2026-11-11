@@ -3,12 +3,22 @@ package com.college.labselect.service;
 import com.college.labselect.dto.req.RoundCreateReqDTO;
 import com.college.labselect.dto.req.RoundUpdateReqDTO;
 import com.college.labselect.dto.resp.CurrentRoundVO;
+import com.college.labselect.entity.Admission;
+import com.college.labselect.entity.InterviewScore;
+import com.college.labselect.entity.Nomination;
 import com.college.labselect.entity.SelectionRound;
+import com.college.labselect.entity.Waitlist;
 import com.college.labselect.exception.BusinessException;
+import com.college.labselect.mapper.AdmissionMapper;
+import com.college.labselect.mapper.InterviewScoreMapper;
+import com.college.labselect.mapper.NominationMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
+import com.college.labselect.mapper.UserNoticeMapper;
+import com.college.labselect.mapper.WaitlistMapper;
 import com.college.labselect.service.impl.RoundServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -22,6 +32,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -33,6 +45,21 @@ class RoundServiceTest {
 
     @Mock
     private SelectionRoundMapper selectionRoundMapper;
+
+    @Mock
+    private NominationMapper nominationMapper;
+
+    @Mock
+    private AdmissionMapper admissionMapper;
+
+    @Mock
+    private InterviewScoreMapper interviewScoreMapper;
+
+    @Mock
+    private WaitlistMapper waitlistMapper;
+
+    @Mock
+    private UserNoticeMapper userNoticeMapper;
 
     @InjectMocks
     private RoundServiceImpl roundService;
@@ -163,6 +190,90 @@ class RoundServiceTest {
 
         assertThat(result.getPhase()).isEqualTo("LOCKED");
         assertThat(result.getCountdownSeconds()).isZero();
+    }
+
+    /**
+     * 快乐路径：批次签发为「有评分但未拟录取」的学生生成递补队列，按总分降序。
+     */
+    @Test
+    void issueRound_shouldGenerateWaitlistOrderedByScore() {
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round(1L, 4, 0));
+        when(nominationMapper.selectList(any())).thenReturn(List.of(
+                nomination(2001L, 1001L), nomination(2001L, 1002L)));
+        when(admissionMapper.selectList(any())).thenReturn(List.of());
+        when(admissionMapper.insert(any(Admission.class))).thenAnswer(invocation -> {
+            invocation.getArgument(0, Admission.class).setId(1L);
+            return 1;
+        });
+        when(interviewScoreMapper.selectList(any())).thenReturn(List.of(
+                score(2001L, 1003L, "80.00"), score(2001L, 1004L, "90.00")));
+        when(waitlistMapper.selectList(any())).thenReturn(List.of());
+
+        roundService.issueRound(1L);
+
+        ArgumentCaptor<Waitlist> captor = ArgumentCaptor.forClass(Waitlist.class);
+        verify(waitlistMapper, times(2)).insert(captor.capture());
+        assertThat(captor.getAllValues()).extracting(Waitlist::getStudentId).containsExactly(1004L, 1003L);
+        assertThat(captor.getAllValues()).extracting(Waitlist::getRankNo).containsExactly(1, 2);
+        assertThat(captor.getAllValues()).allMatch(item -> item.getApplyStatus() == 1);
+    }
+
+    /**
+     * 边界：重复签发时已存在的递补组合跳过，顺位从已有最大值继续。
+     */
+    @Test
+    void issueRound_existingWaitlist_shouldNotDuplicate() {
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round(1L, 4, 0));
+        when(nominationMapper.selectList(any())).thenReturn(List.of(
+                nomination(2001L, 1001L), nomination(2001L, 1002L)));
+        when(admissionMapper.selectList(any())).thenReturn(List.of());
+        when(admissionMapper.insert(any(Admission.class))).thenAnswer(invocation -> {
+            invocation.getArgument(0, Admission.class).setId(1L);
+            return 1;
+        });
+        when(interviewScoreMapper.selectList(any())).thenReturn(List.of(
+                score(2001L, 1003L, "80.00"), score(2001L, 1004L, "90.00")));
+        when(waitlistMapper.selectList(any())).thenReturn(List.of(waitlist(2001L, 1003L, 1)));
+
+        roundService.issueRound(1L);
+
+        ArgumentCaptor<Waitlist> captor = ArgumentCaptor.forClass(Waitlist.class);
+        verify(waitlistMapper, times(1)).insert(captor.capture());
+        assertThat(captor.getValue().getStudentId()).isEqualTo(1004L);
+        assertThat(captor.getValue().getRankNo()).isEqualTo(2);
+    }
+
+    private Nomination nomination(Long mentorId, Long studentId) {
+        Nomination item = new Nomination();
+        item.setId(1L);
+        item.setRoundId(1L);
+        item.setLabId(900101L);
+        item.setMentorId(mentorId);
+        item.setStudentId(studentId);
+        item.setStatus(2);
+        item.setTotalScore(new BigDecimal("85.75"));
+        return item;
+    }
+
+    private InterviewScore score(Long mentorId, Long studentId, String finalTotal) {
+        InterviewScore item = new InterviewScore();
+        item.setRoundId(1L);
+        item.setMentorId(mentorId);
+        item.setStudentId(studentId);
+        item.setStatus(2);
+        item.setFinalTotal(new BigDecimal(finalTotal));
+        return item;
+    }
+
+    private Waitlist waitlist(Long mentorId, Long studentId, int rankNo) {
+        Waitlist item = new Waitlist();
+        item.setRoundId(1L);
+        item.setMentorId(mentorId);
+        item.setStudentId(studentId);
+        item.setRankNo(rankNo);
+        item.setIsManual(0);
+        item.setApplyStatus(1);
+        return item;
     }
 
     private SelectionRound round(Long id, int status, int locked) {

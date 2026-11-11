@@ -12,6 +12,10 @@ spring:
   mvc:
     problemdetails:
       enabled: false
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
@@ -30,6 +34,7 @@ jwt:
 
 lab-select:
   default-password: ${INITIAL_PASSWORD:123456}
+  upload-dir: ${UPLOAD_DIR:./uploads}
 
 logging:
   level:

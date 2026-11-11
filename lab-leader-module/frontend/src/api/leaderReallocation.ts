@@ -18,7 +18,7 @@ export function listLeaderCandidates(params: {
 }
 
 /**
- * 执行本室内部调剂，结果直接生效。
+ * 执行本室内部调剂，提交后生成待学生确认的录取记录。
  */
 export function reallocateInner(payload: LeaderReallocationReq): Promise<LeaderReallocationResp> {
   return post<LeaderReallocationResp>('/leader/reallocation', payload)

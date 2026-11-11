@@ -27,10 +27,10 @@ sequenceDiagram
     B->>D: 写 intention / intention_item
 
     Note over L,D: 第 1 轮 · 面试
-    L->>B: 建场次、排期、发布
+    L->>B: 建场次、按“学生+导师”排期、发布
     B->>D: 写 interview_session / interview_schedule
-    L->>B: 录入四维分数
-    B->>D: 写 interview_score（一室一套分）
+    M->>B: 导师自主出题、独立评分
+    B->>D: 写 interview_score（导师+学生独立评分）
 
     Note over M,D: 第 1 轮 · 拟录取
     M->>B: 勾选拟录取（受个人名额上限校验）
@@ -122,7 +122,7 @@ sequenceDiagram
 | 意向数量 | 首轮 1–3 条、补录轮 1 条，平行不分先后 | `intention_item`、API `items`、PRD 志愿规则 |
 | 批次锁定 | `locked` 0 未锁 / 1 已锁 | `selection_round.locked`、API `locked`、前端整站只读 |
 | 终局有效标记 | `active_flag` 1 终局（status 2/3）/ NULL 其余 | `admission.active_flag`、`uk_round_student_active` |
-| 待确认类型 | 1 拟录取多选一 / 2 递补待确认 / 3 异议调整待确认，仅展示 | `admission.pending_type`、API `pendingType` |
+| 待确认类型 | 1 拟录取多选一 / 2 递补待确认 / 3 异议调整待确认 / 4 内部调剂待确认，仅展示 | `admission.pending_type`、API `pendingType` |
 | 调剂子窗 | `adjust_start` ~ `adjust_end` | `selection_round`、抢录门禁、API `phase = ADJUST` |
 
 ## 6. 异常与边界

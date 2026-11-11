@@ -1,17 +1,21 @@
 package com.college.labselect.service;
 
+import com.college.labselect.dto.req.LeaderNominationAdjustReqDTO;
 import com.college.labselect.dto.req.NominationSaveReqDTO;
 import com.college.labselect.dto.resp.NominationSaveRespVO;
 import com.college.labselect.entity.Intention;
 import com.college.labselect.entity.InterviewScore;
+import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
 import com.college.labselect.entity.SelectionRound;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.mapper.IntentionItemMapper;
 import com.college.labselect.mapper.IntentionMapper;
 import com.college.labselect.mapper.InterviewScoreMapper;
+import com.college.labselect.mapper.LabMapper;
 import com.college.labselect.mapper.MentorProfileMapper;
 import com.college.labselect.mapper.NominationMapper;
+import com.college.labselect.mapper.OperationLogMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
 import com.college.labselect.mapper.SysUserMapper;
 import com.college.labselect.service.impl.NominationServiceImpl;
@@ -61,8 +65,44 @@ class NominationServiceTest {
     @Mock
     private SysUserMapper sysUserMapper;
 
+    @Mock
+    private LabMapper labMapper;
+
+    @Mock
+    private OperationLogMapper operationLogMapper;
+
     @InjectMocks
     private NominationServiceImpl nominationService;
+
+    /**
+     * 边界：负责人调整其他实训室导师名单返回 403001。
+     */
+    @Test
+    void saveLeaderMentorNominations_otherLab_shouldThrow403001() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        MentorProfile mentor = mentor(4, 0);
+        mentor.setId(11L);
+        mentor.setLabId(2L);
+        when(mentorProfileMapper.selectById(11L)).thenReturn(mentor);
+        LeaderNominationAdjustReqDTO req = new LeaderNominationAdjustReqDTO();
+        req.setRoundId(1L);
+        req.setStudentIds(List.of(1001L));
+        req.setReason("负责人协调");
+
+        BusinessException exception = catchThrowableOfType(
+                () -> nominationService.saveLeaderMentorNominations(2001L, 11L, req),
+                BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(403001);
+    }
+
+    private Lab lab() {
+        Lab lab = new Lab();
+        lab.setId(1L);
+        lab.setLeaderId(2001L);
+        return lab;
+    }
 
     /**
      * 快乐路径：名额 4 已用 2，提交 2 人后剩余 0。

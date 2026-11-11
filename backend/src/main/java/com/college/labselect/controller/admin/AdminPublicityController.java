@@ -4,6 +4,7 @@ import com.college.labselect.common.PageResult;
 import com.college.labselect.common.Result;
 import com.college.labselect.common.ResultCode;
 import com.college.labselect.dto.req.PublicityCreateReqDTO;
+import com.college.labselect.dto.resp.PublicityAdminDetailVO;
 import com.college.labselect.dto.resp.PublicityConfirmRespVO;
 import com.college.labselect.dto.resp.PublicityCreateRespVO;
 import com.college.labselect.dto.resp.PublicityListVO;
@@ -53,6 +54,18 @@ public class AdminPublicityController {
                                                     @RequestParam(defaultValue = "1") long pageNum,
                                                     @RequestParam(defaultValue = "10") long pageSize) {
         return Result.success(publicityService.listPublicities(roundId, status, pageNum, pageSize));
+    }
+
+    /**
+     * 公示名单明细。
+     *
+     * @param id 公示批次 ID
+     * @return 公示名单明细
+     */
+    @Operation(summary = "公示名单明细")
+    @GetMapping("/{id}/rows")
+    public Result<PublicityAdminDetailVO> rows(@PathVariable Long id) {
+        return Result.success(publicityService.getAdminPublicityRows(id));
     }
 
     /**

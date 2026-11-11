@@ -22,5 +22,7 @@ public class PublicNoticeVO {
 
     private String attachmentUrl;
 
+    private Long publicityId;
+
     private LocalDateTime publishTime;
 }

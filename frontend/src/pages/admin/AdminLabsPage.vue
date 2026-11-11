@@ -23,6 +23,9 @@
       <el-table v-loading="loading" :data="labs" stripe>
         <el-table-column prop="labCode" label="编码" width="130" />
         <el-table-column prop="labName" label="实训室名称" min-width="150" />
+        <el-table-column prop="department" label="所属系部" min-width="130">
+          <template #default="{ row }">{{ row.department || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="leaderName" label="负责人" width="110">
           <template #default="{ row }">{{ row.leaderName || '未设置' }}</template>
         </el-table-column>
@@ -58,6 +61,9 @@
           </el-form-item>
           <el-form-item label="实训室名称" prop="labName">
             <el-input v-model="form.labName" placeholder="请输入名称" />
+          </el-form-item>
+          <el-form-item label="所属系部">
+            <el-input v-model="form.department" placeholder="如 信息工程学院" />
           </el-form-item>
           <el-form-item label="研究方向">
             <el-input v-model="form.researchDirection" placeholder="如 计算机视觉、大模型应用" />
@@ -174,6 +180,7 @@ function emptyForm(): LabSaveReq {
   return {
     labCode: '',
     labName: '',
+    department: '',
     introduction: '',
     researchDirection: '',
     equipmentEnv: '',
@@ -218,6 +225,7 @@ function fillForm(detail: LabDetail) {
   Object.assign(form, {
     labCode: detail.labCode,
     labName: detail.labName,
+    department: detail.department ?? '',
     introduction: detail.introduction ?? '',
     researchDirection: detail.researchDirection ?? '',
     equipmentEnv: detail.equipmentEnv ?? '',

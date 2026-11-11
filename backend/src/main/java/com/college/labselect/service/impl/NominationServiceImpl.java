@@ -4,22 +4,29 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.college.labselect.common.DesensitizeUtils;
 import com.college.labselect.common.ResultCode;
 import com.college.labselect.common.StatusTextUtils;
+import com.college.labselect.dto.req.LeaderNominationAdjustReqDTO;
 import com.college.labselect.dto.req.NominationSaveReqDTO;
+import com.college.labselect.dto.resp.LeaderNominationCandidateVO;
+import com.college.labselect.dto.resp.LeaderNominationDetailVO;
 import com.college.labselect.dto.resp.NominationItemVO;
 import com.college.labselect.dto.resp.NominationSaveRespVO;
 import com.college.labselect.entity.Intention;
 import com.college.labselect.entity.IntentionItem;
 import com.college.labselect.entity.InterviewScore;
+import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
 import com.college.labselect.entity.Nomination;
+import com.college.labselect.entity.OperationLog;
 import com.college.labselect.entity.SelectionRound;
 import com.college.labselect.entity.SysUser;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.mapper.IntentionItemMapper;
 import com.college.labselect.mapper.IntentionMapper;
 import com.college.labselect.mapper.InterviewScoreMapper;
+import com.college.labselect.mapper.LabMapper;
 import com.college.labselect.mapper.MentorProfileMapper;
 import com.college.labselect.mapper.NominationMapper;
+import com.college.labselect.mapper.OperationLogMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
 import com.college.labselect.mapper.SysUserMapper;
 import com.college.labselect.service.INominationService;
@@ -30,6 +37,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -61,6 +70,8 @@ public class NominationServiceImpl implements INominationService {
     private final IntentionMapper intentionMapper;
     private final IntentionItemMapper intentionItemMapper;
     private final SysUserMapper sysUserMapper;
+    private final LabMapper labMapper;
+    private final OperationLogMapper operationLogMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -132,6 +143,195 @@ public class NominationServiceImpl implements INominationService {
         return records.stream().map(record -> toItem(record, userMap.get(record.getStudentId()))).toList();
     }
 
+    @Override
+    public LeaderNominationDetailVO getLeaderMentorNominations(Long leaderUserId, Long mentorId, Long roundId) {
+        Lab lab = requireLeaderLab(leaderUserId);
+        MentorProfile mentor = requireMentorById(mentorId);
+        if (!Objects.equals(mentor.getLabId(), lab.getId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权查看其他实训室导师的名单");
+        }
+        LeaderNominationDetailVO result = new LeaderNominationDetailVO();
+        result.setMentorId(mentorId);
+        result.setQuota(Optional.ofNullable(mentor.getQuota()).orElse(0));
+        result.setQuotaUsed(Optional.ofNullable(mentor.getQuotaUsed()).orElse(0));
+        result.setSelectedStudentIds(List.of());
+        result.setCandidates(List.of());
+        SysUser mentorUser = mentor.getUserId() == null ? null : sysUserMapper.selectById(mentor.getUserId());
+        result.setMentorName(mentorUser == null ? "" : mentorUser.getRealName());
+        SelectionRound round = roundId == null ? currentRound() : selectionRoundMapper.selectById(roundId);
+        if (round == null) {
+            return result;
+        }
+        result.setRoundId(round.getId());
+        List<Nomination> records = nominationMapper.selectList(new LambdaQueryWrapper<Nomination>()
+                .eq(Nomination::getRoundId, round.getId())
+                .eq(Nomination::getMentorId, mentor.getId()));
+        Set<Long> selected = records.stream()
+                .map(Nomination::getStudentId)
+                .collect(Collectors.toSet());
+        result.setSelectedStudentIds(new ArrayList<>(selected));
+        List<Intention> intentions = intentionMapper.selectList(new LambdaQueryWrapper<Intention>()
+                .eq(Intention::getRoundId, round.getId())
+                .eq(Intention::getStatus, INTENTION_SUBMITTED));
+        if (intentions.isEmpty()) {
+            return result;
+        }
+        Map<Long, Long> intentionStudentMap = intentions.stream()
+                .collect(Collectors.toMap(Intention::getId, Intention::getStudentId,
+                        (first, second) -> first));
+        List<IntentionItem> items = intentionItemMapper.selectList(new LambdaQueryWrapper<IntentionItem>()
+                .in(IntentionItem::getIntentionId, intentionStudentMap.keySet())
+                .eq(IntentionItem::getMentorId, mentor.getId()));
+        Set<Long> candidateIds = items.stream()
+                .map(item -> intentionStudentMap.get(item.getIntentionId()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(HashSet::new));
+        candidateIds.addAll(selected);
+        if (candidateIds.isEmpty()) {
+            return result;
+        }
+        Map<Long, InterviewScore> scoreMap = loadScoreMap(round.getId(), mentor.getId(),
+                new ArrayList<>(candidateIds));
+        Map<Long, SysUser> userMap = loadUsers(new ArrayList<>(candidateIds));
+        List<LeaderNominationCandidateVO> candidates = new ArrayList<>();
+        for (Long studentId : candidateIds) {
+            SysUser student = userMap.get(studentId);
+            InterviewScore score = scoreMap.get(studentId);
+            LeaderNominationCandidateVO vo = new LeaderNominationCandidateVO();
+            vo.setStudentId(studentId);
+            vo.setStudentNo(student == null ? "" : DesensitizeUtils.maskUserNo(student.getUserNo()));
+            vo.setStudentName(student == null ? "" : DesensitizeUtils.maskName(student.getRealName()));
+            vo.setTotalScore(score == null ? null : resolveTotalScore(score));
+            vo.setNominated(selected.contains(studentId));
+            candidates.add(vo);
+        }
+        candidates.sort(Comparator.comparing(LeaderNominationCandidateVO::getTotalScore,
+                        Comparator.nullsLast(Comparator.reverseOrder()))
+                .thenComparing(LeaderNominationCandidateVO::getStudentId,
+                        Comparator.nullsLast(Comparator.naturalOrder())));
+        result.setCandidates(candidates);
+        return result;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public NominationSaveRespVO saveLeaderMentorNominations(Long leaderUserId, Long mentorId,
+                                                            LeaderNominationAdjustReqDTO req) {
+        Lab lab = requireLeaderLab(leaderUserId);
+        MentorProfile mentor = requireMentorById(mentorId);
+        if (!Objects.equals(mentor.getLabId(), lab.getId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权调整其他实训室导师的名单");
+        }
+        SelectionRound round = requireRound(req.getRoundId());
+        ensureEditable(round);
+        List<Long> studentIds = req.getStudentIds().stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        List<Nomination> existing = nominationMapper.selectList(new LambdaQueryWrapper<Nomination>()
+                .eq(Nomination::getRoundId, round.getId())
+                .eq(Nomination::getMentorId, mentor.getId()));
+        int delta = studentIds.size() - existing.size();
+        int quota = Optional.ofNullable(mentor.getQuota()).orElse(0);
+        int quotaUsed = Optional.ofNullable(mentor.getQuotaUsed()).orElse(0);
+        if (delta > 0 && quotaUsed + delta > quota) {
+            throw new BusinessException(ResultCode.QUOTA_EXCEEDED, "超出个人名额上限（" + quota + " 人）");
+        }
+        Map<Long, InterviewScore> scoreMap = Map.of();
+        if (!studentIds.isEmpty()) {
+            scoreMap = loadScores(mentor, round.getId(), studentIds);
+            validateCandidates(mentor, round.getId(), studentIds);
+        }
+        adjustQuota(mentor, delta);
+        saveRecords(mentor, round.getId(), studentIds, existing, scoreMap, STATUS_SUBMITTED);
+        writeLeaderNominationLog(leaderUserId, mentor, existing, studentIds, req.getReason());
+        int newQuotaUsed = quotaUsed + delta;
+        NominationSaveRespVO resp = new NominationSaveRespVO();
+        resp.setSubmittedCount(studentIds.size());
+        resp.setQuota(quota);
+        resp.setQuotaUsed(newQuotaUsed);
+        resp.setRemainQuota(Math.max(0, quota - newQuotaUsed));
+        log.info("负责人调整导师拟录取名单，mentorId={}，roundId={}，count={}",
+                mentor.getId(), round.getId(), studentIds.size());
+        return resp;
+    }
+
+    /**
+     * 查询负责人所在实训室。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @return 实训室
+     */
+    private Lab requireLeaderLab(Long leaderUserId) {
+        Lab lab = labMapper.selectOne(new LambdaQueryWrapper<Lab>().eq(Lab::getLeaderId, leaderUserId));
+        if (lab == null) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "仅实训室负责人可协调本室拟录取名单");
+        }
+        return lab;
+    }
+
+    /**
+     * 按 ID 查询导师档案。
+     *
+     * @param mentorId 导师档案 ID
+     * @return 导师档案
+     */
+    private MentorProfile requireMentorById(Long mentorId) {
+        MentorProfile mentor = mentorProfileMapper.selectById(mentorId);
+        if (mentor == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "导师不存在");
+        }
+        return mentor;
+    }
+
+    /**
+     * 批量加载评分，缺失评分时不抛异常。
+     *
+     * @param roundId    轮次 ID
+     * @param mentorId   导师档案 ID
+     * @param studentIds 学生 ID 列表
+     * @return 学生 ID 到评分的映射
+     */
+    private Map<Long, InterviewScore> loadScoreMap(Long roundId, Long mentorId, List<Long> studentIds) {
+        if (studentIds.isEmpty()) {
+            return new HashMap<>();
+        }
+        return interviewScoreMapper.selectList(new LambdaQueryWrapper<InterviewScore>()
+                        .eq(InterviewScore::getRoundId, roundId)
+                        .eq(InterviewScore::getMentorId, mentorId)
+                        .in(InterviewScore::getStudentId, studentIds))
+                .stream()
+                .collect(Collectors.toMap(InterviewScore::getStudentId, Function.identity(),
+                        (first, second) -> first));
+    }
+
+    /**
+     * 写负责人调整拟录取名单操作日志。
+     *
+     * @param operatorId 操作人用户 ID
+     * @param mentor     导师档案
+     * @param existing   调整前记录
+     * @param studentIds 调整后学生 ID 列表
+     * @param reason     调整理由
+     */
+    private void writeLeaderNominationLog(Long operatorId, MentorProfile mentor,
+                                          List<Nomination> existing, List<Long> studentIds, String reason) {
+        SysUser operator = sysUserMapper.selectById(operatorId);
+        String before = existing.stream().map(Nomination::getStudentId).sorted()
+                .map(String::valueOf).collect(Collectors.joining(","));
+        String after = studentIds.stream().sorted().map(String::valueOf).collect(Collectors.joining(","));
+        OperationLog operationLog = new OperationLog();
+        operationLog.setOperatorId(operatorId);
+        operationLog.setOperatorName(operator == null ? "" : operator.getRealName());
+        operationLog.setBizType("NOMINATION");
+        operationLog.setBizId(mentor.getId());
+        operationLog.setAction("负责人调整导师拟录取名单");
+        operationLog.setBeforeValue(before);
+        operationLog.setAfterValue(after);
+        operationLog.setReason(reason);
+        operationLogMapper.insert(operationLog);
+    }
+
     /**
      * 查询当前导师档案，不存在则拒绝。
      *
@@ -199,7 +399,7 @@ public class NominationServiceImpl implements INominationService {
     private Map<Long, InterviewScore> loadScores(MentorProfile mentor, Long roundId, List<Long> studentIds) {
         List<InterviewScore> scores = interviewScoreMapper.selectList(new LambdaQueryWrapper<InterviewScore>()
                 .eq(InterviewScore::getRoundId, roundId)
-                .eq(InterviewScore::getLabId, mentor.getLabId())
+                .eq(InterviewScore::getMentorId, mentor.getId())
                 .in(InterviewScore::getStudentId, studentIds));
         Map<Long, InterviewScore> scoreMap = scores.stream().collect(Collectors.toMap(
                 InterviewScore::getStudentId, Function.identity(), (first, second) -> first));

@@ -60,9 +60,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { MockError } from '@/mock/auth'
-import { mockAdminDashboard } from '@/mock/dashboard'
+import { getAdminDashboard } from '@/api/dashboard'
 import { formatCountdown } from '@/utils/countdown'
 import type { AdminDashboard } from '@/types/dashboard'
 
@@ -81,9 +79,9 @@ function go(target?: string) {
 async function loadData() {
   loading.value = true
   try {
-    dashboard.value = await mockAdminDashboard()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载工作台失败')
+    dashboard.value = await getAdminDashboard()
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     loading.value = false
   }

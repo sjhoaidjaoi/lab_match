@@ -105,11 +105,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { MockError } from '@/mock/auth'
-import { mockMentorList } from '@/mock/basic'
-import { HANDLE_RESULT_TEXT, mockAdminDisputes, mockHandleDispute } from '@/mock/publicity'
+import { listMentors } from '@/api/adminMentor'
+import { handleDispute, listAdminDisputes } from '@/api/publicity'
 import type { MentorListItem } from '@/types/basic'
 import type { DisputeItem } from '@/types/publicity'
+
+const HANDLE_RESULT_TEXT: Record<number, string> = {
+  1: '维持原结果',
+  2: '调整录取',
+  3: '退回重审'
+}
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -135,9 +140,14 @@ function tagType(status: number): 'warning' | 'primary' | 'success' | 'info' {
 async function loadDisputes() {
   loading.value = true
   try {
-    disputes.value = await mockAdminDisputes(statusFilter.value === 0 ? undefined : statusFilter.value)
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载异议列表失败')
+    const result = await listAdminDisputes({
+      status: statusFilter.value === 0 ? undefined : statusFilter.value,
+      pageNum: 1,
+      pageSize: 100
+    })
+    disputes.value = result.list
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     loading.value = false
   }
@@ -149,7 +159,8 @@ async function openHandleDialog(row: DisputeItem) {
   handleOpinion.value = ''
   adjustMentorId.value = null
   try {
-    mentors.value = (await mockMentorList()).filter((item) => item.remainQuota > 0)
+    const page = await listMentors({ pageNum: 1, pageSize: 100 })
+    mentors.value = page.list.filter((item) => item.remainQuota > 0)
   } catch {
     mentors.value = []
   }
@@ -170,7 +181,7 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
-    await mockHandleDispute(current.value.id, {
+    await handleDispute(current.value.id, {
       handleResult: handleResult.value,
       handleOpinion: handleOpinion.value,
       adjustMentorId: handleResult.value === 2 ? adjustMentorId.value ?? undefined : undefined
@@ -178,8 +189,8 @@ async function handleSubmit() {
     handleVisible.value = false
     ElMessage.success('异议已处理，已通知学生')
     await loadDisputes()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '处理失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     submitting.value = false
   }

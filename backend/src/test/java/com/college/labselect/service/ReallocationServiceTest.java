@@ -32,6 +32,7 @@ import com.college.labselect.service.impl.AdmissionWaitlistSupport;
 import com.college.labselect.service.impl.ReallocationServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -129,7 +130,7 @@ class ReallocationServiceTest {
      */
     @Test
     void reallocateInner_notAcceptInner_shouldThrow400002() {
-        stubOpenRound();
+        stubInnerRound();
         when(mentorProfileMapper.selectOne(any())).thenReturn(mentor(11L, 1L, 5, 2));
         when(intentionMapper.selectOne(any())).thenReturn(intention(0, 1));
         when(intentionItemMapper.selectList(any())).thenReturn(List.of(item(1L)));
@@ -147,8 +148,8 @@ class ReallocationServiceTest {
      */
     @Test
     void reallocateInner_otherLab_shouldThrow403001() {
-        stubOpenRound();
-        when(mentorProfileMapper.selectOne(any())).thenReturn(mentor(11L, 2L, 5, 2));
+        stubInnerRound();
+        when(labMapper.selectOne(any())).thenReturn(lab(2L));
         when(intentionMapper.selectOne(any())).thenReturn(intention(1, 0));
         when(intentionItemMapper.selectList(any())).thenReturn(List.of(item(1L)));
         when(admissionMapper.selectCount(any())).thenReturn(0L);
@@ -165,7 +166,7 @@ class ReallocationServiceTest {
      */
     @Test
     void reallocateInner_noRemainQuota_shouldThrow400002() {
-        stubOpenRound();
+        stubInnerRound();
         when(mentorProfileMapper.selectOne(any())).thenReturn(mentor(11L, 1L, 5, 2));
         when(mentorProfileMapper.selectById(12L)).thenReturn(mentor(12L, 1L, 4, 4));
         when(intentionMapper.selectOne(any())).thenReturn(intention(1, 0));
@@ -184,7 +185,7 @@ class ReallocationServiceTest {
      */
     @Test
     void reallocateInner_success_shouldWriteReallocationAndAdmission() {
-        stubOpenRound();
+        stubInnerRound();
         when(mentorProfileMapper.selectOne(any())).thenReturn(mentor(11L, 1L, 5, 2));
         when(mentorProfileMapper.selectById(12L)).thenReturn(mentor(12L, 1L, 4, 1));
         when(mentorProfileMapper.update(isNull(), any())).thenReturn(1);
@@ -196,7 +197,14 @@ class ReallocationServiceTest {
         reallocationService.reallocateInner(2001L, innerReq());
 
         verify(reallocationMapper, atLeastOnce()).insert(any(Reallocation.class));
-        verify(admissionMapper, atLeastOnce()).insert(any(Admission.class));
+        ArgumentCaptor<Admission> captor = ArgumentCaptor.forClass(Admission.class);
+        verify(admissionMapper).insert(captor.capture());
+        Admission saved = captor.getValue();
+        assertThat(saved.getStatus()).isEqualTo(1);
+        assertThat(saved.getPendingType()).isEqualTo(4);
+        assertThat(saved.getActiveFlag()).isNull();
+        assertThat(saved.getConfirmDeadline()).isNotNull();
+        assertThat(saved.getConfirmDeadline()).isBefore(LocalDateTime.now().plusHours(2));
         verify(operationLogMapper, atLeastOnce()).insert(any(OperationLog.class));
     }
 
@@ -309,6 +317,20 @@ class ReallocationServiceTest {
     private void stubOpenRound() {
         when(selectionRoundMapper.selectById(1L)).thenReturn(openRound());
         when(selectionRoundMapper.selectOne(any())).thenReturn(openRound());
+    }
+
+    /**
+     * 阶段 6 内部调剂窗口开启，阶段 7 跨室窗口尚未开始。
+     */
+    private void stubInnerRound() {
+        SelectionRound round = openRound();
+        round.setInnerAdjustStart(LocalDateTime.now().minusHours(1));
+        round.setInnerAdjustEnd(LocalDateTime.now().plusHours(1));
+        round.setAdjustStart(LocalDateTime.now().plusHours(2));
+        round.setAdjustEnd(LocalDateTime.now().plusHours(4));
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round);
+        when(selectionRoundMapper.selectOne(any())).thenReturn(round);
+        when(labMapper.selectOne(any())).thenReturn(lab(1L));
     }
 
     private SelectionRound openRound() {

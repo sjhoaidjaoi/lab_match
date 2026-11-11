@@ -91,6 +91,8 @@
 | nomination_submit_end | DATETIME | N | | 名单提交截止；到点系统统一批处理签发，之后不再接受提交 |
 | confirm_start | DATETIME | N | | 学生确认开始；批处理完成后开启，早于此刻学生看不到待确认记录 |
 | nomination_end | DATETIME | N | | 确认截止；到点未确认批量置逾期 |
+| inner_adjust_start | DATETIME | Y | | 阶段 6 内部调剂开始；为空表示本轮不开放本室内部调剂 |
+| inner_adjust_end | DATETIME | Y | | 阶段 6 内部调剂结束；必须与开始时间同时配置，且不得晚于 `adjust_start` |
 | adjust_start | DATETIME | N | | 统筹调剂开始；教师抢录与管理员兜底仅在此后可用 |
 | adjust_end | DATETIME | N | | 统筹调剂结束；之后进入公示准备 |
 | weight_attitude | DECIMAL(5,2) | N | 25.00 | 学习态度权重（%） |
@@ -184,15 +186,16 @@
 | id | BIGINT | N | 自增 | 主键 |
 | round_id | BIGINT | N | | 所属轮次 |
 | lab_id | BIGINT | N | | 实训室 |
+| mentor_id | BIGINT | N | | 面试导师 `mentor_profile.id` |
 | session_id | BIGINT | N | | 面试场次 |
 | student_id | BIGINT | N | | 学生 |
 | status | TINYINT | N | 1 | 1 待面试 2 已完成 3 缺席 |
 | gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
 | gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
 
-索引：`uk_round_lab_student(round_id, lab_id, student_id)`、`idx_session_id(session_id)`、`idx_student_id(student_id)`
+索引：`uk_round_mentor_student(round_id, mentor_id, student_id)`、`idx_session_id(session_id)`、`idx_student_id(student_id)`、`idx_mentor_id(mentor_id)`
 
-说明：一个学生在一轮内、同一实训室只排 1 场；意向跨 N 个实训室则最多 N 条排期。
+说明：一个学生在一轮内、同一导师只排 1 场；选择 N 位导师则最多 N 条排期，且不得时间冲突。
 
 ### 3.9 interview_score 面试评分
 
@@ -201,6 +204,7 @@
 | id | BIGINT | N | 自增 | 主键 |
 | round_id | BIGINT | N | | 所属轮次 |
 | lab_id | BIGINT | N | | 实训室 |
+| mentor_id | BIGINT | N | | 评分导师 `mentor_profile.id` |
 | student_id | BIGINT | N | | 学生 |
 | session_id | BIGINT | Y | | 关联面试场次 |
 | attitude_score | DECIMAL(5,2) | N | 0.00 | 学习态度（0-100） |
@@ -212,14 +216,14 @@
 | final_total | DECIMAL(5,2) | N | 0.00 | 实际使用总分 = manual_total 非空取之，否则取 system_total |
 | adjust_reason | VARCHAR(500) | Y | | 手动调整理由 |
 | comment | VARCHAR(1000) | Y | | 面试评语 |
-| scorer_id | BIGINT | N | | 录分人（实训室负责人） |
+| scorer_id | BIGINT | N | | 录分人（导师本人） |
 | status | TINYINT | N | 1 | 1 草稿 2 已提交 |
 | gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
 | gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
 
-索引：`uk_round_lab_student(round_id, lab_id, student_id)`、`idx_round_lab(round_id, lab_id)`、`idx_scorer_id(scorer_id)`
+索引：`uk_round_mentor_student(round_id, mentor_id, student_id)`、`idx_round_lab(round_id, lab_id)`、`idx_scorer_id(scorer_id)`、`idx_mentor_id(mentor_id)`
 
-说明：一套分数本室共享，唯一键保证不会出现「一室多套分」。
+说明：评分按“导师 + 学生”独立记录，各导师分数独立用于本人拟录取，不做平均。
 
 ### 3.10 nomination 拟录取
 
@@ -251,7 +255,7 @@
 | lab_id | BIGINT | N | | 实训室 |
 | mentor_id | BIGINT | N | | 导师 |
 | source_type | TINYINT | N | 1 | 1 拟录取 2 递补 3 内部调剂 4 跨室调剂 5 座谈安置 |
-| pending_type | TINYINT | Y | | 待确认类型：1 拟录取多选一 2 递补待确认 3 异议调整待确认；NULL 表示无需确认。**检索一律按 `status = 1`，该字段仅作展示标签** |
+| pending_type | TINYINT | Y | | 待确认类型：1 拟录取多选一 2 递补待确认 3 异议调整待确认 4 内部调剂待确认；NULL 表示无需确认。**检索一律按 `status = 1`，该字段仅作展示标签** |
 | active_flag | TINYINT | Y | | 终局有效标记：`status ∈ {2,3}` 时为 1，`{1,4,5}` 时为 NULL。**待确认期（status=1）必须为 NULL**，否则同轮多条待确认会撞唯一键 |
 | nomination_id | BIGINT | Y | | 来源拟录取记录 |
 | waitlist_id | BIGINT | Y | | 来源递补记录 |
@@ -407,6 +411,8 @@ CREATE TABLE `selection_round` (
   `nomination_submit_end` DATETIME NOT NULL COMMENT '名单提交截止时间，到点系统统一批处理签发',
   `confirm_start` DATETIME NOT NULL COMMENT '学生确认开始时间，早于此刻不可见待确认记录',
   `nomination_end` DATETIME NOT NULL COMMENT '确认截止时间，到点未确认批量置逾期',
+  `inner_adjust_start` DATETIME DEFAULT NULL COMMENT '阶段6内部调剂开始时间，为空表示不开放',
+  `inner_adjust_end` DATETIME DEFAULT NULL COMMENT '阶段6内部调剂结束时间，不得晚于跨室调剂开始',
   `adjust_start` DATETIME NOT NULL COMMENT '统筹调剂开始时间，抢录与兜底仅此后可用',
   `adjust_end` DATETIME NOT NULL COMMENT '统筹调剂结束时间',
   `weight_attitude` DECIMAL(5,2) NOT NULL DEFAULT 25.00 COMMENT '学习态度权重(%)',
@@ -483,21 +489,24 @@ CREATE TABLE `interview_schedule` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
   `round_id` BIGINT NOT NULL COMMENT '轮次ID',
   `lab_id` BIGINT NOT NULL COMMENT '实训室ID',
+  `mentor_id` BIGINT NOT NULL COMMENT '面试导师 mentor_profile.id',
   `session_id` BIGINT NOT NULL COMMENT '面试场次ID',
   `student_id` BIGINT NOT NULL COMMENT '学生用户ID',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1待面试 2已完成 3缺席',
   `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_round_lab_student` (`round_id`, `lab_id`, `student_id`),
+  UNIQUE KEY `uk_round_mentor_student` (`round_id`, `mentor_id`, `student_id`),
   KEY `idx_session_id` (`session_id`),
-  KEY `idx_student_id` (`student_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='面试排期表';
+  KEY `idx_student_id` (`student_id`),
+  KEY `idx_mentor_id` (`mentor_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='面试排期表（按导师分别面试）';
 
 CREATE TABLE `interview_score` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
   `round_id` BIGINT NOT NULL COMMENT '轮次ID',
   `lab_id` BIGINT NOT NULL COMMENT '实训室ID',
+  `mentor_id` BIGINT NOT NULL COMMENT '评分导师 mentor_profile.id',
   `student_id` BIGINT NOT NULL COMMENT '学生用户ID',
   `session_id` BIGINT DEFAULT NULL COMMENT '面试场次ID',
   `attitude_score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '学习态度得分(0-100)',
@@ -509,15 +518,16 @@ CREATE TABLE `interview_score` (
   `final_total` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '实际使用总分',
   `adjust_reason` VARCHAR(500) DEFAULT NULL COMMENT '手动调整理由',
   `comment` VARCHAR(1000) DEFAULT NULL COMMENT '面试评语',
-  `scorer_id` BIGINT NOT NULL COMMENT '录分人（实训室负责人）',
+  `scorer_id` BIGINT NOT NULL COMMENT '录分人（导师本人）',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1草稿 2已提交',
   `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_round_lab_student` (`round_id`, `lab_id`, `student_id`),
+  UNIQUE KEY `uk_round_mentor_student` (`round_id`, `mentor_id`, `student_id`),
   KEY `idx_round_lab` (`round_id`, `lab_id`),
-  KEY `idx_scorer_id` (`scorer_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='面试评分表（一室一套分，本室共享）';
+  KEY `idx_scorer_id` (`scorer_id`),
+  KEY `idx_mentor_id` (`mentor_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='面试评分表（导师独立评分）';
 
 CREATE TABLE `nomination` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
@@ -543,7 +553,7 @@ CREATE TABLE `admission` (
   `lab_id` BIGINT NOT NULL COMMENT '实训室ID',
   `mentor_id` BIGINT NOT NULL COMMENT '导师档案ID',
   `source_type` TINYINT NOT NULL DEFAULT 1 COMMENT '来源：1拟录取 2递补 3内部调剂 4跨室调剂 5座谈安置',
-  `pending_type` TINYINT DEFAULT NULL COMMENT '待确认类型：1拟录取多选一 2递补待确认 3异议调整待确认',
+  `pending_type` TINYINT DEFAULT NULL COMMENT '待确认类型：1拟录取多选一 2递补待确认 3异议调整待确认 4内部调剂待确认',
   `active_flag` TINYINT DEFAULT NULL COMMENT '终局有效标记：status为2/3时为1，其余为NULL',
   `nomination_id` BIGINT DEFAULT NULL COMMENT '来源拟录取ID',
   `waitlist_id` BIGINT DEFAULT NULL COMMENT '来源递补ID',

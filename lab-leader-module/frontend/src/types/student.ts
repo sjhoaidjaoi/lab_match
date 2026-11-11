@@ -98,5 +98,7 @@ export interface CurrentRound {
   statusText: string
   applyStart: string
   applyEnd: string
+  innerAdjustStart?: string | null
+  innerAdjustEnd?: string | null
   countdownSeconds: number
 }

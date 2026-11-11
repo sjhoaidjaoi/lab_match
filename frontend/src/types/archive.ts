@@ -1,7 +1,5 @@
 export type SnapshotType = 1 | 2 | 3 | 4
 
-export type ResultGroupBy = 'lab' | 'mentor' | 'student'
-
 export interface RoundSnapshotItem {
   id: number
   roundId: number
@@ -51,13 +49,18 @@ export interface ResultRow {
   confirmTime: string | null
 }
 
-export interface ResultGroupStat {
-  key: number
-  name: string
-  totalQuota: number
-  admitted: number
-  enrolled: number
-  saturationRate: number
+export type AdmissionAdjustAction = 'CONFIRM' | 'CANCEL' | 'REASSIGN' | 'ABANDON'
+
+export interface AdmissionAdjustReq {
+  action: AdmissionAdjustAction
+  targetMentorId?: number
+  reason: string
+}
+
+export interface AdmissionAdjustResp {
+  id: number
+  status: number
+  mentorId: number | null
 }
 
 export interface ResultOverview {
@@ -68,8 +71,6 @@ export interface ResultOverview {
   totalConfirmed: number
   totalEnrolled: number
   saturationRate: number
-  groupBy: ResultGroupBy
-  groups: ResultGroupStat[]
   page: {
     total: number
     pageNum: number
@@ -84,7 +85,6 @@ export interface ResultQuery {
   mentorId?: number
   keyword?: string
   status?: number
-  groupBy: ResultGroupBy
   pageNum: number
   pageSize: number
 }

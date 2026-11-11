@@ -14,6 +14,7 @@ public class LabListVO {
     private Long id;
     private String labCode;
     private String labName;
+    private String department;
     private String leaderName;
     private Integer mentorCount;
     private Integer totalQuota;

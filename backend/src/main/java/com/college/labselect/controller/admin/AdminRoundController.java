@@ -13,6 +13,7 @@ import com.college.labselect.dto.resp.RoundListVO;
 import com.college.labselect.dto.resp.RoundLockRespVO;
 import com.college.labselect.dto.resp.RoundUnlockRespVO;
 import com.college.labselect.dto.resp.SnapshotCreateRespVO;
+import com.college.labselect.dto.resp.SnapshotListItemVO;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.security.LoginUser;
 import com.college.labselect.service.IArchiveService;
@@ -31,6 +32,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 管理端轮次接口。
@@ -131,6 +134,20 @@ public class AdminRoundController {
             throw new BusinessException(ResultCode.UNAUTHORIZED);
         }
         return Result.success(archiveService.generateSnapshot(loginUser.getUserId(), id, req));
+    }
+
+    /**
+     * 快照历史列表。
+     *
+     * @param id           轮次 ID
+     * @param snapshotType 快照类型，可为空
+     * @return 快照历史列表
+     */
+    @Operation(summary = "快照历史列表")
+    @GetMapping("/{id}/snapshots")
+    public Result<List<SnapshotListItemVO>> snapshots(@PathVariable Long id,
+                                                      @RequestParam(required = false) Integer snapshotType) {
+        return Result.success(archiveService.listSnapshots(id, snapshotType));
     }
 
     /**

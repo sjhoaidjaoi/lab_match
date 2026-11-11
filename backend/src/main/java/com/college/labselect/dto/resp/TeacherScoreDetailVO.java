@@ -12,6 +12,8 @@ public class TeacherScoreDetailVO {
 
     private Long id;
     private Long studentId;
+    private Long mentorId;
+    private String mentorName;
     private String studentNo;
     private String studentName;
     private BigDecimal attitudeScore;

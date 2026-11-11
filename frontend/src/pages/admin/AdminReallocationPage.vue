@@ -15,7 +15,7 @@
     </el-alert>
 
     <el-card shadow="never">
-      <el-tabs v-model="level" @tab-change="handleTabChange">
+      <el-tabs v-model="level" @tab-change="loadCandidates">
         <el-tab-pane label="一级 · 本室内部调剂" :name="1" />
         <el-tab-pane label="二级 · 全院跨室调剂" :name="2" />
         <el-tab-pane label="三级 · 座谈安置" :name="3" />
@@ -111,13 +111,14 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MockError } from '@/mock/auth'
-import { ROUND_ID, mockAdminCandidates, mockAdminReallocate } from '@/mock/reallocation'
+import { getCurrentRound } from '@/api/public'
+import { adminReallocate, listAdminCandidates } from '@/api/adminReallocation'
 import type { ReallocationCandidate, ReallocationMentor } from '@/types/reallocation'
 
 const level = ref<number>(1)
 const loading = ref(false)
 const submitting = ref(false)
+const roundId = ref<number>(0)
 const candidates = ref<ReallocationCandidate[]>([])
 const selectedRows = ref<ReallocationCandidate[]>([])
 const pendingRows = ref<ReallocationCandidate[]>([])
@@ -149,17 +150,19 @@ const mentorOptions = computed<ReallocationMentor[]>(() => {
 async function loadCandidates() {
   loading.value = true
   try {
-    candidates.value = await mockAdminCandidates(level.value)
+    const result = await listAdminCandidates({
+      roundId: roundId.value || undefined,
+      level: level.value,
+      pageNum: 1,
+      pageSize: 100
+    })
+    candidates.value = result.list
     selectedRows.value = []
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载调剂候选失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     loading.value = false
   }
-}
-
-function handleTabChange() {
-  void loadCandidates()
 }
 
 function handleSelectionChange(rows: ReallocationCandidate[]) {
@@ -195,6 +198,10 @@ async function handleSubmit() {
     ElMessage.warning('座谈安置必须填写说明')
     return
   }
+  if (!roundId.value) {
+    ElMessage.warning('当前无进行中的选拔轮次')
+    return
+  }
   try {
     await ElMessageBox.confirm('调剂结果直接生效，学生无需确认，确认提交？', '调剂确认', {
       type: 'warning'
@@ -204,8 +211,8 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
-    const result = await mockAdminReallocate({
-      roundId: ROUND_ID,
+    const result = await adminReallocate({
+      roundId: roundId.value,
       level: level.value,
       items: pendingRows.value.map((row) => ({
         studentId: row.studentId,
@@ -226,14 +233,23 @@ async function handleSubmit() {
       selectedRows.value = []
     }
     await loadCandidates()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '调剂失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     submitting.value = false
   }
 }
 
-onMounted(loadCandidates)
+async function init() {
+  try {
+    roundId.value = (await getCurrentRound()).id
+  } catch {
+    // 无进行中轮次时仅展示空态
+  }
+  await loadCandidates()
+}
+
+onMounted(init)
 </script>
 
 <style scoped>
@@ -242,47 +258,39 @@ onMounted(loadCandidates)
   flex-direction: column;
   gap: 16px;
 }
-
 .page-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
 }
-
 .page-header h2 {
   margin: 0 0 6px;
   font-size: 20px;
 }
-
 .subtitle {
   margin: 0;
   font-size: 13px;
   color: #909399;
 }
-
 .toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
   margin: 12px 0;
 }
-
 .selected-tip {
   font-size: 13px;
   color: #606266;
 }
-
 .mentor-tag,
 .wish-tag {
   margin-right: 6px;
 }
-
 .dialog-tip {
   margin: 0 0 12px;
   font-size: 14px;
   color: #303133;
 }
-
 .full-width {
   width: 100%;
 }

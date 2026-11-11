@@ -10,6 +10,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 /**
  * 全局异常处理器。
@@ -77,6 +78,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public Result<Void> handleAccessDenied(AccessDeniedException exception) {
         return Result.error(ResultCode.FORBIDDEN);
+    }
+
+    /**
+     * 处理上传文件超限异常。
+     *
+     * @param exception 上传超限异常
+     * @return 统一响应
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Result<Void> handleMaxUploadSize(MaxUploadSizeExceededException exception) {
+        log.warn("上传文件超过大小限制：{}", exception.getMessage());
+        return Result.error(ResultCode.PARAM_ERROR, "附件大小不能超过 10MB");
     }
 
     /**

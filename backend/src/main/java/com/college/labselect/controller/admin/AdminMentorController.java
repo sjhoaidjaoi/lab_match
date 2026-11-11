@@ -7,6 +7,7 @@ import com.college.labselect.dto.req.MentorQuotaReqDTO;
 import com.college.labselect.dto.req.MentorStatusReqDTO;
 import com.college.labselect.dto.req.MentorUpdateReqDTO;
 import com.college.labselect.dto.resp.MentorListVO;
+import com.college.labselect.dto.resp.StudentImportResultVO;
 import com.college.labselect.service.IMentorService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -87,13 +88,12 @@ public class AdminMentorController {
      * 批量导入教师。
      *
      * @param file Excel 文件
-     * @return 统一响应
+     * @return 导入结果
      */
     @Operation(summary = "批量导入教师")
     @PostMapping("/import")
-    public Result<Void> importMentors(@RequestPart("file") MultipartFile file) {
-        mentorService.importMentors(file);
-        return Result.success();
+    public Result<StudentImportResultVO> importMentors(@RequestPart("file") MultipartFile file) {
+        return Result.success(mentorService.importMentors(file));
     }
 
     /**

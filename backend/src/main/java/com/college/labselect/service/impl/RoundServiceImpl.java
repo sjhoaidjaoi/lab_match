@@ -12,14 +12,18 @@ import com.college.labselect.dto.req.RoundUpdateReqDTO;
 import com.college.labselect.dto.resp.CurrentRoundVO;
 import com.college.labselect.dto.resp.RoundListVO;
 import com.college.labselect.entity.Admission;
+import com.college.labselect.entity.InterviewScore;
 import com.college.labselect.entity.Nomination;
 import com.college.labselect.entity.SelectionRound;
 import com.college.labselect.entity.UserNotice;
+import com.college.labselect.entity.Waitlist;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.mapper.AdmissionMapper;
+import com.college.labselect.mapper.InterviewScoreMapper;
 import com.college.labselect.mapper.NominationMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
 import com.college.labselect.mapper.UserNoticeMapper;
+import com.college.labselect.mapper.WaitlistMapper;
 import com.college.labselect.service.IRoundService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -55,12 +60,16 @@ public class RoundServiceImpl implements IRoundService {
     private static final int ADMISSION_PENDING = 1;
     private static final int ADMISSION_CONFIRMED = 2;
     private static final int ADMISSION_ENROLLED = 3;
+    private static final int SCORE_SUBMITTED = 2;
+    private static final int WAITLIST_PENDING = 1;
     private static final int NOTICE_TYPE_CONFIRM = 4;
     private static final BigDecimal WEIGHT_TOTAL = new BigDecimal("100.00");
 
     private final SelectionRoundMapper selectionRoundMapper;
     private final NominationMapper nominationMapper;
     private final AdmissionMapper admissionMapper;
+    private final InterviewScoreMapper interviewScoreMapper;
+    private final WaitlistMapper waitlistMapper;
     private final UserNoticeMapper userNoticeMapper;
 
     @Override
@@ -152,6 +161,8 @@ public class RoundServiceImpl implements IRoundService {
         vo.setNominationSubmitEnd(round.getNominationSubmitEnd());
         vo.setConfirmStart(round.getConfirmStart());
         vo.setNominationEnd(round.getNominationEnd());
+        vo.setInnerAdjustStart(round.getInnerAdjustStart());
+        vo.setInnerAdjustEnd(round.getInnerAdjustEnd());
         vo.setAdjustStart(round.getAdjustStart());
         vo.setAdjustEnd(round.getAdjustEnd());
         vo.setLocked(round.getLocked());
@@ -212,7 +223,74 @@ public class RoundServiceImpl implements IRoundService {
             }
             sendIssueNotice(entry.getKey(), firstAdmissionId, single);
         }
-        log.info("批次签发完成，roundId={}，studentCount={}", id, byStudent.size());
+        int waitlistCount = generateWaitlist(id, nominations);
+        log.info("批次签发完成，roundId={}，studentCount={}，waitlistCount={}", id, byStudent.size(), waitlistCount);
+    }
+
+    /**
+     * 为本轮「有评分但未被拟录取」的学生生成递补队列。
+     * 按导师分组，总分降序排列，同分按学生 ID 升序；已存在的组合跳过，保证重复签发幂等。
+     *
+     * @param roundId     轮次 ID
+     * @param nominations 本轮已提交的拟录取记录
+     * @return 新写入的递补记录数
+     */
+    private int generateWaitlist(Long roundId, List<Nomination> nominations) {
+        List<InterviewScore> scores = interviewScoreMapper.selectList(new LambdaQueryWrapper<InterviewScore>()
+                .eq(InterviewScore::getRoundId, roundId)
+                .eq(InterviewScore::getStatus, SCORE_SUBMITTED));
+        if (scores.isEmpty()) {
+            return 0;
+        }
+        Set<Long> admittedStudents = admissionMapper.selectList(new LambdaQueryWrapper<Admission>()
+                        .eq(Admission::getRoundId, roundId))
+                .stream()
+                .map(Admission::getStudentId)
+                .collect(Collectors.toSet());
+        Set<String> nominatedKeys = nominations.stream()
+                .map(item -> item.getMentorId() + ":" + item.getStudentId())
+                .collect(Collectors.toSet());
+        List<Waitlist> existing = waitlistMapper.selectList(new LambdaQueryWrapper<Waitlist>()
+                .eq(Waitlist::getRoundId, roundId));
+        Set<String> existingKeys = existing.stream()
+                .map(item -> item.getMentorId() + ":" + item.getStudentId())
+                .collect(Collectors.toSet());
+        Map<Long, Integer> maxRanks = existing.stream()
+                .collect(Collectors.toMap(Waitlist::getMentorId, Waitlist::getRankNo, Math::max));
+        Map<Long, List<InterviewScore>> byMentor = scores.stream()
+                .filter(item -> !nominatedKeys.contains(item.getMentorId() + ":" + item.getStudentId()))
+                .filter(item -> !admittedStudents.contains(item.getStudentId()))
+                .collect(Collectors.groupingBy(InterviewScore::getMentorId));
+        LocalDateTime now = LocalDateTime.now();
+        int inserted = 0;
+        for (Map.Entry<Long, List<InterviewScore>> entry : byMentor.entrySet()) {
+            List<InterviewScore> sorted = entry.getValue().stream()
+                    .sorted(Comparator.comparing(
+                                    (InterviewScore item) -> Optional.ofNullable(item.getFinalTotal()).orElse(BigDecimal.ZERO))
+                            .reversed()
+                            .thenComparing(InterviewScore::getStudentId))
+                    .toList();
+            int rankNo = maxRanks.getOrDefault(entry.getKey(), 0);
+            for (InterviewScore score : sorted) {
+                String key = entry.getKey() + ":" + score.getStudentId();
+                if (existingKeys.contains(key)) {
+                    continue;
+                }
+                Waitlist waitlist = new Waitlist();
+                waitlist.setRoundId(roundId);
+                waitlist.setMentorId(entry.getKey());
+                waitlist.setStudentId(score.getStudentId());
+                waitlist.setRankNo(++rankNo);
+                waitlist.setIsManual(0);
+                waitlist.setApplyStatus(WAITLIST_PENDING);
+                waitlist.setGmtCreate(now);
+                waitlist.setGmtModified(now);
+                waitlistMapper.insert(waitlist);
+                existingKeys.add(key);
+                inserted++;
+            }
+        }
+        return inserted;
     }
 
     /**
@@ -261,6 +339,32 @@ public class RoundServiceImpl implements IRoundService {
         }
         if (!req.getAdjustStart().isBefore(req.getAdjustEnd())) {
             throw new BusinessException(ResultCode.BUSINESS_ERROR, "调剂开始时间必须早于调剂结束时间");
+        }
+        validateInnerAdjustTimeline(req);
+    }
+
+    /**
+     * 校验阶段 6 内部调剂时间窗。
+     *
+     * @param req 轮次请求
+     */
+    private void validateInnerAdjustTimeline(RoundBaseReqDTO req) {
+        LocalDateTime start = req.getInnerAdjustStart();
+        LocalDateTime end = req.getInnerAdjustEnd();
+        if (start == null && end == null) {
+            return;
+        }
+        if (start == null || end == null) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "内部调剂开始与结束时间需同时填写");
+        }
+        if (start.isBefore(req.getNominationEnd())) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "内部调剂开始时间不得早于确认截止时间");
+        }
+        if (!start.isBefore(end)) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "内部调剂开始时间必须早于内部调剂结束时间");
+        }
+        if (end.isAfter(req.getAdjustStart())) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "内部调剂结束时间不得晚于跨室调剂开始时间");
         }
     }
 
@@ -340,6 +444,8 @@ public class RoundServiceImpl implements IRoundService {
         round.setNominationSubmitEnd(req.getNominationSubmitEnd());
         round.setConfirmStart(req.getConfirmStart());
         round.setNominationEnd(req.getNominationEnd());
+        round.setInnerAdjustStart(req.getInnerAdjustStart());
+        round.setInnerAdjustEnd(req.getInnerAdjustEnd());
         round.setAdjustStart(req.getAdjustStart());
         round.setAdjustEnd(req.getAdjustEnd());
         round.setWeightAttitude(req.getWeightAttitude());
@@ -370,6 +476,9 @@ public class RoundServiceImpl implements IRoundService {
         }
         if (inRange(now, round.getConfirmStart(), round.getNominationEnd())) {
             return "CONFIRM";
+        }
+        if (inRange(now, round.getInnerAdjustStart(), round.getInnerAdjustEnd())) {
+            return "INNER_ADJUST";
         }
         if (inRange(now, round.getAdjustStart(), round.getAdjustEnd())) {
             return "ADJUST";
@@ -406,6 +515,7 @@ public class RoundServiceImpl implements IRoundService {
             case "INTERVIEW" -> round.getInterviewEnd();
             case "NOMINATION" -> round.getNominationSubmitEnd();
             case "CONFIRM" -> round.getNominationEnd();
+            case "INNER_ADJUST" -> round.getInnerAdjustEnd();
             case "ADJUST" -> round.getAdjustEnd();
             case "IDLE" -> now.isBefore(round.getApplyStart()) ? round.getApplyStart() : null;
             default -> null;
@@ -461,6 +571,8 @@ public class RoundServiceImpl implements IRoundService {
         vo.setNominationSubmitEnd(round.getNominationSubmitEnd());
         vo.setConfirmStart(round.getConfirmStart());
         vo.setNominationEnd(round.getNominationEnd());
+        vo.setInnerAdjustStart(round.getInnerAdjustStart());
+        vo.setInnerAdjustEnd(round.getInnerAdjustEnd());
         vo.setAdjustStart(round.getAdjustStart());
         vo.setAdjustEnd(round.getAdjustEnd());
         vo.setWeightAttitude(round.getWeightAttitude());

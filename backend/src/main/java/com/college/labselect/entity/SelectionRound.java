@@ -40,6 +40,10 @@ public class SelectionRound {
 
     private LocalDateTime nominationEnd;
 
+    private LocalDateTime innerAdjustStart;
+
+    private LocalDateTime innerAdjustEnd;
+
     private LocalDateTime adjustStart;
 
     private LocalDateTime adjustEnd;

@@ -21,6 +21,8 @@ public class InterviewSchedule {
 
     private Long labId;
 
+    private Long mentorId;
+
     private Long sessionId;
 
     private Long studentId;

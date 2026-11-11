@@ -14,6 +14,8 @@ public class InterviewScoreListVO {
     private Long studentId;
     private String studentNo;
     private String studentName;
+    private Long mentorId;
+    private String mentorName;
     private Long sessionId;
     private String sessionName;
     private BigDecimal attitudeScore;

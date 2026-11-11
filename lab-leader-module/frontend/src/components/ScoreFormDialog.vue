@@ -5,7 +5,7 @@
         <span>{{ row?.studentNo }}</span>
         <span>{{ row?.studentName }}</span>
         <span>{{ row?.sessionName }}</span>
-        <span class="tip">本室统一面试仅此一套分数，录入后本室所有导师共享使用</span>
+        <span class="tip">导师独立面试评分，仅用于本人拟录取</span>
       </div>
 
       <div class="score-grid">
@@ -59,7 +59,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { saveLeaderScore } from '@/api/leaderScore'
+import { saveTeacherScore } from '@/api/teacherScore'
 import type { InterviewScoreRow, InterviewScoreSaveReq } from '@/types/interview'
 
 interface Props {
@@ -156,7 +156,7 @@ async function handleSave(submit: number) {
   }
   saving.value = true
   try {
-    await saveLeaderScore({
+    await saveTeacherScore({
       ...form,
       manualTotal: manualOverride.value ? form.manualTotal : null,
       adjustReason: manualOverride.value ? form.adjustReason : '',

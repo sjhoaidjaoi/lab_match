@@ -3,10 +3,19 @@
     <div class="page-header">
       <div>
         <h2>本室内部调剂</h2>
-        <p class="subtitle">仅处理服从本室内部调剂、且本轮尚无录取去向的学生</p>
+        <p class="subtitle">阶段 6 仅处理服从本室内部调剂、且本轮尚无录取去向的学生；提交后需学生确认</p>
       </div>
       <el-tag type="warning" size="large">待调剂 {{ candidates.length }} 人</el-tag>
     </div>
+
+    <el-alert v-if="innerWindowText" :title="innerWindowText" type="info" :closable="false" show-icon />
+    <el-alert
+      v-else
+      title="本轮未配置内部调剂时间窗，暂不可执行本室内部调剂"
+      type="warning"
+      :closable="false"
+      show-icon
+    />
 
     <el-card shadow="never" header="本室导师剩余名额">
       <el-table :data="mentors" size="small">
@@ -79,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { listLeaderMentors } from '@/api/leaderMentor'
 import { listLeaderCandidates, reallocateInner } from '@/api/leaderReallocation'
@@ -90,12 +99,20 @@ import type { ReallocationCandidate } from '@/types/reallocation'
 const loading = ref(false)
 const submitting = ref(false)
 const roundId = ref<number | null>(null)
+const roundWindow = ref<{ start: string | null; end: string | null } | null>(null)
 const candidates = ref<ReallocationCandidate[]>([])
 const mentors = ref<MentorListItem[]>([])
 const dialogVisible = ref(false)
 const current = ref<ReallocationCandidate | null>(null)
 const toMentorId = ref<number | null>(null)
 const reason = ref('')
+
+const innerWindowText = computed(() => {
+  if (!roundWindow.value?.start || !roundWindow.value?.end) {
+    return ''
+  }
+  return `阶段 6 内部调剂窗口：${roundWindow.value.start} ~ ${roundWindow.value.end}；学生需在窗口结束或通知后 24 小时内确认`
+})
 
 function formatScore(value: number | null): string {
   return value === null ? '—' : value.toFixed(2)
@@ -106,6 +123,9 @@ async function loadData() {
   try {
     const round = await getCurrentRound()
     roundId.value = round?.id ?? null
+    roundWindow.value = round
+      ? { start: round.innerAdjustStart ?? null, end: round.innerAdjustEnd ?? null }
+      : null
     const [candidatePage, mentorList] = await Promise.all([
       listLeaderCandidates({
         roundId: roundId.value ?? undefined,
@@ -144,21 +164,31 @@ async function handleReallocate() {
     return
   }
   try {
-    await ElMessageBox.confirm('调剂后录取结果直接生效，学生无需确认，确认调剂？', '内部调剂确认', {
-      type: 'warning'
-    })
+    await ElMessageBox.confirm(
+      '提交后将生成待确认录取，学生需在截止前确认；逾期或拒绝将释放名额。确认提交吗？',
+      '内部调剂确认',
+      { type: 'warning' }
+    )
   } catch {
     return
   }
   submitting.value = true
   try {
-    await reallocateInner({
+    const resp = await reallocateInner({
       roundId: roundId.value,
       studentId: current.value.studentId,
       toMentorId: toMentorId.value,
       reason: reason.value.trim()
     })
-    ElMessage.success('内部调剂已完成')
+    if (resp.status === 1) {
+      ElMessage.success(
+        resp.confirmDeadline
+          ? `已提交，等待学生于 ${resp.confirmDeadline} 前确认`
+          : '已提交，等待学生确认'
+      )
+    } else {
+      ElMessage.success('内部调剂已完成')
+    }
     dialogVisible.value = false
     await loadData()
   } catch {

@@ -17,6 +17,8 @@ public class StudentInterviewVO {
     private Integer roundNo;
     private Long labId;
     private String labName;
+    private Long mentorId;
+    private String mentorName;
     private String sessionName;
 
     @JsonFormat(pattern = "yyyy-MM-dd")

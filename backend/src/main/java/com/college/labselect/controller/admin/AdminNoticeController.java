@@ -6,6 +6,7 @@ import com.college.labselect.common.ResultCode;
 import com.college.labselect.dto.req.NoticeSaveReqDTO;
 import com.college.labselect.dto.req.NoticeStatusReqDTO;
 import com.college.labselect.dto.resp.NoticeAdminVO;
+import com.college.labselect.dto.resp.NoticeAttachmentVO;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.security.LoginUser;
 import com.college.labselect.service.INoticeManageService;
@@ -15,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 管理员端公告管理接口。
@@ -98,6 +101,31 @@ public class AdminNoticeController {
     @PutMapping("/{id}/status")
     public Result<Void> updateStatus(@PathVariable Long id, @Valid @RequestBody NoticeStatusReqDTO req) {
         noticeManageService.updateStatus(id, req);
+        return Result.success();
+    }
+
+    /**
+     * 上传公告附件。
+     *
+     * @param file 附件文件
+     * @return 附件名称与访问地址
+     */
+    @Operation(summary = "上传公告附件")
+    @PostMapping("/upload")
+    public Result<NoticeAttachmentVO> upload(@RequestParam("file") MultipartFile file) {
+        return Result.success(noticeManageService.uploadAttachment(file));
+    }
+
+    /**
+     * 删除公告。
+     *
+     * @param id 公告 ID
+     * @return 统一响应
+     */
+    @Operation(summary = "删除公告")
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        noticeManageService.deleteNotice(id);
         return Result.success();
     }
 }

@@ -8,16 +8,16 @@
     <div v-else class="student-pool">
       <div
         v-for="student in students"
-        :key="student.studentId"
+        :key="`${student.studentId}:${student.mentorId}`"
         class="student-chip"
-        :class="{ dragging: draggingStudent?.studentId === student.studentId }"
+        :class="{ dragging: isDragging(student) }"
         draggable="true"
         @dragstart="startDrag($event, student)"
         @dragend="endDrag"
       >
         <span class="student-name">{{ student.studentName }}</span>
         <span class="student-no">{{ student.studentNo }}</span>
-        <span class="student-mentors">意向：{{ student.mentorNames.join('、') || '本室导师' }}</span>
+        <span class="student-mentors">导师：{{ student.mentorName || '—' }}</span>
       </div>
     </div>
 
@@ -66,11 +66,18 @@ interface Props {
 defineProps<Props>()
 
 const emit = defineEmits<{
-  (e: 'assign', studentId: number, sessionId: number): void
+  (e: 'assign', studentId: number, mentorId: number, sessionId: number): void
 }>()
 
 const draggingStudent = ref<UnassignedStudent | null>(null)
 const overSessionId = ref<number | null>(null)
+
+function isDragging(student: UnassignedStudent): boolean {
+  return (
+    draggingStudent.value?.studentId === student.studentId &&
+    draggingStudent.value?.mentorId === student.mentorId
+  )
+}
 
 function isFull(session: InterviewSession): boolean {
   return session.scheduledCount >= session.capacity
@@ -80,7 +87,7 @@ function startDrag(event: DragEvent, student: UnassignedStudent) {
   draggingStudent.value = student
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData('text/plain', String(student.studentId))
+    event.dataTransfer.setData('text/plain', `${student.studentId}:${student.mentorId}`)
   }
 }
 
@@ -103,14 +110,13 @@ function onDragLeave(session: InterviewSession) {
 }
 
 function onDrop(event: DragEvent, session: InterviewSession) {
-  const studentId = Number(event.dataTransfer?.getData('text/plain') ?? 0)
   const student = draggingStudent.value
   draggingStudent.value = null
   overSessionId.value = null
-  if (!student || !studentId || isFull(session)) {
+  if (!student || isFull(session)) {
     return
   }
-  emit('assign', studentId, session.id)
+  emit('assign', student.studentId, student.mentorId, session.id)
 }
 </script>
 

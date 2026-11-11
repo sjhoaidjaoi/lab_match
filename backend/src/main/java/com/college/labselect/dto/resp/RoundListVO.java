@@ -43,6 +43,12 @@ public class RoundListVO {
     private LocalDateTime nominationEnd;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime innerAdjustStart;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime innerAdjustEnd;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime adjustStart;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

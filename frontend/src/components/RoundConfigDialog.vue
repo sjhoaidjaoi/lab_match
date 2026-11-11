@@ -37,6 +37,22 @@
         <el-form-item label="确认截止" prop="nominationEnd">
           <el-date-picker v-model="form.nominationEnd" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
         </el-form-item>
+        <el-form-item label="内部调剂开始" prop="innerAdjustStart">
+          <el-date-picker
+            v-model="form.innerAdjustStart"
+            type="datetime"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            placeholder="可空，阶段6"
+          />
+        </el-form-item>
+        <el-form-item label="内部调剂结束" prop="innerAdjustEnd">
+          <el-date-picker
+            v-model="form.innerAdjustEnd"
+            type="datetime"
+            value-format="YYYY-MM-DD HH:mm:ss"
+            placeholder="可空，需同时填写"
+          />
+        </el-form-item>
         <el-form-item label="调剂开始" prop="adjustStart">
           <el-date-picker v-model="form.adjustStart" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" />
         </el-form-item>
@@ -111,6 +127,8 @@ function emptyForm(): RoundSaveReq {
     nominationSubmitEnd: '',
     confirmStart: '',
     nominationEnd: '',
+    innerAdjustStart: null,
+    innerAdjustEnd: null,
     adjustStart: '',
     adjustEnd: '',
     weightAttitude: 25,
@@ -166,6 +184,8 @@ function fromRound(round: RoundListItem): RoundSaveReq {
     nominationSubmitEnd: round.nominationSubmitEnd,
     confirmStart: round.confirmStart,
     nominationEnd: round.nominationEnd,
+    innerAdjustStart: round.innerAdjustStart ?? null,
+    innerAdjustEnd: round.innerAdjustEnd ?? null,
     adjustStart: round.adjustStart,
     adjustEnd: round.adjustEnd,
     weightAttitude: round.weightAttitude,
@@ -197,13 +217,22 @@ async function handleSave() {
     ElMessage.error('四维权重合计必须为 100')
     return
   }
+  if (Boolean(form.innerAdjustStart) !== Boolean(form.innerAdjustEnd)) {
+    ElMessage.error('内部调剂开始与结束时间需同时填写')
+    return
+  }
   saving.value = true
   try {
+    const payload = {
+      ...form,
+      innerAdjustStart: form.innerAdjustStart || null,
+      innerAdjustEnd: form.innerAdjustEnd || null
+    }
     if (props.round) {
-      const { roundNo: _roundNo, ...payload } = form
-      await updateRound(props.round.id, payload)
+      const { roundNo: _roundNo, ...rest } = payload
+      await updateRound(props.round.id, rest)
     } else {
-      await createRound({ ...form })
+      await createRound(payload)
     }
     ElMessage.success('保存成功')
     visible.value = false

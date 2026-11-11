@@ -6,12 +6,14 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.college.labselect.common.PageResult;
 import com.college.labselect.common.ResultCode;
+import com.college.labselect.dto.req.LeaderAssignReqDTO;
 import com.college.labselect.dto.req.MentorCreateReqDTO;
 import com.college.labselect.dto.req.MentorQuotaReqDTO;
 import com.college.labselect.dto.req.MentorStatusReqDTO;
 import com.college.labselect.dto.req.MentorUpdateReqDTO;
 import com.college.labselect.dto.resp.MentorListVO;
 import com.college.labselect.dto.resp.QuotaOverviewVO;
+import com.college.labselect.dto.resp.StudentImportResultVO;
 import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
 import com.college.labselect.entity.Notice;
@@ -25,6 +27,7 @@ import com.college.labselect.mapper.NoticeMapper;
 import com.college.labselect.mapper.OperationLogMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
 import com.college.labselect.mapper.SysUserMapper;
+import com.college.labselect.service.ILabService;
 import com.college.labselect.service.IMentorService;
 import com.college.labselect.utils.SimpleXlsxWriter;
 import com.college.labselect.utils.StudentExcelParser;
@@ -69,6 +72,7 @@ public class MentorServiceImpl implements IMentorService {
     private final OperationLogMapper operationLogMapper;
     private final NoticeMapper noticeMapper;
     private final StudentExcelParser studentExcelParser;
+    private final ILabService labService;
 
     @Value("${lab-select.default-password:123456}")
     private String defaultPassword = "123456";
@@ -125,6 +129,8 @@ public class MentorServiceImpl implements IMentorService {
         user.setRealName(req.getRealName());
         user.setUserType(USER_TYPE_TEACHER);
         user.setTitle(req.getTitle());
+        user.setPhone(req.getPhone());
+        user.setEmail(req.getEmail());
         user.setStatus(status);
         user.setNeedChangePwd(NEED_CHANGE_PWD);
         sysUserMapper.insert(user);
@@ -132,11 +138,18 @@ public class MentorServiceImpl implements IMentorService {
         profile.setUserId(user.getId());
         profile.setLabId(lab.getId());
         profile.setResearchDirection(req.getResearchDirection());
+        profile.setResearchProjects(req.getResearchProjects());
         profile.setQuota(req.getQuota());
         profile.setQuotaUsed(0);
         profile.setVersion(0);
         profile.setStatus(status);
         mentorProfileMapper.insert(profile);
+        if (Boolean.TRUE.equals(req.getLeader())) {
+            LeaderAssignReqDTO assignReq = new LeaderAssignReqDTO();
+            assignReq.setUserId(user.getId());
+            assignReq.setReason("管理员创建负责人账号");
+            labService.assignLeader(lab.getId(), assignReq);
+        }
         log.info("新增教师账号，userId={}，mentorId={}", user.getId(), profile.getId());
         return profile.getId();
     }
@@ -154,12 +167,15 @@ public class MentorServiceImpl implements IMentorService {
         validateQuotaSum(lab, id, req.getQuota());
         user.setRealName(req.getRealName());
         user.setTitle(req.getTitle());
+        user.setPhone(req.getPhone());
+        user.setEmail(req.getEmail());
         if (req.getStatus() != null) {
             user.setStatus(req.getStatus());
         }
         sysUserMapper.updateById(user);
         profile.setLabId(lab.getId());
         profile.setResearchDirection(req.getResearchDirection());
+        profile.setResearchProjects(req.getResearchProjects());
         profile.setQuota(req.getQuota());
         if (req.getStatus() != null) {
             profile.setStatus(req.getStatus());
@@ -170,31 +186,37 @@ public class MentorServiceImpl implements IMentorService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void importMentors(MultipartFile file) {
+    public StudentImportResultVO importMentors(MultipartFile file) {
         List<StudentExcelParser.RawRow> rows = studentExcelParser.parseRaw(file, TEACHER_EXCEL_COLUMNS);
         if (rows.isEmpty()) {
             throw new BusinessException(ResultCode.PARAM_ERROR, "Excel 无有效数据");
         }
+        List<StudentImportResultVO.FailItem> failList = new ArrayList<>();
         int success = 0;
         for (StudentExcelParser.RawRow row : rows) {
             String[] values = row.getValues();
             String userNo = StrUtil.trim(values[0]);
             String realName = StrUtil.trim(values[1]);
             String labCode = StrUtil.trim(values[2]);
-            try {
-                if (StrUtil.isBlank(userNo) || StrUtil.isBlank(realName)) {
-                    log.warn("教师导入跳过，行={}，工号或姓名为空", row.getRowNo());
-                    continue;
-                }
-                if (userNoExists(userNo)) {
-                    log.warn("教师导入跳过，行={}，工号已存在={}", row.getRowNo(), userNo);
-                    continue;
-                }
-                Lab lab = labMapper.selectOne(new LambdaQueryWrapper<Lab>().eq(Lab::getLabCode, labCode));
+            String reason = null;
+            if (StrUtil.isBlank(userNo) || StrUtil.isBlank(realName)) {
+                reason = "工号或姓名为空";
+            } else if (userNoExists(userNo)) {
+                reason = "工号已存在";
+            }
+            Lab lab = null;
+            if (reason == null) {
+                lab = labMapper.selectOne(new LambdaQueryWrapper<Lab>().eq(Lab::getLabCode, labCode));
                 if (lab == null) {
-                    log.warn("教师导入跳过，行={}，实训室编码不存在={}", row.getRowNo(), labCode);
-                    continue;
+                    reason = "实训室编码不存在";
                 }
+            }
+            if (reason != null) {
+                failList.add(importFailItem(row.getRowNo(), userNo, reason));
+                log.warn("教师导入跳过，行={}，userNo={}，reason={}", row.getRowNo(), userNo, reason);
+                continue;
+            }
+            try {
                 SysUser user = new SysUser();
                 user.setUserNo(userNo);
                 user.setPassword(passwordEncoder.encode(defaultPassword));
@@ -217,14 +239,37 @@ public class MentorServiceImpl implements IMentorService {
                 mentorProfileMapper.insert(profile);
                 success++;
             } catch (Exception exception) {
+                failList.add(importFailItem(row.getRowNo(), userNo, "导入失败"));
                 log.warn("教师导入失败，行={}，userNo={}，reason={}",
                         row.getRowNo(), userNo, exception.getMessage());
             }
         }
-        log.info("批量导入教师完成，total={}，success={}", rows.size(), success);
+        log.info("批量导入教师完成，total={}，success={}，fail={}", rows.size(), success, failList.size());
         if (success == 0) {
             throw new BusinessException(ResultCode.BUSINESS_ERROR, "教师导入全部失败，请检查工号与实训室编码");
         }
+        StudentImportResultVO result = new StudentImportResultVO();
+        result.setSuccessCount(success);
+        result.setFailCount(failList.size());
+        result.setFailList(failList);
+        result.setFailFileUrl(null);
+        return result;
+    }
+
+    /**
+     * 构建教师导入失败明细。
+     *
+     * @param rowNo  行号
+     * @param userNo 工号
+     * @param reason 失败原因
+     * @return 失败明细
+     */
+    private StudentImportResultVO.FailItem importFailItem(Integer rowNo, String userNo, String reason) {
+        StudentImportResultVO.FailItem item = new StudentImportResultVO.FailItem();
+        item.setRow(rowNo);
+        item.setUserNo(userNo);
+        item.setReason(reason);
+        return item;
     }
 
     @Override
@@ -487,6 +532,9 @@ public class MentorServiceImpl implements IMentorService {
         vo.setLabName(lab == null ? "" : lab.getLabName());
         vo.setTitle(user == null ? "" : user.getTitle());
         vo.setResearchDirection(profile == null ? "" : profile.getResearchDirection());
+        vo.setResearchProjects(profile == null ? "" : profile.getResearchProjects());
+        vo.setPhone(user == null ? "" : user.getPhone());
+        vo.setEmail(user == null ? "" : user.getEmail());
         int quota = profile == null ? 0 : Optional.ofNullable(profile.getQuota()).orElse(0);
         int used = profile == null ? 0 : Optional.ofNullable(profile.getQuotaUsed()).orElse(0);
         vo.setQuota(quota);

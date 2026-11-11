@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h2>全院录取总览</h2>
-        <p class="subtitle">按实训室 / 导师 / 学生查看录取结果，归档后从最终快照渲染</p>
+        <p class="subtitle">查看录取结果，归档后从最终快照渲染</p>
       </div>
       <el-button type="primary" :loading="exporting" @click="exportResults">导出 Excel</el-button>
     </div>
@@ -26,11 +26,6 @@
             :value="item.id"
           />
         </el-select>
-        <el-radio-group v-model="query.groupBy" @change="handleGroupChange">
-          <el-radio-button value="lab">按实训室</el-radio-button>
-          <el-radio-button value="mentor">按导师</el-radio-button>
-          <el-radio-button value="student">按学生</el-radio-button>
-        </el-radio-group>
         <el-input
           v-model="query.keyword"
           placeholder="学号或姓名"
@@ -51,53 +46,7 @@
       </div>
     </el-card>
 
-    <el-row :gutter="16">
-      <el-col :span="4">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-label">名额上限</div>
-          <div class="stat-value">{{ overview?.totalQuota ?? 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="5">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-label">已录取</div>
-          <div class="stat-value">{{ overview?.totalAdmitted ?? 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="5">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-label">已确认</div>
-          <div class="stat-value">{{ overview?.totalConfirmed ?? 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="5">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-label">已入组</div>
-          <div class="stat-value">{{ overview?.totalEnrolled ?? 0 }}</div>
-        </el-card>
-      </el-col>
-      <el-col :span="5">
-        <el-card shadow="never" class="stat-card">
-          <div class="stat-label">名额饱和度</div>
-          <div class="stat-value">{{ formatRate(overview?.saturationRate ?? 0) }}%</div>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-card v-if="query.groupBy !== 'student'" shadow="never">
-      <template #header>分组名额饱和度</template>
-      <el-table :data="overview?.groups ?? []" stripe>
-        <el-table-column prop="name" :label="query.groupBy === 'lab' ? '实训室' : '导师'" min-width="150" />
-        <el-table-column prop="totalQuota" label="名额上限" width="100" />
-        <el-table-column prop="admitted" label="已录取" width="90" />
-        <el-table-column prop="enrolled" label="已入组" width="90" />
-        <el-table-column label="饱和度" min-width="200">
-          <template #default="{ row }">
-            <el-progress :percentage="Math.min(row.saturationRate, 100)" :stroke-width="10" />
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <ResultOverviewStats :overview="overview" />
 
     <el-card shadow="never">
       <el-table v-loading="loading" :data="overview?.page.list ?? []" stripe>
@@ -125,6 +74,19 @@
         <el-table-column label="确认时间" min-width="170">
           <template #default="{ row }">{{ row.confirmTime ?? '—' }}</template>
         </el-table-column>
+        <el-table-column label="操作" width="120" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              size="small"
+              :disabled="overview?.archived === 1"
+              @click="openAdjust(row)"
+            >
+              阶段内调整
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
 
       <el-pagination
@@ -138,27 +100,39 @@
         @size-change="handleSizeChange"
       />
     </el-card>
+
+    <AdminResultAdjustDialog v-model="adjustVisible" :record="adjustRecord" @done="loadOverview" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { MockError } from '@/mock/auth'
-import { mockRoundList } from '@/mock/basic'
-import { ADMISSION_STATUS_TEXT, mockExportResults, mockResultOverview } from '@/mock/archive'
+import { exportResultExcel, getResultOverview } from '@/api/adminArchive'
+import { listRounds } from '@/api/adminRound'
+import AdminResultAdjustDialog from '@/components/AdminResultAdjustDialog.vue'
+import ResultOverviewStats from '@/components/ResultOverviewStats.vue'
+import type { ResultOverview, ResultQuery, ResultRow } from '@/types/archive'
 import type { RoundListItem } from '@/types/basic'
-import type { ResultOverview, ResultQuery } from '@/types/archive'
+
+const ADMISSION_STATUS_TEXT: Record<number, string> = {
+  1: '待确认',
+  2: '已确认',
+  3: '已入组',
+  4: '已放弃',
+  5: '逾期未确认'
+}
 
 const loading = ref(false)
 const exporting = ref(false)
 const rounds = ref<RoundListItem[]>([])
 const overview = ref<ResultOverview | null>(null)
+const adjustVisible = ref(false)
+const adjustRecord = ref<ResultRow | null>(null)
 
 const query = reactive<ResultQuery>({
   roundId: 0,
   keyword: '',
-  groupBy: 'lab',
   pageNum: 1,
   pageSize: 10
 })
@@ -176,8 +150,9 @@ const statusTag: Record<number, 'success' | 'warning' | 'info' | 'danger' | 'pri
   5: 'danger'
 }
 
-function formatRate(value: number): string {
-  return value.toFixed(2)
+function openAdjust(row: ResultRow) {
+  adjustRecord.value = row
+  adjustVisible.value = true
 }
 
 async function loadOverview() {
@@ -186,23 +161,18 @@ async function loadOverview() {
   }
   loading.value = true
   try {
-    overview.value = await mockResultOverview({
+    overview.value = await getResultOverview({
       ...query,
       keyword: query.keyword?.trim() || undefined
     })
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载录取总览失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     loading.value = false
   }
 }
 
 function handleRoundChange() {
-  query.pageNum = 1
-  loadOverview()
-}
-
-function handleGroupChange() {
   query.pageNum = 1
   loadOverview()
 }
@@ -215,7 +185,6 @@ function handleSearch() {
 function handleReset() {
   query.keyword = ''
   query.status = undefined
-  query.groupBy = 'lab'
   query.pageNum = 1
   loadOverview()
 }
@@ -226,19 +195,23 @@ function handleSizeChange() {
 }
 
 async function exportResults() {
+  if (!query.roundId) {
+    ElMessage.warning('请选择轮次')
+    return
+  }
   exporting.value = true
   try {
-    const content = await mockExportResults({ ...query, pageNum: 1, pageSize: 1000 })
-    const blob = new Blob([`\uFEFF${content}`], { type: 'text/csv;charset=utf-8' })
+    const blob = await exportResultExcel({ ...query, pageNum: 1, pageSize: 1000 })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `录取结果_第${query.roundId}轮.csv`
+    const roundNo = rounds.value.find((item) => item.id === query.roundId)?.roundNo ?? ''
+    link.download = `录取结果_第${roundNo}轮.xlsx`
     link.click()
     URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '导出失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     exporting.value = false
   }
@@ -246,15 +219,15 @@ async function exportResults() {
 
 onMounted(async () => {
   try {
-    rounds.value = await mockRoundList()
+    rounds.value = await listRounds()
     const lastRound = rounds.value.reduce(
       (latest, item) => (item.roundNo > latest.roundNo ? item : latest),
       rounds.value[0]
     )
     query.roundId = lastRound?.id ?? 0
     await loadOverview()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载轮次失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   }
 })
 </script>
@@ -290,27 +263,10 @@ onMounted(async () => {
   gap: 12px;
 }
 
-.stat-card {
-  text-align: center;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #909399;
-}
-
-.stat-value {
-  margin-top: 8px;
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
-}
-
 .muted {
   color: #909399;
   font-size: 12px;
 }
-
 .pagination {
   margin-top: 16px;
   justify-content: flex-end;

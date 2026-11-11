@@ -63,6 +63,28 @@ export interface WaitlistRankItem {
   rankNo: number
 }
 
+export interface LeaderWaitlistItem {
+  id: number
+  roundId: number
+  mentorId: number
+  mentorName: string
+  rankNo: number
+  studentId: number
+  studentNo: string
+  studentName: string
+  totalScore: number | null
+  isManual: number
+  adjustReason: string | null
+  applyStatus: number
+  applyStatusText: string
+}
+
+export interface LeaderWaitlistRankReq {
+  roundId: number
+  items: WaitlistRankItem[]
+  adjustReason: string
+}
+
 export interface LeaderNominationMentor {
   mentorId: number
   mentorName: string
@@ -86,6 +108,30 @@ export interface LeaderNominationSummary {
   conflictCount: number
   mentors: LeaderNominationMentor[]
   conflicts: LeaderNominationConflict[]
+}
+
+export interface LeaderNominationCandidate {
+  studentId: number
+  studentNo: string
+  studentName: string
+  totalScore: number | null
+  nominated: boolean
+}
+
+export interface LeaderNominationDetail {
+  roundId: number | null
+  mentorId: number
+  mentorName: string
+  quota: number
+  quotaUsed: number
+  selectedStudentIds: number[]
+  candidates: LeaderNominationCandidate[]
+}
+
+export interface LeaderNominationAdjustReq {
+  roundId: number
+  studentIds: number[]
+  reason: string
 }
 
 export interface LeaderNominationSubmitResp {

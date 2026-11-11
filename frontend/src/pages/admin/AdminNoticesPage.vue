@@ -44,11 +44,12 @@
           <template #default="{ row }">{{ row.publishTime ?? '—' }}</template>
         </el-table-column>
         <el-table-column prop="publisherName" label="发布人" width="120" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
             <el-button v-if="row.status !== 2" link type="success" @click="handleStatus(row, 2)">发布</el-button>
             <el-button v-if="row.status === 2" link type="warning" @click="handleStatus(row, 3)">下线</el-button>
+            <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -67,8 +68,24 @@
         <el-form-item label="正文" required>
           <el-input v-model="form.content" type="textarea" :rows="8" maxlength="5000" show-word-limit />
         </el-form-item>
-        <el-form-item label="附件地址">
-          <el-input v-model="form.attachmentUrl" maxlength="500" placeholder="选填，填写附件下载地址" />
+        <el-form-item label="附件">
+          <div class="attachment-field">
+            <el-upload
+              :show-file-list="false"
+              :http-request="handleUpload"
+              :disabled="uploading"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.rar,.png,.jpg,.jpeg"
+            >
+              <el-button :loading="uploading">{{ form.attachmentUrl ? '重新上传' : '上传附件' }}</el-button>
+            </el-upload>
+            <div v-if="form.attachmentUrl" class="attachment-current">
+              <el-link :href="form.attachmentUrl" target="_blank" type="primary">
+                {{ attachmentName || '查看附件' }}
+              </el-link>
+              <el-button link type="danger" @click="clearAttachment">移除</el-button>
+            </div>
+            <div v-else class="attachment-tip">支持 PDF、Office、压缩包与图片，单个不超过 10MB</div>
+          </div>
         </el-form-item>
         <el-form-item v-if="editing" label="当前状态">
           <el-tag :type="statusTag(form.status)" size="small">{{ ANNOUNCEMENT_STATUS_TEXT[form.status] }}</el-tag>
@@ -90,24 +107,38 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { MockError } from '@/mock/auth'
+import { ElMessage, ElMessageBox, type UploadRequestOptions } from 'element-plus'
 import {
-  ANNOUNCEMENT_STATUS_TEXT,
-  ANNOUNCEMENT_TYPE_TEXT,
-  mockAdminNoticeList,
-  mockCreateNotice,
-  mockUpdateNotice,
-  mockUpdateNoticeStatus
-} from '@/mock/notice'
+  createAdminNotice,
+  deleteAdminNotice,
+  listAdminNotices,
+  updateAdminNotice,
+  updateAdminNoticeStatus,
+  uploadNoticeAttachment
+} from '@/api/notice'
 import type { AdminNotice } from '@/types/notice'
+
+const ANNOUNCEMENT_TYPE_TEXT: Record<number, string> = {
+  1: '宣讲',
+  2: '开放日',
+  3: '公示',
+  4: '通知'
+}
+
+const ANNOUNCEMENT_STATUS_TEXT: Record<number, string> = {
+  1: '草稿',
+  2: '已发布',
+  3: '已下线'
+}
 
 const loading = ref(false)
 const submitting = ref(false)
+const uploading = ref(false)
 const dialogVisible = ref(false)
 const notices = ref<AdminNotice[]>([])
 const filters = reactive<{ keyword: string; noticeType?: number; status?: number }>({ keyword: '' })
 const form = reactive({ id: 0, title: '', noticeType: 1, content: '', attachmentUrl: '', status: 1 })
+const attachmentName = ref('')
 
 const editing = computed(() => form.id > 0)
 const typeOptions = Object.entries(ANNOUNCEMENT_TYPE_TEXT).map(([value, label]) => ({
@@ -136,13 +167,16 @@ function statusTag(status: number): 'success' | 'info' | 'danger' {
 async function loadNotices() {
   loading.value = true
   try {
-    notices.value = await mockAdminNoticeList({
+    const result = await listAdminNotices({
       keyword: filters.keyword || undefined,
       noticeType: filters.noticeType,
-      status: filters.status
+      status: filters.status,
+      pageNum: 1,
+      pageSize: 100
     })
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载公告失败')
+    notices.value = result.list
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     loading.value = false
   }
@@ -162,6 +196,7 @@ function openCreate() {
   form.content = ''
   form.attachmentUrl = ''
   form.status = 1
+  attachmentName.value = ''
   dialogVisible.value = true
 }
 
@@ -172,14 +207,34 @@ function openEdit(row: AdminNotice) {
   form.content = row.content
   form.attachmentUrl = row.attachmentUrl
   form.status = row.status
+  attachmentName.value = row.attachmentUrl ? row.attachmentUrl.split('/').pop() ?? '' : ''
   dialogVisible.value = true
+}
+
+async function handleUpload(options: UploadRequestOptions) {
+  uploading.value = true
+  try {
+    const attachment = await uploadNoticeAttachment(options.file)
+    form.attachmentUrl = attachment.url
+    attachmentName.value = attachment.fileName
+    ElMessage.success('附件上传成功')
+  } catch {
+    // 错误提示已由请求层统一处理
+  } finally {
+    uploading.value = false
+  }
+}
+
+function clearAttachment() {
+  form.attachmentUrl = ''
+  attachmentName.value = ''
 }
 
 async function handleSubmit(status?: number) {
   submitting.value = true
   try {
     if (editing.value) {
-      await mockUpdateNotice(form.id, {
+      await updateAdminNotice(form.id, {
         title: form.title,
         noticeType: form.noticeType,
         content: form.content,
@@ -187,7 +242,7 @@ async function handleSubmit(status?: number) {
       })
       ElMessage.success('公告已保存')
     } else {
-      await mockCreateNotice({
+      await createAdminNotice({
         title: form.title,
         noticeType: form.noticeType,
         content: form.content,
@@ -198,8 +253,8 @@ async function handleSubmit(status?: number) {
     }
     dialogVisible.value = false
     await loadNotices()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '保存公告失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     submitting.value = false
   }
@@ -217,11 +272,30 @@ async function handleStatus(row: AdminNotice, status: number) {
     return
   }
   try {
-    await mockUpdateNoticeStatus(row.id, status)
+    await updateAdminNoticeStatus(row.id, status)
     ElMessage.success(`公告已${action === '发布' ? '发布' : '下线'}`)
     await loadNotices()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : `${action}失败`)
+  } catch {
+    // 错误提示已由请求层统一处理
+  }
+}
+
+async function handleDelete(row: AdminNotice) {
+  if (row.status === 2) {
+    ElMessage.warning('已发布公告请先下线再删除')
+    return
+  }
+  try {
+    await ElMessageBox.confirm('删除后不可恢复，确认删除该公告？', '删除公告', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await deleteAdminNotice(row.id)
+    ElMessage.success('公告已删除')
+    await loadNotices()
+  } catch {
+    // 错误提示已由请求层统一处理
   }
 }
 
@@ -269,5 +343,22 @@ onMounted(loadNotices)
 
 .full-width {
   width: 100%;
+}
+
+.attachment-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.attachment-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.attachment-tip {
+  font-size: 12px;
+  color: #909399;
 }
 </style>

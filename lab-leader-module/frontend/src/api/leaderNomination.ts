@@ -1,5 +1,7 @@
-import { get, post } from './request'
+import { get, post, put } from './request'
 import type {
+  LeaderNominationAdjustReq,
+  LeaderNominationDetail,
   LeaderNominationSubmitResp,
   LeaderNominationSummary
 } from '@/types/nomination'
@@ -18,4 +20,26 @@ export function getLeaderNominationSummary(roundId?: number): Promise<LeaderNomi
  */
 export function submitLeaderNominations(roundId: number): Promise<LeaderNominationSubmitResp> {
   return post<LeaderNominationSubmitResp>('/leader/nominations/submit', { roundId })
+}
+
+/**
+ * 查看某导师拟录取名单与候选学生。
+ */
+export function getLeaderMentorNominations(
+  mentorId: number,
+  roundId?: number
+): Promise<LeaderNominationDetail> {
+  return get<LeaderNominationDetail>(`/leader/nominations/${mentorId}`, {
+    params: roundId ? { roundId } : undefined
+  })
+}
+
+/**
+ * 负责人调整某导师拟录取名单。
+ */
+export function adjustLeaderMentorNominations(
+  mentorId: number,
+  payload: LeaderNominationAdjustReq
+): Promise<unknown> {
+  return put<unknown>(`/leader/nominations/${mentorId}`, payload)
 }

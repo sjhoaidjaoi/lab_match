@@ -8,6 +8,7 @@ import com.college.labselect.entity.Intention;
 import com.college.labselect.entity.IntentionItem;
 import com.college.labselect.entity.InterviewSchedule;
 import com.college.labselect.entity.InterviewSession;
+import com.college.labselect.entity.InterviewSessionInterviewer;
 import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
 import com.college.labselect.entity.SelectionRound;
@@ -91,6 +92,9 @@ class InterviewScheduleServiceTest {
         when(interviewScheduleMapper.selectList(any())).thenReturn(List.of(
                 schedule(1L, 1L, 1001L),
                 schedule(2L, 2L, 1001L)));
+        when(mentorProfileMapper.selectList(any())).thenReturn(List.of(mentor()));
+        when(interviewerMapper.selectList(any())).thenReturn(List.of(
+                interviewer(1L), interviewer(2L)));
 
         ScheduleAdjustReqDTO req = new ScheduleAdjustReqDTO();
         req.setRoundId(1L);
@@ -138,6 +142,9 @@ class InterviewScheduleServiceTest {
         when(intentionItemMapper.selectList(any())).thenReturn(List.of(intentionItem(61L, 11L)));
         when(interviewScheduleMapper.selectList(any())).thenReturn(List.of());
         when(mentorProfileMapper.selectList(any())).thenReturn(List.of(mentor()));
+        when(mentorProfileMapper.selectBatchIds(any())).thenReturn(List.of(mentor()));
+        when(interviewerMapper.selectList(any())).thenReturn(List.of(interviewer(1L)));
+        when(sysUserMapper.selectBatchIds(any())).thenReturn(List.of(user(2001L, "20010001", "李海峰")));
 
         interviewScheduleService.autoSchedule(2001L, 1L);
 
@@ -166,7 +173,8 @@ class InterviewScheduleServiceTest {
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getStudentId()).isEqualTo(1002L);
-        assertThat(result.get(0).getMentorNames()).containsExactly("李海峰");
+        assertThat(result.get(0).getMentorId()).isEqualTo(11L);
+        assertThat(result.get(0).getMentorName()).isEqualTo("李海峰");
     }
 
     /**
@@ -177,6 +185,8 @@ class InterviewScheduleServiceTest {
         when(labMapper.selectOne(any())).thenReturn(lab());
         when(selectionRoundMapper.selectById(1L)).thenReturn(round());
         when(interviewSessionMapper.selectById(1L)).thenReturn(session(1L, 14, 0, 15, 30, 30));
+        when(mentorProfileMapper.selectById(11L)).thenReturn(mentor());
+        when(interviewerMapper.selectCount(any())).thenReturn(1L);
         when(intentionMapper.selectOne(any())).thenReturn(intention(61L, 1001L));
         when(intentionItemMapper.selectCount(any())).thenReturn(1L);
         when(interviewScheduleMapper.selectCount(any())).thenReturn(0L);
@@ -201,6 +211,8 @@ class InterviewScheduleServiceTest {
         when(labMapper.selectOne(any())).thenReturn(lab());
         when(selectionRoundMapper.selectById(1L)).thenReturn(round());
         when(interviewSessionMapper.selectById(1L)).thenReturn(session(1L, 14, 0, 15, 30, 30));
+        when(mentorProfileMapper.selectById(11L)).thenReturn(mentor());
+        when(interviewerMapper.selectCount(any())).thenReturn(1L);
         when(intentionMapper.selectOne(any())).thenReturn(intention(61L, 1001L));
         when(intentionItemMapper.selectCount(any())).thenReturn(1L);
         when(interviewScheduleMapper.selectCount(any())).thenReturn(1L);
@@ -222,6 +234,8 @@ class InterviewScheduleServiceTest {
         when(interviewSessionMapper.selectById(1L)).thenReturn(session(1L, 14, 0, 15, 30, 30));
         when(interviewSessionMapper.selectBatchIds(any())).thenReturn(List.of(
                 session(2L, 14, 30, 16, 0, 30)));
+        when(mentorProfileMapper.selectById(11L)).thenReturn(mentor());
+        when(interviewerMapper.selectCount(any())).thenReturn(1L);
         when(intentionMapper.selectOne(any())).thenReturn(intention(61L, 1001L));
         when(intentionItemMapper.selectCount(any())).thenReturn(1L);
         when(interviewScheduleMapper.selectCount(any())).thenReturn(0L);
@@ -233,6 +247,55 @@ class InterviewScheduleServiceTest {
 
         assertThat(exception).isNotNull();
         assertThat(exception.getCode()).isEqualTo(409001);
+    }
+
+    /**
+     * 快乐路径：登记面试状态为已完成。
+     */
+    @Test
+    void updateScheduleStatus_success_shouldUpdateStatus() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(interviewScheduleMapper.selectById(801L)).thenReturn(schedule(801L, 1L, 1001L));
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round());
+        when(interviewScheduleMapper.updateById(any(InterviewSchedule.class))).thenReturn(1);
+
+        interviewScheduleService.updateScheduleStatus(2001L, 801L, 2);
+
+        verify(interviewScheduleMapper).updateById(any(InterviewSchedule.class));
+    }
+
+    /**
+     * 边界：登记其他实训室排期状态返回 403001。
+     */
+    @Test
+    void updateScheduleStatus_otherLab_shouldThrow403001() {
+        InterviewSchedule other = schedule(801L, 1L, 1001L);
+        other.setLabId(2L);
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(interviewScheduleMapper.selectById(801L)).thenReturn(other);
+
+        BusinessException exception = catchThrowableOfType(
+                () -> interviewScheduleService.updateScheduleStatus(2001L, 801L, 2),
+                BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(403001);
+    }
+
+    /**
+     * 边界：面试状态仅支持已完成或缺席。
+     */
+    @Test
+    void updateScheduleStatus_invalidStatus_shouldThrow400001() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(interviewScheduleMapper.selectById(801L)).thenReturn(schedule(801L, 1L, 1001L));
+
+        BusinessException exception = catchThrowableOfType(
+                () -> interviewScheduleService.updateScheduleStatus(2001L, 801L, 1),
+                BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(400001);
     }
 
     private Lab lab() {
@@ -272,7 +335,15 @@ class InterviewScheduleServiceTest {
         mentor.setId(11L);
         mentor.setUserId(2001L);
         mentor.setLabId(1L);
+        mentor.setStatus(1);
         return mentor;
+    }
+
+    private InterviewSessionInterviewer interviewer(Long sessionId) {
+        InterviewSessionInterviewer interviewer = new InterviewSessionInterviewer();
+        interviewer.setSessionId(sessionId);
+        interviewer.setInterviewerId(2001L);
+        return interviewer;
     }
 
     private InterviewSession session(Long id, int startHour, int startMinute,
@@ -296,6 +367,7 @@ class InterviewScheduleServiceTest {
         schedule.setId(id);
         schedule.setRoundId(1L);
         schedule.setLabId(1L);
+        schedule.setMentorId(11L);
         schedule.setSessionId(sessionId);
         schedule.setStudentId(studentId);
         schedule.setStatus(1);
@@ -306,6 +378,7 @@ class InterviewScheduleServiceTest {
         ScheduleAssignReqDTO req = new ScheduleAssignReqDTO();
         req.setRoundId(1L);
         req.setStudentId(1001L);
+        req.setMentorId(11L);
         req.setSessionId(1L);
         return req;
     }

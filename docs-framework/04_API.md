@@ -60,6 +60,10 @@
 | 面试排期 | interview_schedule.status | 1 待面试、2 已完成、3 缺席 |
 | 面试评分 | interview_score.status | 0 未评分、1 草稿、2 已提交 |
 | 拟录取汇总 | submitStatus | 0 未提交、1 待提交、2 已提交 |
+| 题库题型 | question.question_type | 1 单选、2 多选、3 判断、4 填空 |
+| 题库状态 | question.status | 1 启用、0 停用 |
+| 在线试卷 | exam_paper.status | 1 草稿、2 已发布 |
+| 在线答卷 | exam_answer.status | 0 未参加（列表派生）、1 答题中、2 已提交 |
 
 ## 2. 接口总览
 
@@ -96,6 +100,11 @@
 | POST | /api/v1/student/intention | 保存/提交填报 | 学生 |
 | GET | /api/v1/student/mentors/available | 可选导师列表 | 学生 |
 | GET | /api/v1/student/interviews | 我的面试安排 | 学生 |
+| GET | /api/v1/student/exams | 我的在线笔试列表 | 学生 |
+| GET | /api/v1/student/exams/{paperId} | 试卷与本人作答（不含答案） | 学生 |
+| POST | /api/v1/student/exams/{paperId}/start | 开始答题 | 学生 |
+| PUT | /api/v1/student/exams/{paperId}/answers | 暂存作答 | 学生 |
+| POST | /api/v1/student/exams/{paperId}/submit | 交卷并自动判分 | 学生 |
 | GET | /api/v1/student/confirm-center | 录取待确认中心（三场景统一） | 学生 |
 | POST | /api/v1/student/confirm-center/{id}/respond | 待确认响应（接受/拒绝） | 学生 |
 | GET | /api/v1/student/supplement/mentors | 补录可选导师（仅剩余名额） | 学生 |
@@ -116,7 +125,20 @@
 | GET | /api/v1/teacher/dashboard | 工作台聚合数据 | 导师 |
 | GET | /api/v1/teacher/applicants | 报名学生列表 | 导师 |
 | GET | /api/v1/teacher/students/{studentId}/archive | 查看本人意向学生档案 | 导师 |
-| GET | /api/v1/teacher/scores/{studentId} | 查看某学生本室评分（只读） | 导师 |
+| GET | /api/v1/teacher/questions | 本人题库列表 | 导师 |
+| POST | /api/v1/teacher/questions | 新增题目 | 导师 |
+| PUT | /api/v1/teacher/questions/{id} | 修改本人题目 | 导师 |
+| DELETE | /api/v1/teacher/questions/{id} | 删除或停用本人题目 | 导师 |
+| GET | /api/v1/teacher/exam-papers | 本人试卷列表 | 导师 |
+| GET | /api/v1/teacher/exam-papers/{id} | 本人试卷详情 | 导师 |
+| POST | /api/v1/teacher/exam-papers | 新建试卷草稿 | 导师 |
+| PUT | /api/v1/teacher/exam-papers/{id} | 修改试卷草稿 | 导师 |
+| DELETE | /api/v1/teacher/exam-papers/{id} | 删除试卷草稿 | 导师 |
+| POST | /api/v1/teacher/exam-papers/{id}/publish | 发布试卷 | 导师 |
+| GET | /api/v1/teacher/exam-papers/{id}/results | 参考与得分 | 导师 |
+| GET | /api/v1/teacher/scores/{studentId} | 查看本人对某学生的评分 | 导师 |
+| POST | /api/v1/teacher/scores | 录入/更新本人评分 | 导师 |
+| POST | /api/v1/teacher/scores/import | Excel 批量导入本人评分 | 导师 |
 | GET | /api/v1/teacher/nominations | 我的拟录取列表 | 导师 |
 | POST | /api/v1/teacher/nominations | 保存/提交拟录取 | 导师 |
 | GET | /api/v1/teacher/waitlist | 我的递补名单 | 导师 |
@@ -138,19 +160,26 @@
 | POST | /api/v1/leader/interview-sessions | 新增场次 | 负责人 |
 | PUT | /api/v1/leader/interview-sessions/{id} | 修改场次 | 负责人 |
 | DELETE | /api/v1/leader/interview-sessions/{id} | 删除场次 | 负责人 |
-| GET | /api/v1/leader/interview-schedules | 排期列表 | 负责人 |
-| GET | /api/v1/leader/interview-schedules/unassigned | 待排学生列表 | 负责人 |
-| POST | /api/v1/leader/interview-schedules/assign | 拖拽排期 | 负责人 |
+| GET | /api/v1/leader/interview-schedules | 排期列表（学生+导师） | 负责人 |
+| GET | /api/v1/leader/interview-schedules/unassigned | 待排学生+导师组合 | 负责人 |
+| POST | /api/v1/leader/interview-schedules/assign | 拖拽排期（指定导师） | 负责人 |
+| PUT | /api/v1/leader/interview-schedules/{id}/status | 登记面试状态 | 负责人 |
 | POST | /api/v1/leader/interview-schedules/auto | 自动分配 | 负责人 |
 | PUT | /api/v1/leader/interview-schedules | 手工调整排期 | 负责人 |
 | POST | /api/v1/leader/interview-sessions/publish | 发布排期 | 负责人 |
 | POST | /api/v1/leader/interview-sessions/publish/cancel | 取消并重排 | 负责人 |
-| GET | /api/v1/leader/scores | 本室评分列表 | 负责人 |
-| POST | /api/v1/leader/scores | 录入/更新评分 | 负责人 |
-| POST | /api/v1/leader/scores/import | Excel 批量导入评分 | 负责人 |
+| GET | /api/v1/leader/scores | 本室评分汇总（按学生+导师） | 负责人 |
 | GET | /api/v1/leader/nominations | 本室拟录取汇总 | 负责人 |
 | POST | /api/v1/leader/nominations/submit | 提交本室名单至学院 | 负责人 |
+| GET | /api/v1/leader/nominations/{mentorId} | 查看导师拟录取名单 | 负责人 |
+| PUT | /api/v1/leader/nominations/{mentorId} | 调整导师拟录取名单 | 负责人 |
+| GET | /api/v1/leader/applicants | 本室报名学生列表 | 负责人 |
+| GET | /api/v1/leader/students/{studentId}/archive | 本室报名学生档案 | 负责人 |
 | GET | /api/v1/leader/reallocation/candidates | 本室内部调剂候选 | 负责人 |
+| GET | /api/v1/leader/admissions | 本室录取确认汇总 | 负责人 |
+| GET | /api/v1/leader/admissions/export | 导出本室最终名单 | 负责人 |
+| GET | /api/v1/leader/waitlist | 本室递补名单 | 负责人 |
+| PUT | /api/v1/leader/waitlist/rank | 调整本室递补顺位 | 负责人 |
 | POST | /api/v1/leader/reallocation | 执行内部调剂 | 负责人 |
 
 ### 2.6 管理端
@@ -172,6 +201,8 @@
 | POST | /api/v1/admin/notices | 新建公告 | 管理员 |
 | PUT | /api/v1/admin/notices/{id} | 编辑公告 | 管理员 |
 | PUT | /api/v1/admin/notices/{id}/status | 发布/下线公告 | 管理员 |
+| POST | /api/v1/admin/notices/upload | 公告附件上传（multipart） | 管理员 |
+| DELETE | /api/v1/admin/notices/{id} | 删除公告（已发布需先下线） | 管理员 |
 | GET | /api/v1/admin/students | 学生账号列表 | 管理员 |
 | POST | /api/v1/admin/students | 新增学生账号 | 管理员 |
 | PUT | /api/v1/admin/students/{id} | 编辑学生账号 | 管理员 |
@@ -188,12 +219,14 @@
 | PUT | /api/v1/admin/mentors/{id}/quota | 强制调整导师名额（冻结期，留痕并公告） | 管理员 |
 | POST | /api/v1/admin/admissions/{id}/adjust | 阶段内调整录取（确认/取消/改派） | 管理员 |
 | POST | /api/v1/admin/rounds/{id}/snapshot | 生成轮次快照 | 管理员 |
+| GET | /api/v1/admin/rounds/{id}/snapshots | 快照历史列表 | 管理员 |
 | POST | /api/v1/admin/rounds/{id}/lock | 批次锁定 | 管理员 |
 | POST | /api/v1/admin/rounds/{id}/unlock | 批次解锁（需密码二次验证） | 管理员 |
 | GET | /api/v1/admin/quotas/export | 导出名额 Excel | 管理员 |
 | GET | /api/v1/admin/reallocation/candidates | 三级调剂候选 | 管理员 |
 | POST | /api/v1/admin/reallocation | 执行调剂（支持批量） | 管理员 |
 | GET | /api/v1/admin/publicities | 公示批次列表 | 管理员 |
+| GET | /api/v1/admin/publicities/{id}/rows | 公示名单明细 | 管理员 |
 | POST | /api/v1/admin/publicities | 发起公示 | 管理员 |
 | PUT | /api/v1/admin/publicities/{id}/end | 结束公示 | 管理员 |
 | POST | /api/v1/admin/publicities/{id}/confirm | 确认最终名单 | 管理员 |
@@ -201,6 +234,8 @@
 | PUT | /api/v1/admin/disputes/{id}/handle | 处理异议 | 管理员 |
 | GET | /api/v1/admin/results | 全院录取总览（归档后从 type=4 快照渲染） | 管理员 |
 | GET | /api/v1/admin/results/export | 导出录取 Excel（归档后从 type=4 快照渲染） | 管理员 |
+
+> 开放日信息（`lab.open_day_date / open_day_start_time / open_day_end_time / open_day_location / open_day_note`）的唯一维护入口为 `POST /api/v1/admin/labs` 与 `PUT /api/v1/admin/labs/{id}`；负责人端不提供开放日写接口，仅在公共实训室详情与实训室档案中只读展示。
 
 ## 3. 接口详述
 
@@ -273,7 +308,7 @@
 ### 3.3 实训室列表 `GET /api/v1/public/labs`
 
 - 鉴权：不需要
-- 查询参数：`keyword`（可选）、`collegeId`（可选）、`status`（可选，1 招录中 0 已满）、`pageNum`、`pageSize`
+- 查询参数：`keyword`（可选）、`department`（可选，所属系部精确匹配）、`status`（可选，1 招录中 0 已满）、`pageNum`、`pageSize`
 - 成功响应：
 
 ```json
@@ -289,6 +324,7 @@
         "id": 1,
         "labCode": "LAB-AI-01",
         "labName": "人工智能实训室",
+        "department": "信息工程学院",
         "leaderName": "王建国",
         "mentorCount": 5,
         "totalQuota": 20,
@@ -315,6 +351,8 @@
     "id": 1,
     "labCode": "LAB-AI-01",
     "labName": "人工智能实训室",
+    "department": "信息工程学院",
+    "leaderName": "王建国",
     "introduction": "面向 AI+PBL 项目实训的校级重点实训室",
     "researchDirection": "计算机视觉、大模型应用",
     "equipmentEnv": "GPU 服务器 8 台，算力 200T",
@@ -345,6 +383,59 @@
 }
 ```
 
+### 3.4.1 导师详情 `GET /api/v1/public/mentors/{id}`
+
+- 鉴权：不需要
+- 路径参数：`id` 为 `mentor_profile.id`
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "id": 11,
+    "userId": 2001,
+    "realName": "李海峰",
+    "title": "副教授",
+    "labId": 1,
+    "labName": "人工智能实训室",
+    "researchDirection": "多模态大模型",
+    "researchProjects": "面向教育场景的多模态问答系统",
+    "quota": 4,
+    "quotaUsed": 2,
+    "remainQuota": 2
+  }
+}
+```
+
+- 失败响应：`{ "code": 404001, "message": "导师不存在" }`
+
+### 3.4.2 公共公告 `GET /api/v1/public/notices`、`GET /api/v1/public/notices/{id}`
+
+- 鉴权：不需要
+- 查询参数（列表）：`noticeType`（可选）、`pageNum`、`pageSize`
+- 成功响应（列表为分页结构，详情为单条）：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "id": 501,
+    "title": "第 1 轮拟录取名单公示",
+    "noticeType": 3,
+    "noticeTypeText": "公示",
+    "content": "本轮拟录取名单已进入公示，公示截止时间：2026-11-06 08:00:00",
+    "attachmentUrl": null,
+    "publicityId": 1301,
+    "publishTime": "2026-11-05 08:00:00"
+  }
+}
+```
+
+- 说明：`publicityId` 仅公示类公告（`noticeType = 3`）有值，前端据此跳转公示名单；其余类型为 `null`。
+
 ### 3.5 当前轮次 `GET /api/v1/public/rounds/current`
 
 - 成功响应：
@@ -368,6 +459,8 @@
     "nominationSubmitEnd": "2026-11-04 07:00:00",
     "confirmStart": "2026-11-04 08:00:00",
     "nominationEnd": "2026-11-04 12:00:00",
+    "innerAdjustStart": "2026-11-04 14:00:00",
+    "innerAdjustEnd": "2026-11-05 18:00:00",
     "adjustStart": "2026-11-06 08:00:00",
     "adjustEnd": "2026-11-06 12:00:00",
     "locked": 0,
@@ -377,8 +470,44 @@
 }
 ```
 
-- `phase`：`APPLY` / `INTERVIEW` / `NOMINATION` / `CONFIRM` / `ADJUST` / `PUBLICITY` / `LOCKED` / `IDLE`，前端据此展示横幅与门禁
+- `phase`：`APPLY` / `INTERVIEW` / `NOMINATION` / `CONFIRM` / `INNER_ADJUST` / `ADJUST` / `PUBLICITY` / `LOCKED` / `IDLE`，前端据此展示横幅与门禁
 - `locked = 1` 时前端整站只读
+
+### 3.5.1 个人信息 `GET /api/v1/student/profile`、`GET /api/v1/teacher/profile`
+
+- 鉴权：学生 / 导师
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "id": 900001,
+    "userNo": "2022001",
+    "realName": "陈丽",
+    "userType": 1,
+    "gender": 2,
+    "phone": "13812345678",
+    "email": "chenli@example.com",
+    "college": "计算机学院",
+    "major": "软件工程",
+    "grade": "2022",
+    "title": null
+  }
+}
+```
+
+- 说明：本人视图返回完整手机号与邮箱，不做脱敏；学生使用 `college / major / grade`，导师使用 `title`，其余字段为 `null`
+- 修改个人信息 `PUT /api/v1/student/profile`、`PUT /api/v1/teacher/profile`
+- 请求：
+
+```json
+{ "phone": "string, 手机号, 可选", "email": "string, 邮箱, 可选" }
+```
+
+- 说明：仅允许修改手机号与邮箱；手机号需匹配 `^1[3-9]\d{9}$`，邮箱需为合法邮箱格式，空字符串表示清空
+- 成功响应：`{ "code": 200, "message": "success", "data": null }`
 
 ### 3.6 学生工作台 `GET /api/v1/student/dashboard`
 
@@ -673,7 +802,7 @@
 ### 3.19 查看评分 `GET /api/v1/teacher/scores/{studentId}`
 
 - 鉴权：导师
-- 前置校验：该学生必须在本室有评分记录，且导师属于该实训室
+- 前置校验：该学生必须选择当前导师且已排期；仅返回当前导师本人的评分，未评分时 `data = null`
 - 成功响应：
 
 ```json
@@ -683,6 +812,8 @@
   "data": {
     "id": 1001,
     "studentId": 1001,
+    "mentorId": 11,
+    "mentorName": "李海峰",
     "studentNo": "2022****01",
     "studentName": "陈*丽",
     "attitudeScore": 90.00,
@@ -699,7 +830,7 @@
 }
 ```
 
-- 失败响应：`{ "code": 403001, "message": "无权查看该学生评分" }`
+- 失败响应：`{ "code": 403001, "message": "仅导师可录入评分" }`
 
 ### 3.20 保存/提交拟录取 `POST /api/v1/teacher/nominations`
 
@@ -1058,6 +1189,8 @@
       "roundId": 3,
       "labId": 1,
       "labName": "人工智能实训室",
+      "mentorId": 11,
+      "mentorName": "李海峰",
       "sessionId": 701,
       "sessionName": "第一场",
       "interviewDate": "2026-11-02",
@@ -1073,7 +1206,7 @@
 }
 ```
 
-- 说明：按面试日期、开始时间升序返回；学号与姓名统一脱敏
+- 说明：按面试日期、开始时间升序返回；每条排期对应一个“学生 + 导师”组合，同一学生可能有多条；学号与姓名统一脱敏
 - 失败响应：`{ "code": 403001, "message": "仅实训室负责人可操作面试排期" }`
 
 ### 3.25.3 自动分配排期 `POST /api/v1/leader/interview-schedules/auto`
@@ -1082,9 +1215,10 @@
 - 请求：`{ "roundId": "BIGINT, 轮次ID, 必填" }`
 - 分配逻辑：
   - 仅使用本室本轮 `status = 1` 的草稿场次
-  - 按意向导师聚合已提交意向（`intention.status = 2`）的本室学生
-  - 优先分配到包含其意向导师的场次，并校验剩余容量
-  - 已存在排期的学生跳过，不重复分配
+  - 按“学生 + 意向导师”组合分配：学生选择的每位导师各生成一条排期
+  - 目标场次必须配置了该导师（`interview_session_interviewer`），并校验剩余容量
+  - 同一学生的多条排期不得时间重叠
+  - 已存在“学生 + 导师”排期的组合跳过，不重复分配
 - 成功响应：`{ "code": 200, "message": "success", "data": null }`
 - 失败响应：
 
@@ -1092,7 +1226,7 @@
 { "code": 404001, "message": "选拔轮次不存在" }
 { "code": 403001, "message": "仅实训室负责人可操作面试排期" }
 { "code": 400002, "message": "请先创建面试场次" }
-{ "code": 400002, "message": "场次容量不足，无法完成自动分配" }
+{ "code": 400002, "message": "导师 XXX 无可用场次或与学生其他面试冲突，无法完成自动分配" }
 ```
 
 ### 3.25.4 手工调整排期 `PUT /api/v1/leader/interview-schedules`
@@ -1115,6 +1249,7 @@
 - 校验：
   - 排期与目标场次都必须属于当前负责人实训室
   - 目标场次必须为草稿状态，已发布场次不可作为目标
+  - 目标场次必须配置了该排期的导师
   - 调整后校验学生时间冲突（409001）与场次容量（400002）
 - 成功响应：`{ "code": 200, "message": "success", "data": null }`
 - 失败响应：
@@ -1126,6 +1261,7 @@
 { "code": 404001, "message": "目标场次不存在" }
 { "code": 403001, "message": "仅实训室负责人可操作面试排期" }
 { "code": 400005, "message": "已发布场次不可调整" }
+{ "code": 400002, "message": "目标场次未配置该导师" }
 { "code": 409001, "message": "存在学生时间冲突" }
 { "code": 400002, "message": "场次超出容量" }
 ```
@@ -1134,7 +1270,7 @@
 
 - 鉴权：负责人
 - 查询参数：`roundId`（可选，默认最近轮次）
-- 说明：返回本室已提交意向、但尚无 `interview_schedule` 记录的学生；学号与姓名脱敏，供拖拽排期使用
+- 说明：返回本室已提交意向、但尚无对应“学生 + 导师”排期的组合；学号与姓名脱敏，供拖拽排期使用
 - 成功响应：
 
 ```json
@@ -1146,7 +1282,8 @@
       "studentId": 1002,
       "studentNo": "2022****02",
       "studentName": "张*",
-      "mentorNames": ["李海峰"]
+      "mentorId": 11,
+      "mentorName": "李海峰"
     }
   ]
 }
@@ -1163,11 +1300,12 @@
 {
   "roundId": "BIGINT, 轮次ID, 必填",
   "studentId": "BIGINT, 学生ID, 必填",
+  "mentorId": "BIGINT, 导师档案ID, 必填",
   "sessionId": "BIGINT, 草稿场次ID, 必填"
 }
 ```
 
-- 校验：轮次处于面试阶段；场次属于本室且为草稿；学生本轮已提交填报且含本室意向；同一学生在本室本轮仅一条排期；场次未超容量；与该生其他场次无时间重叠
+- 校验：轮次处于面试阶段；场次属于本室且为草稿；目标导师属于本室且在职；场次已配置该导师；学生本轮已提交填报且选择了该导师；同一“学生 + 导师”本轮仅一条排期；场次未超容量；与该生其他场次无时间重叠
 - 成功响应：`{ "code": 200, "message": "success", "data": 801 }`
 - 失败响应：
 
@@ -1176,12 +1314,29 @@
 { "code": 404001, "message": "面试场次不存在" }
 { "code": 400005, "message": "当前不在面试阶段" }
 { "code": 400005, "message": "仅草稿场次可拖拽排期" }
+{ "code": 400002, "message": "目标导师不可选" }
+{ "code": 400002, "message": "该场次未配置目标导师" }
 { "code": 400002, "message": "该学生本轮未提交填报" }
 { "code": 400002, "message": "场次已满，无法排期" }
-{ "code": 403001, "message": "该学生不属于本实训室" }
+{ "code": 403001, "message": "该学生未选择该导师" }
 { "code": 403001, "message": "无权使用其他实训室的场次" }
-{ "code": 409001, "message": "该学生已在本室排期" }
+{ "code": 409001, "message": "该学生已在该导师处排期" }
 { "code": 409001, "message": "与该生其他面试场次时间冲突" }
+```
+
+### 3.25.7 登记面试状态 `PUT /api/v1/leader/interview-schedules/{id}/status`
+
+- 鉴权：负责人
+- 请求：`{ "status": "TINYINT, 2 已完成 / 3 缺席, 必填" }`
+- 校验：排期属于本室；批次未锁定
+- 成功响应：`{ "code": 200, "message": "success", "data": null }`
+- 失败响应：
+
+```json
+{ "code": 400001, "message": "面试状态仅支持已完成或缺席" }
+{ "code": 400005, "message": "批次已锁定，不可登记面试状态" }
+{ "code": 403001, "message": "无权操作其他实训室的排期" }
+{ "code": 404001, "message": "面试排期不存在" }
 ```
 
 ### 3.26 发布排期 `POST /api/v1/leader/interview-sessions/publish`
@@ -1231,9 +1386,10 @@
 { "code": 400005, "message": "无可取消的已发布场次" }
 ```
 
-### 3.27 录入评分 `POST /api/v1/leader/scores`
+### 3.27 导师录入评分 `POST /api/v1/teacher/scores`
 
-- 鉴权：负责人
+- 鉴权：导师
+- 说明：导师只能给选择本人且已排期的学生评分；评分按 `(round_id, mentor_id, student_id)` 唯一，仅用于本人拟录取
 - 请求：
 
 ```json
@@ -1275,12 +1431,13 @@
 { "code": 400004, "message": "当前不在面试时间窗内" }
 { "code": 400005, "message": "当前不在面试阶段" }
 { "code": 400005, "message": "批次已锁定，不可录入评分" }
-{ "code": 403001, "message": "该学生未在本室面试" }
+{ "code": 403001, "message": "该学生未选择该导师或尚未排期" }
 ```
 
-### 3.27.1 本室评分列表 `GET /api/v1/leader/scores`
+### 3.27.1 本室评分汇总 `GET /api/v1/leader/scores`
 
 - 鉴权：负责人
+- 说明：按“学生 + 导师”返回本室本轮全部评分，供负责人汇总；负责人不录入、不修改分数
 - 查询参数：
 
 | 参数 | 类型 | 必填 | 说明 |
@@ -1307,6 +1464,8 @@
         "studentId": 1001,
         "studentNo": "2022****01",
         "studentName": "陈*丽",
+        "mentorId": 11,
+        "mentorName": "李海峰",
         "sessionId": 701,
         "sessionName": "第一场",
         "attitudeScore": 90.00,
@@ -1324,12 +1483,12 @@
 }
 ```
 
-- 说明：列表以本室本轮排期学生为基准，按学号升序返回；`status = 0` 时 `id` 与各项评分字段均为 `null`，`statusText = "未评分"`
+- 说明：列表以本室本轮“学生 + 导师”排期为基准，按学号升序返回；`status = 0` 时 `id` 与各项评分字段均为 `null`，`statusText = "未评分"`
 - 失败响应：`{ "code": 403001, "message": "仅实训室负责人可录入评分" }`
 
-### 3.27.2 Excel 批量导入评分 `POST /api/v1/leader/scores/import`
+### 3.27.2 导师 Excel 批量导入评分 `POST /api/v1/teacher/scores/import`
 
-- 鉴权：负责人
+- 鉴权：导师
 - 请求：`multipart/form-data`，字段名 `file`，仅支持 `.xlsx`
 - Excel 列顺序（首行为表头）：
 
@@ -1343,7 +1502,7 @@
 | F | 评语 |
 
 - 说明：
-  - 使用最近轮次；仅处理本室已排期学生
+  - 使用最近轮次；仅处理选择本人且已排期的学生
   - 通过校验的行统一按 `submit = 1` 提交
   - 失败行跳过并返回明细；全部失败时仍返回 200 + `failList`
 - 成功响应：
@@ -1439,6 +1598,7 @@
 ### 3.30 本室内部调剂 `POST /api/v1/leader/reallocation`
 
 - 鉴权：负责人
+- 说明：仅在阶段 6 `inner_adjust_start ~ inner_adjust_end` 内开放；提交后生成 `admission.status = 1`、`pending_type = 4` 的待确认记录，学生确认后生效；确认截止 = `min(inner_adjust_end, 通知时刻 + 24 小时)`；逾期或拒绝时释放名额并触发同导师递补，不影响学生阶段 7 跨室调剂资格（需勾选服从跨室）
 - 请求：
 
 ```json
@@ -1450,14 +1610,29 @@
 }
 ```
 
-- 成功响应：`{ "code": 200, "message": "success", "data": { "reallocationId": 1401, "admissionId": 902 } }`
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "reallocationId": 1401,
+    "admissionId": 902,
+    "status": 1,
+    "confirmDeadline": "2026-11-05 18:00:00"
+  }
+}
+```
+
 - 失败响应：
 
 ```json
 { "code": 400001, "message": "调剂说明不能为空" }
 { "code": 400002, "message": "学生未勾选服从实训室内部调剂" }
 { "code": 400002, "message": "目标导师剩余名额不足" }
-{ "code": 400004, "message": "当前不在调剂时间窗内" }
+{ "code": 400004, "message": "本轮未配置内部调剂时间窗" }
+{ "code": 400004, "message": "当前不在内部调剂时间窗内" }
 { "code": 400005, "message": "批次已锁定，不可调剂" }
 { "code": 400005, "message": "学生本轮已有录取记录" }
 { "code": 403001, "message": "该学生不属于本实训室" }
@@ -1510,6 +1685,179 @@
 - 说明：`totalScore` 无面试评分时为 `null`；列表按总分降序、总分相同按学生 ID 升序，`null` 总分排在最后
 - 失败响应：`{ "code": 403001, "message": "仅实训室负责人可查看本室调剂候选" }`
 
+### 3.30.2 本室录取确认汇总 `GET /api/v1/leader/admissions`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选，默认最近轮次）、`finalOnly`（可选，默认 false；true 仅返回已确认/已入组记录）
+- 说明：仅返回负责人所在实训室的录取记录；学号与姓名脱敏；`confirmedCount` 统计 status = 2，`enrolledCount` 统计 status = 3，`abandonedCount` 统计 status ∈ {4,5}
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "roundId": 1,
+    "labId": 1,
+    "labName": "人工智能实训室",
+    "labQuota": 20,
+    "allocatedQuota": 18,
+    "quotaUsed": 8,
+    "remainQuota": 12,
+    "totalCount": 10,
+    "pendingCount": 1,
+    "confirmedCount": 6,
+    "enrolledCount": 2,
+    "abandonedCount": 1,
+    "items": [
+      {
+        "id": 901,
+        "studentId": 1001,
+        "studentNo": "2022****01",
+        "studentName": "陈*丽",
+        "mentorId": 11,
+        "mentorName": "李海峰",
+        "totalScore": 85.75,
+        "status": 2,
+        "statusText": "已确认",
+        "sourceType": 1,
+        "sourceTypeText": "拟录取",
+        "confirmTime": "2026-11-05 10:00:00",
+        "confirmDeadline": "2026-11-05 12:00:00"
+      }
+    ]
+  }
+}
+```
+
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可查看本室录取情况" }`
+
+### 3.30.3 导出本室最终名单 `GET /api/v1/leader/admissions/export`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选，默认最近轮次）
+- 说明：仅导出负责人所在实训室的录取记录；归档后从最终归档快照渲染
+- 成功响应：`application/octet-stream`，文件名 `leader-results.xlsx`
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可查看本室录取情况" }`
+
+### 3.30.4 本室递补名单 `GET /api/v1/leader/waitlist`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选，默认最近轮次）
+- 说明：返回本室全部导师的递补名单，按导师、顺位升序；学号与姓名脱敏
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "id": 1101,
+      "roundId": 1,
+      "mentorId": 11,
+      "mentorName": "李海峰",
+      "rankNo": 1,
+      "studentId": 1002,
+      "studentNo": "2022****02",
+      "studentName": "张*强",
+      "totalScore": 78.50,
+      "isManual": 0,
+      "adjustReason": null,
+      "applyStatus": 1,
+      "applyStatusText": "待处理"
+    }
+  ]
+}
+```
+
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可操作本室递补名单" }`
+
+### 3.30.5 调整本室递补顺位 `PUT /api/v1/leader/waitlist/rank`
+
+- 鉴权：负责人
+- 请求：
+
+```json
+{
+  "roundId": "BIGINT, 轮次ID, 必填",
+  "items": [
+    { "waitlistId": "BIGINT, 递补记录ID, 必填", "rankNo": "INT, 新顺位, 从1开始" }
+  ],
+  "adjustReason": "string, 调整理由, 必填, 最长200字"
+}
+```
+
+- 校验：递补记录必须属于本室导师；同一导师内顺位不可重复；批次锁定后拒绝；调整写 `operation_log`
+- 成功响应：`{ "code": 200, "message": "success", "data": null }`
+- 失败响应：
+
+```json
+{ "code": 400001, "message": "调整理由不能为空" }
+{ "code": 400002, "message": "同一导师递补顺位重复" }
+{ "code": 400002, "message": "递补记录不属于该轮次" }
+{ "code": 400005, "message": "批次已锁定，不可调整递补顺位" }
+{ "code": 403001, "message": "无权调整其他实训室的递补记录" }
+{ "code": 404001, "message": "递补记录不存在" }
+{ "code": 404001, "message": "选拔轮次不存在" }
+```
+
+### 3.30.6 本室报名学生列表 `GET /api/v1/leader/applicants`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选）、`keyword`（学号/姓名）、`pageNum`、`pageSize`
+- 盲选门禁：填报截止前 `visible = 0` 且列表为空
+- 返回：学生基础信息、全部意向（实训室 + 导师）、两个调剂意愿、面试场次、总分、录取状态；学号与姓名脱敏
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可查看本室报名学生" }`
+
+### 3.30.7 本室报名学生档案 `GET /api/v1/leader/students/{studentId}/archive`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选）
+- 校验：填报截止后；学生已提交意向且包含本实训室
+- 成功响应：学生档案字段同导师端档案接口，学号与姓名脱敏；未创建档案返回 `data: null`
+- 失败响应：
+
+```json
+{ "code": 403001, "message": "填报截止后方可查看学生档案" }
+{ "code": 403001, "message": "该学生未报名本实训室" }
+{ "code": 404001, "message": "学生不存在" }
+```
+
+### 3.30.8 查看导师拟录取名单 `GET /api/v1/leader/nominations/{mentorId}`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选）
+- 返回：导师名额、已占用、当前选中学生 ID、候选学生（学号/姓名脱敏、总分、是否已勾选）
+- 失败响应：`{ "code": 403001, "message": "无权查看其他实训室导师的名单" }`
+
+### 3.30.9 调整导师拟录取名单 `PUT /api/v1/leader/nominations/{mentorId}`
+
+- 鉴权：负责人
+- 请求：
+
+```json
+{
+  "roundId": "BIGINT, 轮次ID, 必填",
+  "studentIds": ["BIGINT, 勾选学生ID列表"],
+  "reason": "string, 调整理由, 必填, 最长200字"
+}
+```
+
+- 校验：名单提交时间窗内、批次未锁定；导师属于本室；学生已提交意向且选择该导师；已录入面试评分；不得超过导师个人名额
+- 副作用：覆盖该导师本轮名单并置为已提交，按差额调整 `quota_used`，写 `operation_log`
+- 成功响应：`{ "code": 200, "message": "success", "data": { "submittedCount": 3, "quota": 4, "quotaUsed": 3, "remainQuota": 1 } }`
+- 失败响应：
+
+```json
+{ "code": 400005, "message": "当前不在拟录取时间窗内" }
+{ "code": 400005, "message": "批次已锁定，不可修改拟录取名单" }
+{ "code": 400003, "message": "超出个人名额上限（4 人）" }
+{ "code": 400002, "message": "存在未录入面试评分的学生，不可列入拟录取" }
+{ "code": 400002, "message": "存在未选择本人的意向学生，不可列入拟录取" }
+{ "code": 403001, "message": "无权调整其他实训室导师的名单" }
+```
+
 ### 3.31 轮次配置 `PUT /api/v1/admin/rounds/{id}`
 
 - 鉴权：管理员
@@ -1527,6 +1875,8 @@
   "nominationSubmitEnd": "datetime, 名单提交截止, 必填",
   "confirmStart": "datetime, 学生确认开始, 必填",
   "nominationEnd": "datetime, 确认截止, 必填",
+  "innerAdjustStart": "datetime, 阶段6内部调剂开始, 可选；为空表示不开放",
+  "innerAdjustEnd": "datetime, 阶段6内部调剂结束, 可选；必须与开始时间同时填写且不晚于 adjustStart",
   "adjustStart": "datetime, 统筹调剂开始, 必填",
   "adjustEnd": "datetime, 统筹调剂结束, 必填",
   "weightAttitude": "decimal, 学习态度权重, 必填",
@@ -1550,6 +1900,45 @@
 { "code": 400005, "message": "批次已锁定，不可修改轮次配置" }
 ```
 
+### 3.31.1 全院名额总览 `GET /api/v1/admin/quotas`
+
+- 鉴权：管理员
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "labId": 1,
+      "labName": "人工智能实训室",
+      "totalQuota": 20,
+      "quotaSum": 18,
+      "quotaUsedSum": 8,
+      "remainQuota": 12
+    }
+  ]
+}
+```
+
+- 字段说明：`totalQuota` 实训室总名额；`quotaSum` 本室导师个人名额合计；`quotaUsedSum` 已占用名额合计；`remainQuota = totalQuota - quotaUsedSum`（最小为 0）
+- 导出 `GET /api/v1/admin/quotas/export`：鉴权管理员，返回 `application/octet-stream` Excel，列顺序为 实训室、总名额、导师名额合计、已占用、剩余名额
+
+### 3.31.2 提拔负责人 `PUT /api/v1/admin/labs/{id}/leader`
+
+- 鉴权：管理员
+- 路径参数：`id` 为 `lab.id`
+- 请求：
+
+```json
+{ "userId": "BIGINT, 目标导师账号 ID（sys_user.id）, 必填", "reason": "string, 提拔理由, 必填" }
+```
+
+- 校验：目标用户必须是该实训室在职导师（`mentor_profile.lab_id` 匹配、`sys_user.user_type = 2` 且 `status = 1`），否则返回 403001 / 400002
+- 副作用：更新 `lab.leader_id`，写 `operation_log`（含前后负责人），向原负责人与新负责人推送通知
+- 成功响应：`{ "code": 200, "message": "success", "data": null }`
+
 ### 3.32 批量导入学生 `POST /api/v1/admin/students/import`
 
 - 鉴权：管理员
@@ -1572,6 +1961,54 @@
   }
 }
 ```
+
+### 3.32.1 新增教师账号 `POST /api/v1/admin/mentors`
+
+- 鉴权：管理员
+- 请求：
+
+```json
+{
+  "userNo": "string, 工号, 必填, 全局唯一",
+  "realName": "string, 姓名, 必填",
+  "labId": "BIGINT, 所属实训室, 必填",
+  "title": "string, 职称, 可选",
+  "researchDirection": "string, 研究方向, 可选",
+  "researchProjects": "string, 在研项目, 可选, 最长1000字",
+  "phone": "string, 手机号, 可选",
+  "email": "string, 邮箱, 可选",
+  "quota": "INT, 个人名额, 必填",
+  "status": "TINYINT, 1启用 0禁用, 可选, 默认1",
+  "leader": "boolean, 是否同时设为该室负责人, 可选, 默认 false"
+}
+```
+
+- 成功响应：`{ "code": 200, "message": "success", "data": 920001 }`（`mentor_profile.id`）
+- 说明：`phone`、`email` 落 `sys_user`；`researchProjects` 落 `mentor_profile`；`leader = true` 时创建账号后立即将该教师设为所属实训室负责人，原负责人权限自动失效，并写入操作日志与站内通知
+
+### 3.32.2 批量导入教师 `POST /api/v1/admin/mentors/import`
+
+- 鉴权：管理员
+- Content-Type：`multipart/form-data`
+- 参数：`file`（Excel，列：工号、姓名、实训室编码、职称、研究方向、手机号、邮箱）
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "successCount": 18,
+    "failCount": 2,
+    "failList": [
+      { "row": 5, "userNo": "T9005", "reason": "工号已存在" },
+      { "row": 9, "userNo": "T9009", "reason": "实训室编码不存在" }
+    ]
+  }
+}
+```
+
+- 说明：逐行独立处理，单行失败不影响其他行；全部失败时返回 400002
 
 ### 3.33 三类调剂候选 `GET /api/v1/admin/reallocation/candidates`
 
@@ -1668,6 +2105,48 @@
   }
 }
 ```
+
+### 3.35.1 公示名单明细 `GET /api/v1/admin/publicities/{id}/rows`
+
+- 鉴权：管理员
+- 路径参数：`id` 为 `publicity.id`
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "id": 1301,
+    "title": "第 1 轮拟录取名单公示",
+    "startTime": "2026-11-05 08:00:00",
+    "endTime": "2026-11-06 08:00:00",
+    "status": 1,
+    "total": 86,
+    "list": [
+      {
+        "admissionId": 3001,
+        "studentId": 910002,
+        "studentNo": "2022001",
+        "studentName": "陈晓",
+        "college": "信息工程学院",
+        "major": "软件工程",
+        "labId": 900101,
+        "labName": "人工智能实训室",
+        "mentorId": 920001,
+        "mentorName": "张明",
+        "finalTotal": 88.50,
+        "status": 2,
+        "statusText": "已确认",
+        "confirmTime": "2026-11-04 10:00:00"
+      }
+    ]
+  }
+}
+```
+
+- 数据来源：本轮 `admission.status ∈ {2,3}` 的记录，按 `admission.id` 升序
+- 说明：管理员视图返回完整学号与姓名，不做脱敏；`statusText` 与 `03_Database.md` 状态值同源映射
 
 ### 3.36 处理异议 `PUT /api/v1/admin/disputes/{id}/handle`
 
@@ -1781,7 +2260,8 @@
   - `pendingType = 1`：拟录取多选一
   - `pendingType = 2`：递补待确认
   - `pendingType = 3`：异议调整待确认
-- 门禁：`type = 1` 需 `NOW() >= confirm_start`；`type ∈ {2,3}` 按记录自身 `created_at ~ confirm_deadline` 判定；公示开始后中心只读
+  - `pendingType = 4`：内部调剂待确认
+- 门禁：`type = 1` 需 `NOW() >= confirm_start`；`type ∈ {2,3,4}` 按记录自身 `confirm_deadline` 判定；公示开始后中心只读
 - 成功响应：
 
 ```json
@@ -1962,6 +2442,37 @@
 - 成功响应：`{ "code": 200, "message": "success", "data": { "id": 2001, "version": 2, "recordCount": 86 } }`
 - 说明：**追加式写入**。同轮同类型重新生成时，旧记录 `is_current = 0`、新记录 `is_current = 1` 且 `version + 1`，历史不丢失。批次归档以 `is_current = 1` 且 `snapshotType = 4` 为唯一权威源。
 
+### 3.47.1 快照历史 `GET /api/v1/admin/rounds/{id}/snapshots`
+
+- 鉴权：管理员
+- 路径参数：`id` 为 `selection_round.id`
+- 查询参数：`snapshotType`（可选，1 拟录取 2 确认结果 3 调剂结果 4 最终归档）
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "id": 2001,
+      "roundId": 930001,
+      "roundName": "第一轮双选",
+      "snapshotType": 4,
+      "snapshotTypeText": "最终归档",
+      "recordCount": 86,
+      "version": 2,
+      "isCurrent": 1,
+      "operatorName": "管理员",
+      "gmtCreate": "2026-11-07 00:00:00"
+    }
+  ]
+}
+```
+
+- 排序：`gmt_create DESC, version DESC`
+- 失败响应：`{ "code": 404001, "message": "选拔轮次不存在" }`
+
 ### 3.48 批次锁定 `POST /api/v1/admin/rounds/{id}/lock`
 
 - 鉴权：管理员
@@ -2002,6 +2513,376 @@
 { "code": 400002, "message": "新名额不得小于已占用名额（2 人，含待确认占位）" }
 ```
 
+### 3.51 题库列表 `GET /api/v1/teacher/questions`
+
+- 鉴权：导师
+- 说明：仅返回当前导师本人题库，按 `id` 倒序
+- 查询参数：`questionType`（可选，1–4）、`status`（可选，1 启用 0 停用）、`keyword`（可选，匹配题干）、`pageNum`、`pageSize`
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "total": 12,
+    "pageNum": 1,
+    "pageSize": 10,
+    "list": [
+      {
+        "id": 101,
+        "questionType": 1,
+        "questionTypeText": "单选题",
+        "content": "以下哪个是 JVM 垃圾回收器？",
+        "options": ["G1", "MySQL", "Redis", "Nginx"],
+        "correctAnswer": "A",
+        "score": 5.00,
+        "status": 1,
+        "statusText": "启用"
+      }
+    ]
+  }
+}
+```
+
+### 3.52 题库维护 `POST/PUT/DELETE /api/v1/teacher/questions`
+
+- 鉴权：导师
+- 新增：`POST /api/v1/teacher/questions`
+- 修改：`PUT /api/v1/teacher/questions/{id}`
+- 删除：`DELETE /api/v1/teacher/questions/{id}`
+- 请求（新增与修改一致）：
+
+```json
+{
+  "questionType": "TINYINT, 1单选 2多选 3判断 4填空, 必填",
+  "content": "string, 题干, 必填, 最长 1000 字",
+  "options": ["string, 选项文本, 单选/多选必填 2-8 个"],
+  "correctAnswer": "string, 单选 A；多选 A,B；判断 T/F；填空多个答案用 | 分隔, 必填",
+  "score": "DECIMAL, 默认分值 0.01-100, 必填"
+}
+```
+
+- 成功响应：返回与列表项同构的题目对象；删除成功返回 `data = null`
+- 说明：
+  - 选项按数组顺序对应 A/B/C…，最多 8 个
+  - 多选题正确答案至少 2 个，且必须全部落在选项范围内
+  - 已被试卷引用的题目删除时置 `status = 0`（停用），未引用时物理删除
+  - 批次 `locked = 1` 时写操作返回 400005
+- 失败响应：
+
+```json
+{ "code": 400001, "message": "选择题选项数量须为 2-8 个" }
+{ "code": 400001, "message": "多选题至少设置两个正确答案" }
+{ "code": 403001, "message": "只能操作本人题库" }
+{ "code": 400005, "message": "批次已锁定，不可修改在线笔试" }
+```
+
+### 3.53 试卷列表 `GET /api/v1/teacher/exam-papers`
+
+- 鉴权：导师
+- 查询参数：`roundId`（可选，缺省不限）、`status`（可选，1 草稿 2 已发布）、`keyword`（可选，匹配标题）、`pageNum`、`pageSize`
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "total": 2,
+    "pageNum": 1,
+    "pageSize": 10,
+    "list": [
+      {
+        "id": 900,
+        "roundId": 1,
+        "title": "2026 年实验室进组笔试",
+        "status": 2,
+        "statusText": "已发布",
+        "questionCount": 20,
+        "totalScore": 100.00,
+        "startTime": "2026-11-12 09:00:00",
+        "endTime": "2026-11-12 11:00:00",
+        "durationMinutes": 60,
+        "answerCount": 15,
+        "submittedCount": 12,
+        "averageScore": 76.50
+      }
+    ]
+  }
+}
+```
+
+- 说明：`answerCount` 为已开始答题人数，`submittedCount` 为已交卷人数，`averageScore` 仅统计已交卷答卷，无提交时返回 `null`
+
+### 3.54 试卷详情与草稿维护 `GET/POST/PUT/DELETE /api/v1/teacher/exam-papers`
+
+- 鉴权：导师
+- 详情：`GET /api/v1/teacher/exam-papers/{id}`，返回题目与正确答案，供导师复核
+- 新建：`POST /api/v1/teacher/exam-papers`
+- 修改：`PUT /api/v1/teacher/exam-papers/{id}`，仅草稿可改
+- 删除：`DELETE /api/v1/teacher/exam-papers/{id}`，仅草稿可删
+- 请求（新建与修改一致）：
+
+```json
+{
+  "roundId": "BIGINT, 轮次ID, 选填，缺省取当前轮",
+  "title": "string, 试卷标题, 必填, 最长 200 字",
+  "description": "string, 试卷说明, 选填, 最长 1000 字",
+  "startTime": "yyyy-MM-dd HH:mm:ss, 答题开始, 必填",
+  "endTime": "yyyy-MM-dd HH:mm:ss, 答题结束, 必填",
+  "durationMinutes": "INT, 单次答题时长 1-300 分钟, 必填",
+  "questions": [
+    { "questionId": "BIGINT, 题库题目ID, 必填", "score": "DECIMAL, 本题分值 0.01-100, 必填" }
+  ]
+}
+```
+
+- 成功响应（详情）：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "id": 900,
+    "roundId": 1,
+    "title": "2026 年实验室进组笔试",
+    "description": "请在 60 分钟内完成",
+    "startTime": "2026-11-12 09:00:00",
+    "endTime": "2026-11-12 11:00:00",
+    "durationMinutes": 60,
+    "totalScore": 100.00,
+    "status": 1,
+    "statusText": "草稿",
+    "questionCount": 20,
+    "questions": [
+      {
+        "id": 5001,
+        "questionId": 101,
+        "questionNo": 1,
+        "questionType": 1,
+        "questionTypeText": "单选题",
+        "content": "以下哪个是 JVM 垃圾回收器？",
+        "options": ["G1", "MySQL", "Redis", "Nginx"],
+        "correctAnswer": "A",
+        "score": 5.00
+      }
+    ]
+  }
+}
+```
+
+- 校验：`endTime > startTime`；题目不得重复；只能选用本人启用状态题目；总分由题目分值自动汇总
+- 失败响应：
+
+```json
+{ "code": 400001, "message": "答题结束时间必须晚于开始时间" }
+{ "code": 400002, "message": "试卷中存在重复题目" }
+{ "code": 403001, "message": "只能选用本人题库中的题目" }
+{ "code": 400005, "message": "已发布试卷不可修改" }
+```
+
+### 3.55 发布试卷 `POST /api/v1/teacher/exam-papers/{id}/publish`
+
+- 鉴权：导师
+- 前置校验：试卷为草稿、至少 1 道题、`endTime > 当前时间`
+- 成功响应：`{ "code": 200, "message": "success", "data": null }`
+- 说明：发布后学生端按答题时间可见；试卷题目与时间窗不可再修改
+- 失败响应：`{ "code": 400002, "message": "试卷至少包含一道题" }`、`{ "code": 400002, "message": "答题结束时间已过，无法发布" }`
+
+### 3.56 试卷结果 `GET /api/v1/teacher/exam-papers/{id}/results`
+
+- 鉴权：导师
+- 说明：以本轮填报该导师且填报已提交的学生为应考名单，未开始答题的学生同样列出
+- 查询参数：`status`（可选，0 未参加 1 答题中 2 已提交）、`pageNum`、`pageSize`
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "total": 15,
+    "pageNum": 1,
+    "pageSize": 10,
+    "list": [
+      {
+        "studentId": 1001,
+        "studentNo": "2022****01",
+        "studentName": "陈*丽",
+        "startTime": "2026-11-12 09:01:00",
+        "submitTime": "2026-11-12 09:52:00",
+        "status": 2,
+        "statusText": "已提交",
+        "score": 85.00
+      }
+    ]
+  }
+}
+```
+
+- 排序：已提交优先按得分倒序，未提交按学生 ID 升序
+
+### 3.57 我的在线笔试 `GET /api/v1/student/exams`
+
+- 鉴权：学生
+- 查询参数：`roundId`（可选，缺省取最近轮次）
+- 说明：仅返回本人在该轮**已提交填报**中选择的导师所发布的试卷；无填报或无导师试卷时返回空数组
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "paperId": 900,
+      "title": "2026 年实验室进组笔试",
+      "mentorId": 11,
+      "mentorName": "李海峰",
+      "labName": "人工智能实训室",
+      "startTime": "2026-11-12 09:00:00",
+      "endTime": "2026-11-12 11:00:00",
+      "durationMinutes": 60,
+      "totalScore": 100.00,
+      "paperStatusText": "进行中",
+      "answerStatus": 1,
+      "answerStatusText": "答题中",
+      "myScore": null,
+      "canStart": true
+    }
+  ]
+}
+```
+
+- 说明：`paperStatusText` 按服务端当前时间派生「未开始 / 进行中 / 已结束」；`answerStatus = 0` 表示未参加；`myScore` 仅已交卷时返回
+
+### 3.58 学生试卷详情 `GET /api/v1/student/exams/{paperId}`
+
+- 鉴权：学生
+- 前置校验：本人已选择该试卷导师且填报已提交，否则 403001；未开始返回 400004，已结束且未作答返回 400004
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "paperId": 900,
+    "title": "2026 年实验室进组笔试",
+    "description": "请在 60 分钟内完成",
+    "mentorName": "李海峰",
+    "labName": "人工智能实训室",
+    "startTime": "2026-11-12 09:00:00",
+    "endTime": "2026-11-12 11:00:00",
+    "durationMinutes": 60,
+    "totalScore": 100.00,
+    "answerStatus": 1,
+    "answerStatusText": "答题中",
+    "remainingSeconds": 3200,
+    "submittedTime": null,
+    "myScore": null,
+    "questions": [
+      {
+        "questionId": 101,
+        "questionNo": 1,
+        "questionType": 1,
+        "questionTypeText": "单选题",
+        "content": "以下哪个是 JVM 垃圾回收器？",
+        "options": ["G1", "MySQL", "Redis", "Nginx"],
+        "score": 5.00,
+        "answerContent": "A"
+      }
+    ]
+  }
+}
+```
+
+- **安全约束**：学生端任何响应均不得包含 `correctAnswer`；`remainingSeconds` 以服务端时间计算，截止时间为 `min(endTime, startTime + durationMinutes)`
+
+### 3.59 开始答题 `POST /api/v1/student/exams/{paperId}/start`
+
+- 鉴权：学生
+- 说明：同一学生同一试卷仅一份答卷；重复调用返回已有答卷，不重置开始时间
+- 前置校验：试卷已发布、在答题时间窗内、本人已选择该导师；批次锁定返回 400005
+- 成功响应：与 §3.58 详情结构一致，`answerStatus = 1`，`remainingSeconds` 为本次剩余秒数
+- 失败响应：
+
+```json
+{ "code": 400004, "message": "当前不在答题时间窗内" }
+{ "code": 403001, "message": "未选择该导师，无法参加本场笔试" }
+{ "code": 400005, "message": "试卷未发布" }
+```
+
+### 3.60 暂存作答 `PUT /api/v1/student/exams/{paperId}/answers`
+
+- 鉴权：学生
+- 请求：
+
+```json
+{
+  "items": [
+    { "questionId": "BIGINT, 题目ID, 必填", "answerContent": "string, 作答内容, 最长 2000 字" }
+  ]
+}
+```
+
+- 成功响应：
+
+```json
+{ "code": 200, "message": "success", "data": { "savedCount": 20, "answerStatus": 1, "remainingSeconds": 3000 } }
+```
+
+- 说明：全量覆盖暂存；题目必须属于本试卷；答卷已提交返回 400005；超过答题截止时服务端自动交卷，返回 `answerStatus = 2`、`remainingSeconds = 0`
+- 失败响应：`{ "code": 400005, "message": "请先开始答题" }`、`{ "code": 400002, "message": "题目不属于本试卷" }`
+
+### 3.61 交卷 `POST /api/v1/student/exams/{paperId}/submit`
+
+- 鉴权：学生
+- 说明：交卷后立即按客观题自动判分，答卷不可再修改；重复调用返回同一结果
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "answerId": 55,
+    "objectiveScore": 85.00,
+    "totalScore": 85.00,
+    "totalScoreOfPaper": 100.00,
+    "correctCount": 17,
+    "questionCount": 20,
+    "submitTime": "2026-11-12 09:52:00"
+  }
+}
+```
+
+- 判分规则：单选 / 判断精确匹配；多选按集合匹配、与顺序无关；填空命中 `|` 分隔的任一答案即得分（忽略大小写与首尾空格）；未作答不得分
+- 失败响应：`{ "code": 400005, "message": "请先开始答题" }`、`{ "code": 400005, "message": "批次已锁定，不可修改在线笔试" }`
+
+### 3.62 公告附件上传 `POST /api/v1/admin/notices/upload`
+
+- 鉴权：管理员
+- 请求：`multipart/form-data`，字段 `file`
+- 限制：单文件不超过 10MB；扩展名仅限 `pdf / doc / docx / xls / xlsx / ppt / pptx / zip / rar / png / jpg / jpeg`
+- 存储：服务端按 `notice/yyyyMMdd/uuid.ext` 落盘，附件通过 `GET /api/v1/files/**` 免登录访问
+- 成功响应：
+
+```json
+{ "code": 200, "message": "success", "data": { "fileName": "选拔方案.pdf", "url": "/api/v1/files/notice/20261111/8f3c2a1b9d4e4f6c8a7b5d3e1f0a2b4c.pdf" } }
+```
+
+- 失败响应：`{ "code": 400001, "message": "请选择需要上传的附件" }`、`{ "code": 400001, "message": "附件大小不能超过 10MB" }`、`{ "code": 400001, "message": "不支持的附件类型" }`
+
+### 3.63 删除公告 `DELETE /api/v1/admin/notices/{id}`
+
+- 鉴权：管理员
+- 说明：仅草稿（`status = 1`）与已下线（`status = 3`）公告可删除；已发布公告须先下线；删除成功后同步清理本系统存储的附件文件
+- 成功响应：`{ "code": 200, "message": "success", "data": null }`
+- 失败响应：`{ "code": 404001, "message": "公告不存在" }`、`{ "code": 400005, "message": "已发布公告请先下线再删除" }`
+
 ## 4. QA 交叉审查结论
 
 | 类型 | 问题 | 处理 |
@@ -2013,7 +2894,7 @@
 | 查冗 | 原草稿含「学生自助注册」「教师注册审核」「导师审核通过/驳回」共 4 个接口 | 账号改为学校统一创建，已全部删除 |
 | 查冗 | 原草稿含「学生线上自选剩余名额」接口 | 需求明确不做，已删除 |
 | 查漏 | 导师在面试前无法了解学生背景，评分缺少依据 | 已补 `GET/PUT /student/archive` 与 `GET /teacher/students/{id}/archive` |
-| 查漏 | 三处待确认（拟录取多选一、递补、异议调整）原为三套逻辑 | 已抽出 `GET /student/confirm-center` + `POST /student/confirm-center/{id}/respond`，按 `status = 1` 检索，`pending_type` 仅作展示 |
+| 查漏 | 四处待确认（拟录取多选一、递补、异议调整、内部调剂）原为多套逻辑 | 已抽出 `GET /student/confirm-center` + `POST /student/confirm-center/{id}/respond`，按 `status = 1` 检索，`pending_type` 仅作展示 |
 | 查漏 | 管理员缺少阶段内兜底能力，学生说「没点上」时只能改库 | 已补 `POST /admin/admissions/{id}/adjust`，四种动作均强制填原因并留痕 |
 | 查漏 | 跨室调剂原为管理员单点分配，教师无参与 | 已补 `GET /teacher/reallocation-pool` 与 `POST .../take`，先到先得，管理员保留兜底 |
 | 查漏 | 补录轮时间紧，强制走面试会跑不完 | 已补 `POST /teacher/supplement/direct-admit`，需填理由 |

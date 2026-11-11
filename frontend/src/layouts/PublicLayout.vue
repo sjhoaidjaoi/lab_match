@@ -1,8 +1,10 @@
 <template>
   <div class="public-layout">
     <header class="public-header">
-      <router-link class="brand" to="/">学生实训室进组选拔平台</router-link>
+      <router-link class="brand" to="/labs">学生实训室进组选拔平台</router-link>
       <nav class="nav">
+        <router-link to="/labs">实训室</router-link>
+        <router-link to="/notices">公告栏</router-link>
         <router-link to="/student/login">学生登录</router-link>
         <router-link to="/teacher/login">教师登录</router-link>
         <router-link to="/admin/login">管理员登录</router-link>

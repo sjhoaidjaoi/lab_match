@@ -1,13 +1,19 @@
 package com.college.labselect.service;
 
+import com.college.labselect.dto.req.LeaderWaitlistRankReqDTO;
 import com.college.labselect.dto.req.WaitlistRankItemReqDTO;
 import com.college.labselect.dto.req.WaitlistRankReqDTO;
+import com.college.labselect.dto.resp.LeaderWaitlistItemVO;
 import com.college.labselect.dto.resp.WaitlistItemVO;
+import com.college.labselect.entity.Lab;
 import com.college.labselect.entity.MentorProfile;
+import com.college.labselect.entity.OperationLog;
+import com.college.labselect.entity.SelectionRound;
 import com.college.labselect.entity.SysUser;
 import com.college.labselect.entity.Waitlist;
 import com.college.labselect.exception.BusinessException;
 import com.college.labselect.mapper.InterviewScoreMapper;
+import com.college.labselect.mapper.LabMapper;
 import com.college.labselect.mapper.MentorProfileMapper;
 import com.college.labselect.mapper.OperationLogMapper;
 import com.college.labselect.mapper.SelectionRoundMapper;
@@ -43,6 +49,9 @@ class WaitlistServiceTest {
 
     @Mock
     private MentorProfileMapper mentorProfileMapper;
+
+    @Mock
+    private LabMapper labMapper;
 
     @Mock
     private SelectionRoundMapper selectionRoundMapper;
@@ -125,6 +134,103 @@ class WaitlistServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getStudentNo()).isEqualTo("2022****02");
         assertThat(result.get(0).getStudentName()).isEqualTo("张*强");
+    }
+
+    /**
+     * 快乐路径：负责人查看本室全部导师递补名单并脱敏。
+     */
+    @Test
+    void listLeaderWaitlist_shouldReturnLabWideList() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(mentorProfileMapper.selectList(any())).thenReturn(List.of(mentor(), mentor2()));
+        when(waitlistMapper.selectList(any())).thenReturn(List.of(
+                waitlist(1101L, 11L, 1), waitlist(1102L, 12L, 1)));
+        when(sysUserMapper.selectBatchIds(any())).thenReturn(List.of(
+                student(), user(2001L, "20010001", "李海峰"), user(2002L, "20010002", "王建国")));
+
+        List<LeaderWaitlistItemVO> result = waitlistService.listLeaderWaitlist(2001L, 1L);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).getMentorName()).isEqualTo("李海峰");
+        assertThat(result.get(0).getStudentNo()).isEqualTo("2022****02");
+        assertThat(result.get(0).getStudentName()).isEqualTo("张*强");
+    }
+
+    /**
+     * 快乐路径：负责人调整本室递补顺位并写入日志。
+     */
+    @Test
+    void adjustLeaderRank_success_shouldUpdateAndLog() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round());
+        when(waitlistMapper.selectById(1101L)).thenReturn(waitlist(1101L, 11L, 3));
+        when(mentorProfileMapper.selectById(11L)).thenReturn(mentor());
+        when(waitlistMapper.selectList(any())).thenReturn(List.of(waitlist(1101L, 11L, 3)));
+        when(waitlistMapper.updateById(any(Waitlist.class))).thenReturn(1);
+
+        waitlistService.adjustLeaderRank(2001L, leaderRankReq(1101L, 1));
+
+        verify(waitlistMapper).updateById(any(Waitlist.class));
+        verify(operationLogMapper).insert(any(OperationLog.class));
+    }
+
+    /**
+     * 边界：负责人调整其他实训室的递补记录返回 403001。
+     */
+    @Test
+    void adjustLeaderRank_otherLab_shouldThrow403001() {
+        when(labMapper.selectOne(any())).thenReturn(lab());
+        when(selectionRoundMapper.selectById(1L)).thenReturn(round());
+        when(waitlistMapper.selectById(1101L)).thenReturn(waitlist(1101L, 99L, 1));
+        MentorProfile other = mentor();
+        other.setId(99L);
+        other.setLabId(2L);
+        when(mentorProfileMapper.selectById(99L)).thenReturn(other);
+
+        BusinessException exception = catchThrowableOfType(
+                () -> waitlistService.adjustLeaderRank(2001L, leaderRankReq(1101L, 1)),
+                BusinessException.class);
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.getCode()).isEqualTo(403001);
+    }
+
+    private LeaderWaitlistRankReqDTO leaderRankReq(Long waitlistId, int rankNo) {
+        LeaderWaitlistRankReqDTO req = new LeaderWaitlistRankReqDTO();
+        req.setRoundId(1L);
+        req.setItems(List.of(item(waitlistId, rankNo)));
+        req.setAdjustReason("负责人统筹本室递补顺序");
+        return req;
+    }
+
+    private Lab lab() {
+        Lab lab = new Lab();
+        lab.setId(1L);
+        lab.setLeaderId(2001L);
+        return lab;
+    }
+
+    private SelectionRound round() {
+        SelectionRound round = new SelectionRound();
+        round.setId(1L);
+        round.setLocked(0);
+        return round;
+    }
+
+    private MentorProfile mentor2() {
+        MentorProfile mentor = new MentorProfile();
+        mentor.setId(12L);
+        mentor.setUserId(2002L);
+        mentor.setLabId(1L);
+        return mentor;
+    }
+
+    private SysUser user(Long id, String userNo, String realName) {
+        SysUser user = new SysUser();
+        user.setId(id);
+        user.setUserNo(userNo);
+        user.setRealName(realName);
+        return user;
     }
 
     private MentorProfile mentor() {

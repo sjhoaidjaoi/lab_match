@@ -170,7 +170,7 @@ public class DashboardServiceImpl implements IDashboardService {
         vo.setPendingScoreCount(visible ? interviewScoreMapper.selectCount(
                 new LambdaQueryWrapper<InterviewScore>()
                         .eq(InterviewScore::getRoundId, roundId)
-                        .eq(InterviewScore::getLabId, mentor.getLabId())
+                        .eq(InterviewScore::getMentorId, mentor.getId())
                         .eq(InterviewScore::getStatus, SCORE_DRAFT)).intValue() : 0);
         vo.setPendingNomination(visible ? nominationMapper.selectCount(
                 new LambdaQueryWrapper<Nomination>()

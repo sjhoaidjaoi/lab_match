@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h2>面试排期</h2>
-        <p class="subtitle">维护本室面试场次，自动分配或拖拽排期，发布后场次锁定</p>
+        <p class="subtitle">按“学生 + 导师”组合分配场次，导师各自面试评分，发布后场次锁定</p>
       </div>
       <div class="header-actions">
         <el-button @click="handleAutoSchedule">自动分配</el-button>
@@ -56,7 +56,7 @@
       <template #header>
         <div class="card-header">
           <span class="section-title">手工拖拽排期</span>
-          <span class="count">待排 {{ unassignedStudents.length }} 人</span>
+          <span class="count">待排 {{ unassignedStudents.length }} 个组合</span>
         </div>
       </template>
       <ScheduleDragBoard
@@ -71,18 +71,41 @@
       <template #header>
         <div class="card-header">
           <span class="section-title">已排学生</span>
-          <span class="count">共 {{ schedules.length }} 人</span>
+          <span class="count">共 {{ schedules.length }} 条</span>
         </div>
       </template>
       <el-table v-loading="loading" :data="schedules" stripe>
         <el-table-column prop="studentNo" label="学号" width="120" />
         <el-table-column prop="studentName" label="姓名" width="100" />
+        <el-table-column prop="mentorName" label="导师" width="110" />
         <el-table-column prop="sessionName" label="场次" width="110" />
         <el-table-column prop="interviewDate" label="日期" width="120" />
         <el-table-column label="时段" width="130">
           <template #default="{ row }">{{ row.startTime }} - {{ row.endTime }}</template>
         </el-table-column>
         <el-table-column prop="statusText" label="状态" width="100" />
+        <el-table-column label="状态登记" width="170" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              link
+              type="success"
+              size="small"
+              :disabled="row.status === 2"
+              @click="markStatus(row, 2)"
+            >
+              已完成
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              size="small"
+              :disabled="row.status === 3"
+              @click="markStatus(row, 3)"
+            >
+              缺席
+            </el-button>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
             <el-button
@@ -106,6 +129,9 @@
         </el-form-item>
         <el-form-item label="原场次">
           <span>{{ adjustingSchedule?.sessionName }}</span>
+        </el-form-item>
+        <el-form-item label="导师">
+          <span>{{ adjustingSchedule?.mentorName }}</span>
         </el-form-item>
         <el-form-item label="目标场次">
           <el-select v-model="targetSessionId" placeholder="选择草稿场次" class="full-width">
@@ -148,7 +174,8 @@ import {
   listInterviewSchedules,
   listInterviewSessions,
   listUnassignedStudents,
-  publishInterviewSchedules
+  publishInterviewSchedules,
+  updateInterviewScheduleStatus
 } from '@/api/leaderInterview'
 import { getCurrentRound } from '@/api/public'
 import type { InterviewSchedule, InterviewSession, UnassignedStudent } from '@/types/interview'
@@ -280,7 +307,7 @@ async function handleAutoSchedule() {
     return
   }
   try {
-    await ElMessageBox.confirm('将按意向导师聚合，为本室未排期学生自动分配场次，确认继续？', '自动分配', {
+    await ElMessageBox.confirm('将按“学生 + 导师”组合，为本室未排期的组合自动分配场次，确认继续？', '自动分配', {
       type: 'warning'
     })
   } catch {
@@ -356,20 +383,40 @@ async function handleCancelPublish() {
   }
 }
 
-async function handleAssign(studentId: number, sessionId: number) {
+async function handleAssign(studentId: number, mentorId: number, sessionId: number) {
   const currentRoundId = requireRoundId()
   if (!currentRoundId) {
     return
   }
   assigning.value = true
   try {
-    await assignInterviewSchedule({ roundId: currentRoundId, studentId, sessionId })
+    await assignInterviewSchedule({ roundId: currentRoundId, studentId, mentorId, sessionId })
     ElMessage.success('排期成功')
     await loadData()
   } catch {
     // 错误提示已由请求层统一处理
   } finally {
     assigning.value = false
+  }
+}
+
+async function markStatus(schedule: InterviewSchedule, status: number) {
+  const actionText = status === 2 ? '已完成' : '缺席'
+  try {
+    await ElMessageBox.confirm(
+      `确定将 ${schedule.studentName} 的面试状态标记为「${actionText}」吗？`,
+      '状态登记',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  try {
+    await updateInterviewScheduleStatus(schedule.id, status)
+    ElMessage.success('面试状态已更新')
+    await loadData()
+  } catch {
+    // 错误提示已由请求层统一处理
   }
 }
 

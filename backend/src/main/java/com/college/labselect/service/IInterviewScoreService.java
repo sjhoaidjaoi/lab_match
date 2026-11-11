@@ -28,25 +28,25 @@ public interface IInterviewScoreService {
                                                 Integer status, long pageNum, long pageSize);
 
     /**
-     * 录入 / 更新评分。
+     * 导师录入 / 更新本人评分。
      *
-     * @param leaderUserId 负责人用户 ID
-     * @param req          评分请求
+     * @param teacherUserId 导师用户 ID
+     * @param req           评分请求
      * @return 评分结果
      */
-    InterviewScoreRespVO saveScore(Long leaderUserId, InterviewScoreSaveReqDTO req);
+    InterviewScoreRespVO saveTeacherScore(Long teacherUserId, InterviewScoreSaveReqDTO req);
 
     /**
-     * Excel 批量导入评分。
+     * 导师 Excel 批量导入本人评分。
      *
-     * @param leaderUserId 负责人用户 ID
-     * @param file         Excel 文件
+     * @param teacherUserId 导师用户 ID
+     * @param file          Excel 文件
      * @return 导入结果，含成功数与失败明细
      */
-    ScoreImportResultVO importScores(Long leaderUserId, MultipartFile file);
+    ScoreImportResultVO importTeacherScores(Long teacherUserId, MultipartFile file);
 
     /**
-     * 导师查看某学生本室评分。
+     * 导师查看某学生本人评分。
      *
      * @param teacherUserId 教师用户 ID
      * @param studentId     学生用户 ID

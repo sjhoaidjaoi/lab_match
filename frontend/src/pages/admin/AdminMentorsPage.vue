@@ -5,6 +5,10 @@
         <h2>导师与名额</h2>
         <p class="subtitle">查看全院导师档案，强制调整名额并维护账号状态</p>
       </div>
+      <div class="header-actions">
+        <el-button plain @click="importVisible = true">导入教师</el-button>
+        <el-button type="primary" @click="openCreate">新增教师</el-button>
+      </div>
     </div>
 
     <el-card shadow="never">
@@ -38,8 +42,18 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button
+              link
+              type="warning"
+              size="small"
+              :loading="resettingId === row.id"
+              @click="resetPassword(row)"
+            >
+              重置密码
+            </el-button>
             <el-button link type="primary" size="small" @click="openQuota(row)">调整名额</el-button>
             <el-button
               link
@@ -71,6 +85,9 @@
         <el-button type="primary" :loading="saving" @click="handleQuota">确认调整</el-button>
       </template>
     </el-dialog>
+
+    <MentorFormDialog v-model="formVisible" :mentor="editingMentor" :labs="labs" @saved="loadData" />
+    <MentorImportDialog v-model="importVisible" @imported="loadData" />
   </div>
 </template>
 
@@ -78,7 +95,14 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { listLabs } from '@/api/adminLab'
-import { forceAdjustMentorQuota, listMentors, updateMentorStatus } from '@/api/adminMentor'
+import {
+  forceAdjustMentorQuota,
+  listMentors,
+  resetMentorPassword,
+  updateMentorStatus
+} from '@/api/adminMentor'
+import MentorFormDialog from '@/components/MentorFormDialog.vue'
+import MentorImportDialog from '@/components/MentorImportDialog.vue'
 import type { LabListItem, MentorListItem } from '@/types/basic'
 
 interface MentorQuotaForm {
@@ -95,6 +119,11 @@ const labs = ref<LabListItem[]>([])
 const mentors = ref<MentorListItem[]>([])
 const labFilter = ref<number | ''>('')
 const keyword = ref('')
+
+const formVisible = ref(false)
+const editingMentor = ref<MentorListItem | null>(null)
+const importVisible = ref(false)
+const resettingId = ref<number | null>(null)
 
 const quotaDialogVisible = ref(false)
 const quotaFormRef = ref<FormInstance>()
@@ -135,6 +164,37 @@ async function loadData() {
     // 错误提示已由请求层统一处理
   } finally {
     loading.value = false
+  }
+}
+
+function openCreate() {
+  editingMentor.value = null
+  formVisible.value = true
+}
+
+function openEdit(mentor: MentorListItem) {
+  editingMentor.value = mentor
+  formVisible.value = true
+}
+
+async function resetPassword(mentor: MentorListItem) {
+  try {
+    await ElMessageBox.confirm(
+      `确定将「${mentor.realName}」的密码重置为系统初始密码吗？重置后需重新改密。`,
+      '提示',
+      { type: 'warning' }
+    )
+  } catch {
+    return
+  }
+  resettingId.value = mentor.id
+  try {
+    await resetMentorPassword(mentor.id)
+    ElMessage.success('密码已重置')
+  } catch {
+    // 错误提示已由请求层统一处理
+  } finally {
+    resettingId.value = null
   }
 }
 
@@ -222,5 +282,10 @@ onMounted(loadData)
 
 .keyword {
   width: 200px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
 }
 </style>

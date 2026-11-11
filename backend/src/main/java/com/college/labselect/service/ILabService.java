@@ -21,7 +21,8 @@ public interface ILabService {
      * @param pageSize 每页条数
      * @return 分页结果
      */
-    PageResult<LabListVO> pagePublicLabs(String keyword, Integer status, long pageNum, long pageSize);
+    PageResult<LabListVO> pagePublicLabs(String keyword, String department, Integer status,
+                                         long pageNum, long pageSize);
 
     /**
      * 公共端查询实训室详情。

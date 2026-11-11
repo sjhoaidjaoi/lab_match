@@ -1,7 +1,7 @@
 # 03 Database｜学生实训室进组选拔平台
 
 > 版本：v1.0（阶段 1 定稿待确认）
-> 表数量：21 张。所有状态值以本文档为准，`04_API.md` 与 `flow/` 必须与之一致。
+> 表数量：26 张。所有状态值以本文档为准，`04_API.md` 与 `flow/` 必须与之一致。
 
 ## 1. 设计规约
 
@@ -28,7 +28,7 @@
 | 面试场次 | interview_session | 以实训室为单位组织的面试场次 |
 | 面试场次面试官 | interview_session_interviewer | 场次与面试官（本室导师）的多对多关联 |
 | 面试排期 | interview_schedule | 学生与场次的对应关系 |
-| 面试评分 | interview_score | 四维分数 + 系统总分 + 手动覆写，本室共享 |
+| 面试评分 | interview_score | 四维分数 + 系统总分 + 手动覆写，按导师独立记录 |
 | 拟录取 | nomination | 导师勾选的拟录取名单 |
 | 递补名单 | waitlist | 导师维度的递补顺位 |
 | 录取结果 | admission | 学生最终去向，含确认状态 |
@@ -39,6 +39,11 @@
 | 站内通知 | user_notice | 面向个人的通知与已读状态 |
 | 操作日志 | operation_log | 名额调整、顺位调整、调剂等关键操作留痕 |
 | 轮次快照 | round_snapshot | 每轮结束固化名单，供回溯、审计与导出 |
+| 题库 | question | 导师个人题库，支持单选 / 多选 / 判断 / 填空 |
+| 在线试卷 | exam_paper | 导师面向本人意向学生发布的在线笔试卷 |
+| 试卷题目 | exam_paper_question | 试卷与题库题目的关联，含题号与分值 |
+| 在线答卷 | exam_answer | 学生答卷主表，一份试卷每生一份 |
+| 答卷明细 | exam_answer_item | 逐题作答内容与自动判分结果 |
 
 ## 3. 表结构
 
@@ -73,6 +78,7 @@
 | id | BIGINT | N | 自增 | 主键 |
 | lab_code | VARCHAR(32) | N | | 实训室编码，唯一 |
 | lab_name | VARCHAR(100) | N | | 实训室名称 |
+| department | VARCHAR(100) | Y | | 所属系部，用于公共端筛选与展示 |
 | introduction | TEXT | Y | | 简介 |
 | research_direction | VARCHAR(500) | Y | | 研究方向 |
 | equipment_env | TEXT | Y | | 设备与环境 |
@@ -99,6 +105,7 @@
 | user_id | BIGINT | N | | 关联 sys_user.id，教师 |
 | lab_id | BIGINT | N | | 所属实训室 |
 | research_direction | VARCHAR(500) | Y | | 研究方向 |
+| research_projects | VARCHAR(1000) | Y | | 在研项目，公共端导师详情展示 |
 | quota | INT | N | 0 | 个人招录名额上限（整个选拔周期） |
 | quota_used | INT | N | 0 | 已占用名额（含拟录取占位与待确认） |
 | version | INT | N | 0 | 乐观锁版本号 |
@@ -126,6 +133,8 @@
 | nomination_submit_end | DATETIME | N | | 名单提交截止；到点系统统一批处理签发，之后不再接受提交 |
 | confirm_start | DATETIME | N | | 学生确认开始；批处理完成后开启，早于此刻学生看不到待确认记录 |
 | nomination_end | DATETIME | N | | 确认截止；到点未确认批量置逾期 |
+| inner_adjust_start | DATETIME | Y | | 阶段 6 内部调剂开始；为空表示本轮不开放本室内部调剂 |
+| inner_adjust_end | DATETIME | Y | | 阶段 6 内部调剂结束；必须与开始时间同时配置，且不得晚于 `adjust_start` |
 | adjust_start | DATETIME | N | | 统筹调剂开始；教师抢录与管理员兜底仅在此后可用 |
 | adjust_end | DATETIME | N | | 统筹调剂结束；之后进入公示准备 |
 | weight_attitude | DECIMAL(5,2) | N | 25.00 | 学习态度权重（%） |
@@ -217,15 +226,16 @@
 | id | BIGINT | N | 自增 | 主键 |
 | round_id | BIGINT | N | | 所属轮次 |
 | lab_id | BIGINT | N | | 实训室 |
+| mentor_id | BIGINT | N | | 面试导师 `mentor_profile.id` |
 | session_id | BIGINT | N | | 面试场次 |
 | student_id | BIGINT | N | | 学生 |
 | status | TINYINT | N | 1 | 1 待面试 2 已完成 3 缺席 |
 | gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
 | gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
 
-索引：`uk_round_lab_student(round_id, lab_id, student_id)`、`idx_session_id(session_id)`、`idx_student_id(student_id)`
+索引：`uk_round_mentor_student(round_id, mentor_id, student_id)`、`idx_session_id(session_id)`、`idx_student_id(student_id)`、`idx_mentor_id(mentor_id)`
 
-说明：一个学生在一轮内、同一实训室只排 1 场；意向跨 N 个实训室则最多 N 条排期。
+说明：一个学生在一轮内、同一导师只排 1 场；选择 N 位导师则最多 N 条排期，且不得时间冲突。
 
 ### 3.9 interview_score 面试评分
 
@@ -234,6 +244,7 @@
 | id | BIGINT | N | 自增 | 主键 |
 | round_id | BIGINT | N | | 所属轮次 |
 | lab_id | BIGINT | N | | 实训室 |
+| mentor_id | BIGINT | N | | 评分导师 `mentor_profile.id` |
 | student_id | BIGINT | N | | 学生 |
 | session_id | BIGINT | Y | | 关联面试场次 |
 | attitude_score | DECIMAL(5,2) | N | 0.00 | 学习态度（0-100） |
@@ -245,14 +256,14 @@
 | final_total | DECIMAL(5,2) | N | 0.00 | 实际使用总分 = manual_total 非空取之，否则取 system_total |
 | adjust_reason | VARCHAR(500) | Y | | 手动调整理由 |
 | comment | VARCHAR(1000) | Y | | 面试评语 |
-| scorer_id | BIGINT | N | | 录分人（实训室负责人） |
+| scorer_id | BIGINT | N | | 录分人（导师本人） |
 | status | TINYINT | N | 1 | 1 草稿 2 已提交 |
 | gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
 | gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
 
-索引：`uk_round_lab_student(round_id, lab_id, student_id)`、`idx_round_lab(round_id, lab_id)`、`idx_scorer_id(scorer_id)`
+索引：`uk_round_mentor_student(round_id, mentor_id, student_id)`、`idx_round_lab(round_id, lab_id)`、`idx_scorer_id(scorer_id)`、`idx_mentor_id(mentor_id)`
 
-说明：一套分数本室共享，唯一键保证不会出现「一室多套分」。
+说明：评分按“导师 + 学生”独立记录，各导师分数独立用于本人拟录取，不做平均。
 
 ### 3.10 nomination 拟录取
 
@@ -290,6 +301,8 @@
 
 索引：`uk_round_mentor_student(round_id, mentor_id, student_id)`、`idx_round_mentor_rank(round_id, mentor_id, rank_no)`
 
+生成时点：批次签发（`POST /api/v1/admin/rounds/{id}/issue`）时，为本轮「本室有面试评分但未被拟录取」的学生按导师分组写入，`rank_no` 按 `final_total` 降序从 1 开始，同分按 `student_id` 升序；重复签发按唯一键跳过，不覆盖已有顺位与 `is_manual` 标记。
+
 ### 3.12 admission 录取结果
 
 | 字段 | 类型 | 允许空 | 默认值 | 说明 |
@@ -300,7 +313,7 @@
 | lab_id | BIGINT | N | | 实训室 |
 | mentor_id | BIGINT | N | | 导师 |
 | source_type | TINYINT | N | 1 | 1 拟录取 2 递补 3 内部调剂 4 跨室调剂 5 座谈安置 |
-| pending_type | TINYINT | Y | | 待确认类型：1 拟录取多选一 2 递补待确认 3 异议调整待确认；NULL 表示无需确认。**检索一律按 `status = 1`，该字段仅作展示标签** |
+| pending_type | TINYINT | Y | | 待确认类型：1 拟录取多选一 2 递补待确认 3 异议调整待确认 4 内部调剂待确认；NULL 表示无需确认。**检索一律按 `status = 1`，该字段仅作展示标签** |
 | active_flag | TINYINT | Y | | 终局有效标记：`status ∈ {2,3}` 时为 1，`{1,4,5}` 时为 NULL。**待确认期（status=1）必须为 NULL**，否则同轮多条待确认会撞唯一键 |
 | nomination_id | BIGINT | Y | | 来源拟录取记录 |
 | waitlist_id | BIGINT | Y | | 来源递补记录 |
@@ -346,6 +359,7 @@
 | status | TINYINT | N | 1 | 1 草稿 2 已发布 3 已下线 |
 | publish_time | DATETIME | Y | | 发布时间 |
 | publisher_id | BIGINT | N | | 发布人 |
+| biz_id | BIGINT | Y | | 业务关联 ID；公示类公告存 `publicity.id`，其余为空 |
 | gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
 | gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
 
@@ -473,6 +487,98 @@
 
 说明：**追加式写入，不覆盖历史**。同轮同类型重新生成时，旧记录 `is_current = 0`、新记录 `is_current = 1` 且 `version + 1`。补录两轮按 `round_id` 隔离。批次归档以 `is_current = 1` 且 `snapshot_type = 4` 的记录为唯一权威源；批次归档后，公示名单、确认名单与导出均从该快照渲染，归档前从实时表渲染。
 
+### 3.21 question 题库
+
+| 字段 | 类型 | 允许空 | 默认值 | 说明 |
+|---|---|---|---|---|
+| id | BIGINT | N | 自增 | 主键 |
+| mentor_id | BIGINT | N | | 所属导师 `mentor_profile.id` |
+| lab_id | BIGINT | N | | 所属实训室（冗余，便于按室查询） |
+| question_type | TINYINT | N | | 1 单选 2 多选 3 判断 4 填空 |
+| content | VARCHAR(1000) | N | | 题干 |
+| options_json | VARCHAR(2000) | Y | | 选项 JSON 数组，单选 / 多选使用；元素为选项文本，按 A/B/C… 顺序 |
+| correct_answer | VARCHAR(500) | N | | 正确答案：单选 `A`；多选 `A,B`；判断 `T`/`F`；填空多个可接受答案用 `|` 分隔 |
+| score | DECIMAL(5,2) | N | 0.00 | 默认分值（0.01–100） |
+| status | TINYINT | N | 1 | 1 启用 0 停用 |
+| gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
+| gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
+
+索引：`idx_mentor_id(mentor_id)`、`idx_lab_id(lab_id)`、`idx_type_status(question_type, status)`
+
+说明：题库按导师隔离，导师只能管理本人题目；被试卷引用的题目删除时置 `status = 0`，未引用时物理删除。
+
+### 3.22 exam_paper 在线试卷
+
+| 字段 | 类型 | 允许空 | 默认值 | 说明 |
+|---|---|---|---|---|
+| id | BIGINT | N | 自增 | 主键 |
+| round_id | BIGINT | N | | 所属选拔轮次 |
+| lab_id | BIGINT | N | | 所属实训室 |
+| mentor_id | BIGINT | N | | 出卷导师 `mentor_profile.id` |
+| title | VARCHAR(200) | N | | 试卷标题 |
+| description | VARCHAR(1000) | Y | | 试卷说明 |
+| start_time | DATETIME | N | | 答题开始时间 |
+| end_time | DATETIME | N | | 答题结束时间 |
+| duration_minutes | INT | N | 60 | 单次答题时长（分钟，1–300） |
+| total_score | DECIMAL(5,2) | N | 0.00 | 试卷总分，由题目分值汇总 |
+| status | TINYINT | N | 1 | 1 草稿 2 已发布 |
+| gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
+| gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
+
+索引：`idx_round_mentor(round_id, mentor_id)`、`idx_lab_id(lab_id)`、`idx_status(status)`
+
+说明：草稿可编辑、删除；发布后不可修改题目与时间窗，仅可通过结束时间自然关闭答题。试卷仅对填报了该导师且填报已提交的学生可见。
+
+### 3.23 exam_paper_question 试卷题目
+
+| 字段 | 类型 | 允许空 | 默认值 | 说明 |
+|---|---|---|---|---|
+| id | BIGINT | N | 自增 | 主键 |
+| paper_id | BIGINT | N | | 试卷 ID |
+| question_id | BIGINT | N | | 题库题目 ID |
+| question_no | INT | N | | 题号，从 1 开始 |
+| score | DECIMAL(5,2) | N | 0.00 | 本题在试卷中的分值 |
+| gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
+| gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
+
+索引：`uk_paper_no(paper_id, question_no)`、`uk_paper_question(paper_id, question_id)`、`idx_question_id(question_id)`
+
+### 3.24 exam_answer 在线答卷
+
+| 字段 | 类型 | 允许空 | 默认值 | 说明 |
+|---|---|---|---|---|
+| id | BIGINT | N | 自增 | 主键 |
+| paper_id | BIGINT | N | | 试卷 ID |
+| round_id | BIGINT | N | | 所属轮次（冗余） |
+| mentor_id | BIGINT | N | | 出卷导师（冗余） |
+| student_id | BIGINT | N | | 学生用户 ID |
+| start_time | DATETIME | N | | 开始答题时间 |
+| submit_time | DATETIME | Y | | 交卷时间，未交卷为空 |
+| objective_score | DECIMAL(5,2) | N | 0.00 | 客观题自动判分得分 |
+| total_score | DECIMAL(5,2) | N | 0.00 | 最终得分（当前全为客观题，与 objective_score 相同） |
+| status | TINYINT | N | 1 | 1 答题中 2 已提交 |
+| gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
+| gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
+
+索引：`uk_paper_student(paper_id, student_id)`、`idx_student_id(student_id)`、`idx_paper_id(paper_id)`
+
+说明：同一学生同一试卷只有一份答卷；答题截止 = `min(paper.end_time, start_time + duration_minutes)`，到点由系统自动交卷并判分。
+
+### 3.25 exam_answer_item 答卷明细
+
+| 字段 | 类型 | 允许空 | 默认值 | 说明 |
+|---|---|---|---|---|
+| id | BIGINT | N | 自增 | 主键 |
+| answer_id | BIGINT | N | | 答卷 ID |
+| question_id | BIGINT | N | | 题库题目 ID |
+| answer_content | VARCHAR(2000) | Y | | 学生作答内容：选择/判断存选项键，多选逗号分隔，填空存文本 |
+| is_correct | TINYINT | N | 0 | 是否答对：1 是 0 否（未交卷时恒为 0） |
+| score | DECIMAL(5,2) | N | 0.00 | 本题得分（未交卷时为 0） |
+| gmt_create | DATETIME | N | CURRENT_TIMESTAMP | 创建时间 |
+| gmt_modified | DATETIME | N | CURRENT_TIMESTAMP | 更新时间 |
+
+索引：`uk_answer_question(answer_id, question_id)`、`idx_answer_id(answer_id)`
+
 ## 4. ER 关系
 
 ```mermaid
@@ -497,6 +603,15 @@ erDiagram
     MENTOR_PROFILE ||--o{ NOMINATION : "提交拟录取"
     MENTOR_PROFILE ||--o{ WAITLIST : "维护递补"
     MENTOR_PROFILE ||--o{ ADMISSION : "最终录取"
+    MENTOR_PROFILE ||--o{ QUESTION : "维护题库"
+    MENTOR_PROFILE ||--o{ EXAM_PAPER : "出卷"
+    SELECTION_ROUND ||--o{ EXAM_PAPER : "轮次试卷"
+    EXAM_PAPER ||--o{ EXAM_PAPER_QUESTION : "包含题目"
+    QUESTION ||--o{ EXAM_PAPER_QUESTION : "被引用"
+    EXAM_PAPER ||--o{ EXAM_ANSWER : "学生答卷"
+    SYS_USER ||--o{ EXAM_ANSWER : "参加笔试"
+    EXAM_ANSWER ||--o{ EXAM_ANSWER_ITEM : "逐题作答"
+    QUESTION ||--o{ EXAM_ANSWER_ITEM : "作答题目"
     SYS_USER ||--o{ ADMISSION : "获得录取"
     SELECTION_ROUND ||--o{ ADMISSION : "轮次录取"
     ADMISSION ||--o| REALLOCATION : "调剂来源"
@@ -518,10 +633,15 @@ erDiagram
 - `intention` 1:N `intention_item`：一份填报最多 3 条平行意向，**不设先后顺序**。
 - `interview_session` 1:N `interview_session_interviewer`：一个场次配置至少 1 名面试官，面试官须为本室在职导师。
 - `interview_session` 1:N `interview_schedule`：一个场次安排多名学生。
-- `interview_score` 以 `(round_id, lab_id, student_id)` 唯一：一套分数本室共享，不按导师分叉。
+- `interview_score` 以 `(round_id, mentor_id, student_id)` 唯一：各导师独立评分，分数独立使用，不做平均。
 - `nomination` 以 `(round_id, mentor_id, student_id)` 唯一：同一导师对同一学生只勾选一次。
 - `admission` 以 `(round_id, mentor_id, student_id)` 唯一：同一导师对同一学生只有一条记录；一名学生同轮可持有多条待确认记录，确认唯一去向。
 - `admission` 1:0..1 `reallocation`：调剂产生的录取指向调味记录，拟录取与递补来源可为空。
+- `mentor_profile` 1:N `question`：题库按导师隔离，导师只能看到并管理自己的题目。
+- `mentor_profile` 1:N `exam_paper`：导师面向本人意向学生出卷；试卷绑定轮次与实训室。
+- `exam_paper` 1:N `exam_paper_question`：一张试卷包含多道题目，题目按 `question_no` 排序。
+- `exam_paper` 1:N `exam_answer`：一张试卷可被多名学生作答，`(paper_id, student_id)` 唯一。
+- `exam_answer` 1:N `exam_answer_item`：一份答卷包含逐题作答与判分结果，`(answer_id, question_id)` 唯一。
 
 ## 5. 关键业务约束
 
@@ -532,7 +652,7 @@ erDiagram
 | 同一学生同轮唯一终局录取 | admission | `active_flag` + 唯一键 `uk_round_student_active(round_id, student_id, active_flag)`；`status ∈ {2,3}` 时 `active_flag = 1`，`{1,4,5}` 时为 NULL（待确认期可并存多条） |
 | 轮次快照 | round_snapshot | 每轮结束追加写入，同轮同类型保留历史版本，`is_current = 1` 为当前版本 |
 | 本室名额不超总和 | lab / mentor_profile | 调整导师名额时校验 `SUM(quota) <= lab.total_quota` |
-| 一套分数本室共享 | interview_score | 唯一键 `(round_id, lab_id, student_id)` |
+| 导师独立评分 | interview_score | 唯一键 `(round_id, mentor_id, student_id)` |
 | 一轮一个最终去向 | admission | 唯一键 `(round_id, mentor_id, student_id)` + `uk_round_student_active` 双重保证 |
 | 单 offer 统一判定 | selection_round | 到 `nomination_submit_end` 停止收名单，系统批处理时按**学生维度**统计后才判定是否自动确认，禁止边提交边确认 |
 | 名额冻结 | mentor_profile | `NOW() >= 第 1 轮 apply_start` 后负责人不可修改 `quota`（`PUT /leader/mentors/{id}/quota` 返回 400004）；管理员强制调整走 `PUT /admin/mentors/{id}/quota`，必须写 `operation_log` 并在学生端公告 |
@@ -545,6 +665,11 @@ erDiagram
 | 关键操作可追溯 | operation_log | 名额调整、顺位调整、调剂、异议处理均写入 |
 | 批次锁定 | selection_round | 最后一轮 `locked = 1` 后全系统只读；解锁需学院管理员特批并留痕；锁定与解锁本身、快照生成不受只读限制 |
 | 抢录限时 | selection_round | 教师抢录仅在 `adjust_start ~ adjust_end` 内可用 |
+| 试卷只面向本人意向学生 | exam_paper / intention_item | 学生须在本轮已提交填报且 `intention_item.mentor_id = exam_paper.mentor_id`，否则 403001 |
+| 一试卷一生一答卷 | exam_answer | 唯一键 `uk_paper_student(paper_id, student_id)`，重复开始返回已有答卷 |
+| 在线答题截止 | exam_paper / exam_answer | `min(paper.end_time, start_time + duration_minutes)`，到点自动交卷判分，之后拒绝继续作答 |
+| 客观题自动判分 | exam_answer_item | 单选/判断精确匹配，多选集合匹配，填空按 `|` 分隔的任一标准答案匹配（忽略大小写与首尾空格） |
+| 题库仅导师本人可管 | question | 所有 `teacher/questions` 写操作校验 `mentor_id` 归属，越权返回 403001 |
 
 ## 6. DDL
 
@@ -605,6 +730,7 @@ CREATE TABLE `lab` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
   `lab_code` VARCHAR(32) NOT NULL COMMENT '实训室编码',
   `lab_name` VARCHAR(100) NOT NULL COMMENT '实训室名称',
+  `department` VARCHAR(100) DEFAULT NULL COMMENT '所属系部',
   `introduction` TEXT COMMENT '实训室简介',
   `research_direction` VARCHAR(500) DEFAULT NULL COMMENT '研究方向',
   `equipment_env` TEXT COMMENT '设备与环境',
@@ -631,6 +757,7 @@ CREATE TABLE `mentor_profile` (
   `user_id` BIGINT NOT NULL COMMENT '用户ID（教师）',
   `lab_id` BIGINT NOT NULL COMMENT '所属实训室ID',
   `research_direction` VARCHAR(500) DEFAULT NULL COMMENT '研究方向',
+  `research_projects` VARCHAR(1000) DEFAULT NULL COMMENT '在研项目',
   `quota` INT NOT NULL DEFAULT 0 COMMENT '个人招录名额上限',
   `quota_used` INT NOT NULL DEFAULT 0 COMMENT '已占用名额（含拟录取占位与待确认）',
   `version` INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
@@ -655,6 +782,8 @@ CREATE TABLE `selection_round` (
   `nomination_submit_end` DATETIME NOT NULL COMMENT '名单提交截止时间，到点系统统一批处理签发',
   `confirm_start` DATETIME NOT NULL COMMENT '学生确认开始时间，早于此刻不可见待确认记录',
   `nomination_end` DATETIME NOT NULL COMMENT '确认截止时间，到点未确认批量置逾期',
+  `inner_adjust_start` DATETIME DEFAULT NULL COMMENT '阶段6内部调剂开始时间，为空表示不开放',
+  `inner_adjust_end` DATETIME DEFAULT NULL COMMENT '阶段6内部调剂结束时间，不得晚于跨室调剂开始',
   `adjust_start` DATETIME NOT NULL COMMENT '统筹调剂开始时间，抢录与兜底仅此后可用',
   `adjust_end` DATETIME NOT NULL COMMENT '统筹调剂结束时间',
   `weight_attitude` DECIMAL(5,2) NOT NULL DEFAULT 25.00 COMMENT '学习态度权重(%)',
@@ -731,21 +860,24 @@ CREATE TABLE `interview_schedule` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
   `round_id` BIGINT NOT NULL COMMENT '轮次ID',
   `lab_id` BIGINT NOT NULL COMMENT '实训室ID',
+  `mentor_id` BIGINT NOT NULL COMMENT '面试导师 mentor_profile.id',
   `session_id` BIGINT NOT NULL COMMENT '面试场次ID',
   `student_id` BIGINT NOT NULL COMMENT '学生用户ID',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1待面试 2已完成 3缺席',
   `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_round_lab_student` (`round_id`, `lab_id`, `student_id`),
+  UNIQUE KEY `uk_round_mentor_student` (`round_id`, `mentor_id`, `student_id`),
   KEY `idx_session_id` (`session_id`),
-  KEY `idx_student_id` (`student_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='面试排期表';
+  KEY `idx_student_id` (`student_id`),
+  KEY `idx_mentor_id` (`mentor_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='面试排期表（按导师分别面试）';
 
 CREATE TABLE `interview_score` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
   `round_id` BIGINT NOT NULL COMMENT '轮次ID',
   `lab_id` BIGINT NOT NULL COMMENT '实训室ID',
+  `mentor_id` BIGINT NOT NULL COMMENT '评分导师 mentor_profile.id',
   `student_id` BIGINT NOT NULL COMMENT '学生用户ID',
   `session_id` BIGINT DEFAULT NULL COMMENT '面试场次ID',
   `attitude_score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '学习态度得分(0-100)',
@@ -757,15 +889,16 @@ CREATE TABLE `interview_score` (
   `final_total` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '实际使用总分',
   `adjust_reason` VARCHAR(500) DEFAULT NULL COMMENT '手动调整理由',
   `comment` VARCHAR(1000) DEFAULT NULL COMMENT '面试评语',
-  `scorer_id` BIGINT NOT NULL COMMENT '录分人（实训室负责人）',
+  `scorer_id` BIGINT NOT NULL COMMENT '录分人（导师本人）',
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1草稿 2已提交',
   `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_round_lab_student` (`round_id`, `lab_id`, `student_id`),
+  UNIQUE KEY `uk_round_mentor_student` (`round_id`, `mentor_id`, `student_id`),
   KEY `idx_round_lab` (`round_id`, `lab_id`),
-  KEY `idx_scorer_id` (`scorer_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='面试评分表（一室一套分，本室共享）';
+  KEY `idx_scorer_id` (`scorer_id`),
+  KEY `idx_mentor_id` (`mentor_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='面试评分表（导师独立评分）';
 
 CREATE TABLE `nomination` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
@@ -807,7 +940,7 @@ CREATE TABLE `admission` (
   `lab_id` BIGINT NOT NULL COMMENT '实训室ID',
   `mentor_id` BIGINT NOT NULL COMMENT '导师档案ID',
   `source_type` TINYINT NOT NULL DEFAULT 1 COMMENT '来源：1拟录取 2递补 3内部调剂 4跨室调剂 5座谈安置',
-  `pending_type` TINYINT DEFAULT NULL COMMENT '待确认类型：1拟录取多选一 2递补待确认 3异议调整待确认',
+  `pending_type` TINYINT DEFAULT NULL COMMENT '待确认类型：1拟录取多选一 2递补待确认 3异议调整待确认 4内部调剂待确认',
   `active_flag` TINYINT DEFAULT NULL COMMENT '终局有效标记：status为2/3时为1，其余为NULL',
   `nomination_id` BIGINT DEFAULT NULL COMMENT '来源拟录取ID',
   `waitlist_id` BIGINT DEFAULT NULL COMMENT '来源递补ID',
@@ -854,6 +987,7 @@ CREATE TABLE `notice` (
   `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1草稿 2已发布 3已下线',
   `publish_time` DATETIME DEFAULT NULL COMMENT '发布时间',
   `publisher_id` BIGINT NOT NULL COMMENT '发布人用户ID',
+  `biz_id` BIGINT DEFAULT NULL COMMENT '业务关联ID；公示类公告存publicity.id',
   `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -948,4 +1082,89 @@ CREATE TABLE `round_snapshot` (
   KEY `idx_round_type_current` (`round_id`, `snapshot_type`, `is_current`),
   KEY `idx_gmt_create` (`gmt_create`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='轮次快照表（追加式，不覆盖历史）';
+
+CREATE TABLE `question` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `mentor_id` BIGINT NOT NULL COMMENT '所属导师 mentor_profile.id',
+  `lab_id` BIGINT NOT NULL COMMENT '所属实训室ID',
+  `question_type` TINYINT NOT NULL COMMENT '题型：1单选 2多选 3判断 4填空',
+  `content` VARCHAR(1000) NOT NULL COMMENT '题干',
+  `options_json` VARCHAR(2000) DEFAULT NULL COMMENT '选项JSON数组，单选/多选使用，按A/B/C顺序',
+  `correct_answer` VARCHAR(500) NOT NULL COMMENT '正确答案：单选A；多选A,B；判断T/F；填空多个答案用|分隔',
+  `score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '默认分值(0.01-100)',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1启用 0停用',
+  `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_mentor_id` (`mentor_id`),
+  KEY `idx_lab_id` (`lab_id`),
+  KEY `idx_type_status` (`question_type`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='题库表';
+
+CREATE TABLE `exam_paper` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `round_id` BIGINT NOT NULL COMMENT '选拔轮次ID',
+  `lab_id` BIGINT NOT NULL COMMENT '实训室ID',
+  `mentor_id` BIGINT NOT NULL COMMENT '出卷导师 mentor_profile.id',
+  `title` VARCHAR(200) NOT NULL COMMENT '试卷标题',
+  `description` VARCHAR(1000) DEFAULT NULL COMMENT '试卷说明',
+  `start_time` DATETIME NOT NULL COMMENT '答题开始时间',
+  `end_time` DATETIME NOT NULL COMMENT '答题结束时间',
+  `duration_minutes` INT NOT NULL DEFAULT 60 COMMENT '单次答题时长(分钟)',
+  `total_score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '试卷总分',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1草稿 2已发布',
+  `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_round_mentor` (`round_id`, `mentor_id`),
+  KEY `idx_lab_id` (`lab_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='在线试卷表';
+
+CREATE TABLE `exam_paper_question` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `paper_id` BIGINT NOT NULL COMMENT '试卷ID',
+  `question_id` BIGINT NOT NULL COMMENT '题库题目ID',
+  `question_no` INT NOT NULL COMMENT '题号，从1开始',
+  `score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '本题分值',
+  `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_paper_no` (`paper_id`, `question_no`),
+  UNIQUE KEY `uk_paper_question` (`paper_id`, `question_id`),
+  KEY `idx_question_id` (`question_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='试卷题目表';
+
+CREATE TABLE `exam_answer` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `paper_id` BIGINT NOT NULL COMMENT '试卷ID',
+  `round_id` BIGINT NOT NULL COMMENT '轮次ID',
+  `mentor_id` BIGINT NOT NULL COMMENT '出卷导师 mentor_profile.id',
+  `student_id` BIGINT NOT NULL COMMENT '学生用户ID',
+  `start_time` DATETIME NOT NULL COMMENT '开始答题时间',
+  `submit_time` DATETIME DEFAULT NULL COMMENT '交卷时间',
+  `objective_score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '客观题自动判分得分',
+  `total_score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '最终得分',
+  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1答题中 2已提交',
+  `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_paper_student` (`paper_id`, `student_id`),
+  KEY `idx_student_id` (`student_id`),
+  KEY `idx_paper_id` (`paper_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='在线答卷表';
+
+CREATE TABLE `exam_answer_item` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `answer_id` BIGINT NOT NULL COMMENT '答卷ID',
+  `question_id` BIGINT NOT NULL COMMENT '题库题目ID',
+  `answer_content` VARCHAR(2000) DEFAULT NULL COMMENT '作答内容：选项键/判断/填空文本',
+  `is_correct` TINYINT NOT NULL DEFAULT 0 COMMENT '是否答对：1是 0否',
+  `score` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT '本题得分',
+  `gmt_create` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `gmt_modified` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_answer_question` (`answer_id`, `question_id`),
+  KEY `idx_answer_id` (`answer_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='答卷明细表';
 ```

@@ -21,6 +21,7 @@ public class LabSaveReqDTO {
     @NotBlank(message = "实训室名称不能为空")
     private String labName;
 
+    private String department;
     private String introduction;
     private String researchDirection;
     private String equipmentEnv;

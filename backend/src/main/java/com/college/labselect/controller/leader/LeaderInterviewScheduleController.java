@@ -5,6 +5,7 @@ import com.college.labselect.common.ResultCode;
 import com.college.labselect.dto.req.AutoScheduleReqDTO;
 import com.college.labselect.dto.req.ScheduleAdjustReqDTO;
 import com.college.labselect.dto.req.ScheduleAssignReqDTO;
+import com.college.labselect.dto.req.ScheduleStatusReqDTO;
 import com.college.labselect.dto.resp.InterviewScheduleVO;
 import com.college.labselect.dto.resp.UnassignedStudentVO;
 import com.college.labselect.exception.BusinessException;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -110,6 +112,23 @@ public class LeaderInterviewScheduleController {
     public Result<Long> assignSchedule(@AuthenticationPrincipal LoginUser loginUser,
                                        @Valid @RequestBody ScheduleAssignReqDTO req) {
         return Result.success(interviewScheduleService.assignSchedule(requireLogin(loginUser), req));
+    }
+
+    /**
+     * 登记面试状态。
+     *
+     * @param loginUser 当前登录用户
+     * @param id        排期 ID
+     * @param req       状态请求
+     * @return 统一响应
+     */
+    @Operation(summary = "登记面试状态")
+    @PutMapping("/{id}/status")
+    public Result<Void> updateStatus(@AuthenticationPrincipal LoginUser loginUser,
+                                     @PathVariable Long id,
+                                     @Valid @RequestBody ScheduleStatusReqDTO req) {
+        interviewScheduleService.updateScheduleStatus(requireLogin(loginUser), id, req.getStatus());
+        return Result.success();
     }
 
     private Long requireLogin(LoginUser loginUser) {

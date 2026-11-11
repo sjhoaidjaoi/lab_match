@@ -15,6 +15,9 @@ public class ScheduleAssignReqDTO {
     @NotNull(message = "学生 ID 不能为空")
     private Long studentId;
 
+    @NotNull(message = "导师 ID 不能为空")
+    private Long mentorId;
+
     @NotNull(message = "场次 ID 不能为空")
     private Long sessionId;
 }

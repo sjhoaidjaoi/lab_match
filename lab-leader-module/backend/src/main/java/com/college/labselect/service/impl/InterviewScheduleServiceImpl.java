@@ -62,6 +62,10 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
     private static final int ROUND_INTERVIEWING = 3;
     private static final int INTENTION_SUBMITTED = 2;
     private static final int SCHEDULE_PENDING = 1;
+    private static final int SCHEDULE_COMPLETED = 2;
+    private static final int SCHEDULE_ABSENT = 3;
+    private static final int LOCKED = 1;
+    private static final int MENTOR_ENABLED = 1;
 
     private final InterviewSessionMapper interviewSessionMapper;
     private final InterviewScheduleMapper interviewScheduleMapper;
@@ -92,6 +96,8 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
                 .map(InterviewSchedule::getSessionId).distinct().toList());
         Map<Long, SysUser> studentMap = loadUsers(schedules.stream()
                 .map(InterviewSchedule::getStudentId).distinct().toList());
+        Map<Long, String> mentorNameMap = loadMentorNames(schedules.stream()
+                .map(InterviewSchedule::getMentorId).filter(Objects::nonNull).distinct().toList());
         List<InterviewScheduleVO> result = new ArrayList<>();
         for (InterviewSchedule schedule : schedules) {
             InterviewSession session = sessionMap.get(schedule.getSessionId());
@@ -101,6 +107,8 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
             vo.setRoundId(schedule.getRoundId());
             vo.setLabId(schedule.getLabId());
             vo.setLabName(lab.getLabName());
+            vo.setMentorId(schedule.getMentorId());
+            vo.setMentorName(mentorNameMap.getOrDefault(schedule.getMentorId(), ""));
             vo.setSessionId(schedule.getSessionId());
             vo.setSessionName(session == null ? "" : session.getSessionName());
             vo.setInterviewDate(session == null ? null : session.getInterviewDate());
@@ -163,9 +171,11 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
                 new LambdaQueryWrapper<InterviewSchedule>()
                         .eq(InterviewSchedule::getRoundId, roundId)
                         .eq(InterviewSchedule::getLabId, lab.getId()));
-        Set<Long> existingStudents = existing.stream()
-                .map(InterviewSchedule::getStudentId)
+        Set<String> existingPairs = existing.stream()
+                .map(schedule -> pairKey(schedule.getStudentId(), schedule.getMentorId()))
                 .collect(Collectors.toSet());
+        Map<Long, List<InterviewSchedule>> studentSchedules = existing.stream()
+                .collect(Collectors.groupingBy(InterviewSchedule::getStudentId));
         Map<Long, Integer> remaining = new HashMap<>();
         for (InterviewSession session : sessions) {
             remaining.put(session.getId(), Optional.ofNullable(session.getCapacity()).orElse(0));
@@ -174,29 +184,40 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
             remaining.computeIfPresent(schedule.getSessionId(), (key, value) -> value - 1);
         }
         Map<Long, Set<Long>> sessionMentorIds = loadSessionMentorIds(sessions, lab.getId());
+        Map<Long, String> mentorNames = loadMentorNames(studentMentors.values().stream()
+                .flatMap(List::stream).distinct().toList());
+        List<Long> allSessionIds = new ArrayList<>(sessions.stream().map(InterviewSession::getId).toList());
+        allSessionIds.addAll(existing.stream().map(InterviewSchedule::getSessionId).toList());
+        Map<Long, InterviewSession> allSessionMap = loadSessions(allSessionIds.stream().distinct().toList());
         for (Long studentId : studentIds) {
-            if (existingStudents.contains(studentId)) {
-                continue;
+            for (Long mentorId : studentMentors.getOrDefault(studentId, List.of()).stream().distinct().toList()) {
+                if (!existingPairs.add(pairKey(studentId, mentorId))) {
+                    continue;
+                }
+                InterviewSession target = sessions.stream()
+                        .filter(session -> remaining.getOrDefault(session.getId(), 0) > 0)
+                        .filter(session -> sessionMentorIds.getOrDefault(session.getId(), Set.of())
+                                .contains(mentorId))
+                        .filter(session -> !hasTimeConflict(
+                                studentSchedules.getOrDefault(studentId, List.of()), session, allSessionMap))
+                        .min(Comparator.comparing(InterviewSession::getInterviewDate)
+                                .thenComparing(InterviewSession::getStartTime))
+                        .orElseThrow(() -> new BusinessException(ResultCode.BUSINESS_ERROR,
+                                "导师 " + mentorNames.getOrDefault(mentorId, String.valueOf(mentorId))
+                                        + " 无可用场次或与学生其他面试冲突，无法完成自动分配"));
+                InterviewSchedule schedule = new InterviewSchedule();
+                schedule.setRoundId(roundId);
+                schedule.setLabId(lab.getId());
+                schedule.setMentorId(mentorId);
+                schedule.setSessionId(target.getId());
+                schedule.setStudentId(studentId);
+                schedule.setStatus(SCHEDULE_PENDING);
+                interviewScheduleMapper.insert(schedule);
+                remaining.merge(target.getId(), -1, Integer::sum);
+                studentSchedules.computeIfAbsent(studentId, key -> new ArrayList<>()).add(schedule);
             }
-            Set<Long> mentorIds = new HashSet<>(studentMentors.getOrDefault(studentId, List.of()));
-            InterviewSession target = sessions.stream()
-                    .filter(session -> remaining.getOrDefault(session.getId(), 0) > 0)
-                    .sorted(Comparator.comparingInt(session ->
-                            sessionMentorIds.getOrDefault(session.getId(), Set.of()).stream()
-                                    .anyMatch(mentorIds::contains) ? 0 : 1))
-                    .findFirst()
-                    .orElseThrow(() -> new BusinessException(ResultCode.BUSINESS_ERROR,
-                            "场次容量不足，无法完成自动分配"));
-            InterviewSchedule schedule = new InterviewSchedule();
-            schedule.setRoundId(roundId);
-            schedule.setLabId(lab.getId());
-            schedule.setSessionId(target.getId());
-            schedule.setStudentId(studentId);
-            schedule.setStatus(SCHEDULE_PENDING);
-            interviewScheduleMapper.insert(schedule);
-            remaining.merge(target.getId(), -1, Integer::sum);
         }
-        log.info("自动分配面试排期，labId={}，roundId={}，studentCount={}", lab.getId(), roundId, studentIds.size());
+        log.info("自动分配面试排期，labId={}，roundId={}，pairCount={}", lab.getId(), roundId, existingPairs.size());
     }
 
     @Override
@@ -220,6 +241,8 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
                 .stream()
                 .collect(Collectors.toMap(InterviewSchedule::getId, Function.identity(), (first, second) -> first));
         List<InterviewSchedule> changed = new ArrayList<>();
+        Map<Long, Set<Long>> sessionMentorIds = loadSessionMentorIds(
+                new ArrayList<>(sessionMap.values()), lab.getId());
         for (ScheduleItemReqDTO item : req.getItems()) {
             InterviewSchedule schedule = scheduleMap.get(item.getScheduleId());
             if (schedule == null) {
@@ -234,6 +257,10 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
             }
             if (!Integer.valueOf(SESSION_DRAFT).equals(target.getStatus())) {
                 throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "已发布场次不可调整");
+            }
+            if (schedule.getMentorId() == null
+                    || !sessionMentorIds.getOrDefault(target.getId(), Set.of()).contains(schedule.getMentorId())) {
+                throw new BusinessException(ResultCode.BUSINESS_ERROR, "目标场次未配置该导师");
             }
             schedule.setSessionId(target.getId());
             changed.add(schedule);
@@ -270,12 +297,12 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
         if (items.isEmpty()) {
             return List.of();
         }
-        Set<Long> scheduledStudents = interviewScheduleMapper.selectList(
+        Set<String> scheduledPairs = interviewScheduleMapper.selectList(
                         new LambdaQueryWrapper<InterviewSchedule>()
                                 .eq(InterviewSchedule::getRoundId, targetRoundId)
                                 .eq(InterviewSchedule::getLabId, lab.getId()))
                 .stream()
-                .map(InterviewSchedule::getStudentId)
+                .map(schedule -> pairKey(schedule.getStudentId(), schedule.getMentorId()))
                 .collect(Collectors.toSet());
         Map<Long, List<Long>> studentMentors = items.stream()
                 .filter(item -> intentionStudentMap.containsKey(item.getIntentionId()))
@@ -287,22 +314,25 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
         Map<Long, SysUser> studentMap = loadUsers(new ArrayList<>(studentMentors.keySet()));
         List<UnassignedStudentVO> result = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : studentMentors.entrySet()) {
-            if (scheduledStudents.contains(entry.getKey())) {
+            List<Long> missingMentors = entry.getValue().stream().distinct()
+                    .filter(mentorId -> !scheduledPairs.contains(pairKey(entry.getKey(), mentorId)))
+                    .toList();
+            if (missingMentors.isEmpty()) {
                 continue;
             }
             SysUser student = studentMap.get(entry.getKey());
-            UnassignedStudentVO vo = new UnassignedStudentVO();
-            vo.setStudentId(entry.getKey());
-            vo.setStudentNo(student == null ? "" : DesensitizeUtils.maskUserNo(student.getUserNo()));
-            vo.setStudentName(student == null ? "" : DesensitizeUtils.maskName(student.getRealName()));
-            vo.setMentorNames(entry.getValue().stream()
-                    .map(mentorNameMap::get)
-                    .filter(Objects::nonNull)
-                    .distinct()
-                    .toList());
-            result.add(vo);
+            for (Long mentorId : missingMentors) {
+                UnassignedStudentVO vo = new UnassignedStudentVO();
+                vo.setStudentId(entry.getKey());
+                vo.setStudentNo(student == null ? "" : DesensitizeUtils.maskUserNo(student.getUserNo()));
+                vo.setStudentName(student == null ? "" : DesensitizeUtils.maskName(student.getRealName()));
+                vo.setMentorId(mentorId);
+                vo.setMentorName(mentorNameMap.getOrDefault(mentorId, ""));
+                result.add(vo);
+            }
         }
-        result.sort(Comparator.comparing(UnassignedStudentVO::getStudentId));
+        result.sort(Comparator.comparing(UnassignedStudentVO::getStudentId)
+                .thenComparing(UnassignedStudentVO::getMentorId));
         return result;
     }
 
@@ -328,6 +358,17 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
         if (!Integer.valueOf(SESSION_DRAFT).equals(session.getStatus())) {
             throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "仅草稿场次可拖拽排期");
         }
+        MentorProfile mentor = mentorProfileMapper.selectById(req.getMentorId());
+        if (mentor == null || !Objects.equals(mentor.getLabId(), lab.getId())
+                || !Integer.valueOf(MENTOR_ENABLED).equals(mentor.getStatus())) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "目标导师不可选");
+        }
+        long interviewer = interviewerMapper.selectCount(new LambdaQueryWrapper<InterviewSessionInterviewer>()
+                .eq(InterviewSessionInterviewer::getSessionId, session.getId())
+                .eq(InterviewSessionInterviewer::getInterviewerId, mentor.getUserId()));
+        if (interviewer == 0) {
+            throw new BusinessException(ResultCode.BUSINESS_ERROR, "该场次未配置目标导师");
+        }
         Intention intention = intentionMapper.selectOne(new LambdaQueryWrapper<Intention>()
                 .eq(Intention::getRoundId, round.getId())
                 .eq(Intention::getStudentId, req.getStudentId())
@@ -337,16 +378,16 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
         }
         long belongs = intentionItemMapper.selectCount(new LambdaQueryWrapper<IntentionItem>()
                 .eq(IntentionItem::getIntentionId, intention.getId())
-                .eq(IntentionItem::getLabId, lab.getId()));
+                .eq(IntentionItem::getMentorId, req.getMentorId()));
         if (belongs == 0) {
-            throw new BusinessException(ResultCode.FORBIDDEN, "该学生不属于本实训室");
+            throw new BusinessException(ResultCode.FORBIDDEN, "该学生未选择该导师");
         }
         long exists = interviewScheduleMapper.selectCount(new LambdaQueryWrapper<InterviewSchedule>()
                 .eq(InterviewSchedule::getRoundId, round.getId())
-                .eq(InterviewSchedule::getLabId, lab.getId())
+                .eq(InterviewSchedule::getMentorId, req.getMentorId())
                 .eq(InterviewSchedule::getStudentId, req.getStudentId()));
         if (exists > 0) {
-            throw new BusinessException(ResultCode.DUPLICATE_SUBMIT, "该学生已在本室排期");
+            throw new BusinessException(ResultCode.DUPLICATE_SUBMIT, "该学生已在该导师处排期");
         }
         long sessionCount = interviewScheduleMapper.selectCount(new LambdaQueryWrapper<InterviewSchedule>()
                 .eq(InterviewSchedule::getSessionId, session.getId()));
@@ -369,13 +410,40 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
         InterviewSchedule schedule = new InterviewSchedule();
         schedule.setRoundId(round.getId());
         schedule.setLabId(lab.getId());
+        schedule.setMentorId(req.getMentorId());
         schedule.setSessionId(session.getId());
         schedule.setStudentId(req.getStudentId());
         schedule.setStatus(SCHEDULE_PENDING);
         interviewScheduleMapper.insert(schedule);
-        log.info("拖拽排期，labId={}，roundId={}，sessionId={}，studentId={}",
-                lab.getId(), round.getId(), session.getId(), req.getStudentId());
+        log.info("拖拽排期，labId={}，roundId={}，mentorId={}，sessionId={}，studentId={}",
+                lab.getId(), round.getId(), req.getMentorId(), session.getId(), req.getStudentId());
         return schedule.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateScheduleStatus(Long leaderUserId, Long scheduleId, Integer status) {
+        Lab lab = requireLab(leaderUserId);
+        InterviewSchedule schedule = interviewScheduleMapper.selectById(scheduleId);
+        if (schedule == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND, "面试排期不存在");
+        }
+        if (!Objects.equals(schedule.getLabId(), lab.getId())) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "无权操作其他实训室的排期");
+        }
+        if (!Integer.valueOf(SCHEDULE_COMPLETED).equals(status)
+                && !Integer.valueOf(SCHEDULE_ABSENT).equals(status)) {
+            throw new BusinessException(ResultCode.PARAM_ERROR, "面试状态仅支持已完成或缺席");
+        }
+        SelectionRound round = selectionRoundMapper.selectById(schedule.getRoundId());
+        if (round != null && Integer.valueOf(LOCKED).equals(round.getLocked())) {
+            throw new BusinessException(ResultCode.STATUS_NOT_ALLOWED, "批次已锁定，不可登记面试状态");
+        }
+        InterviewSchedule update = new InterviewSchedule();
+        update.setId(schedule.getId());
+        update.setStatus(status);
+        interviewScheduleMapper.updateById(update);
+        log.info("登记面试状态，labId={}，scheduleId={}，status={}", lab.getId(), scheduleId, status);
     }
 
     @Override
@@ -405,6 +473,8 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
         Map<Long, SysUser> interviewerMap = loadUsers(interviewerIds.values().stream()
                 .flatMap(List::stream).distinct().toList());
         Map<Long, Lab> labMap = loadLabs(schedules.stream().map(InterviewSchedule::getLabId).distinct().toList());
+        Map<Long, String> mentorNameMap = loadMentorNames(schedules.stream()
+                .map(InterviewSchedule::getMentorId).filter(Objects::nonNull).distinct().toList());
         SelectionRound round = selectionRoundMapper.selectById(targetRoundId);
         List<StudentInterviewVO> result = new ArrayList<>();
         for (InterviewSchedule schedule : schedules) {
@@ -418,6 +488,8 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
             vo.setRoundNo(round == null ? null : round.getRoundNo());
             vo.setLabId(schedule.getLabId());
             vo.setLabName(lab == null ? "" : lab.getLabName());
+            vo.setMentorId(schedule.getMentorId());
+            vo.setMentorName(mentorNameMap.getOrDefault(schedule.getMentorId(), ""));
             vo.setSessionName(session.getSessionName());
             vo.setInterviewDate(session.getInterviewDate());
             vo.setStartTime(session.getStartTime());
@@ -438,6 +510,36 @@ public class InterviewScheduleServiceImpl implements IInterviewScheduleService {
                 .thenComparing(StudentInterviewVO::getStartTime,
                         Comparator.nullsLast(Comparator.naturalOrder())));
         return result;
+    }
+
+    /**
+     * 判断目标场次是否与该生已有排期时间冲突。
+     *
+     * @param schedules  该生已有排期
+     * @param target     目标场次
+     * @param sessionMap 场次映射
+     * @return 是否冲突
+     */
+    private boolean hasTimeConflict(List<InterviewSchedule> schedules, InterviewSession target,
+                                    Map<Long, InterviewSession> sessionMap) {
+        for (InterviewSchedule schedule : schedules) {
+            InterviewSession other = sessionMap.get(schedule.getSessionId());
+            if (other != null && InterviewTimeUtils.overlap(other, target)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 学生与导师组合键。
+     *
+     * @param studentId 学生 ID
+     * @param mentorId  导师档案 ID
+     * @return 组合键
+     */
+    private String pairKey(Long studentId, Long mentorId) {
+        return studentId + ":" + mentorId;
     }
 
     /**

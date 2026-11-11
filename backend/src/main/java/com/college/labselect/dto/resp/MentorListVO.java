@@ -16,6 +16,9 @@ public class MentorListVO {
     private String labName;
     private String title;
     private String researchDirection;
+    private String researchProjects;
+    private String phone;
+    private String email;
     private Integer quota;
     private Integer quotaUsed;
     private Integer remainQuota;

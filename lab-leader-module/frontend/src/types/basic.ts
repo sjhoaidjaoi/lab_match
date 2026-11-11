@@ -127,6 +127,8 @@ export interface RoundListItem {
   nominationSubmitEnd: string
   confirmStart: string
   nominationEnd: string
+  innerAdjustStart: string | null
+  innerAdjustEnd: string | null
   adjustStart: string
   adjustEnd: string
   weightAttitude: number
@@ -147,6 +149,8 @@ export interface RoundSaveReq {
   nominationSubmitEnd: string
   confirmStart: string
   nominationEnd: string
+  innerAdjustStart: string | null
+  innerAdjustEnd: string | null
   adjustStart: string
   adjustEnd: string
   weightAttitude: number

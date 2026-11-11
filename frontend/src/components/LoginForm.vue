@@ -31,16 +31,24 @@
       </el-form>
       <p class="tip">账号由学校统一创建，如无账号请联系学院管理员</p>
       <router-link class="back" to="/">返回首页</router-link>
+      <div class="role-links">
+        <span>其他角色入口：</span>
+        <router-link v-for="item in otherRoleLinks" :key="item.label" :to="item.to">
+          {{ item.label }}
+        </router-link>
+      </div>
+      <QuickLoginPanel class="quick-login-panel" :login-types="[props.loginType]" />
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@/store/user'
 import { login } from '@/api/auth'
+import QuickLoginPanel from '@/components/QuickLoginPanel.vue'
 import type { LoginReq } from '@/types/auth'
 
 interface Props {
@@ -66,6 +74,14 @@ const form = reactive<LoginReq>({
   userNo: '',
   password: ''
 })
+
+const ROLE_LINKS = [
+  { label: '学生入口', to: '/student/login', loginType: 1 },
+  { label: '教师入口', to: '/teacher/login', loginType: 2 },
+  { label: '管理员入口', to: '/admin/login', loginType: 3 }
+]
+
+const otherRoleLinks = computed(() => ROLE_LINKS.filter((item) => item.loginType !== props.loginType))
 
 const rules: FormRules<LoginReq> = {
   userNo: [{ required: true, message: `请输入${props.accountLabel}`, trigger: 'blur' }],
@@ -145,5 +161,22 @@ function handleForgot() {
 .back {
   font-size: 12px;
   color: #409eff;
+}
+
+.role-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.role-links a {
+  color: #409eff;
+}
+
+.quick-login-panel {
+  margin-top: 16px;
 }
 </style>

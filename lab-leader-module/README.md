@@ -5,7 +5,7 @@
 - 来源分支：`feature/lab-leader`
 - 来源提交：`1be964e`
 - 提取范围：负责人端后端接口、服务、DTO/VO、单元测试、前端页面、API、类型、接口契约、数据库说明与流程文档
-- 文件数量：76（含 README 与模块文档）
+- 文件数量：99（含 README 与模块文档）
 
 ## 目录结构
 
@@ -21,8 +21,8 @@ lab-leader-module/
 │       └── test/java/.../service/       面试与拟录取单元测试
 ├── frontend/
 │   └── src/
-│       ├── pages/teacher/               负责人端 6 个页面
-│       ├── components/                  场次表单、评分表单弹窗
+│       ├── pages/teacher/               负责人端 9 个页面
+│       ├── components/                  场次表单、评分表单、拖拽排期组件
 │       ├── api/                         负责人接口封装
 │       └── types/                       接口与页面类型
 └── docs-framework/
@@ -33,7 +33,7 @@ lab-leader-module/
 
 ## 模块文档
 
-- `docs-framework/04_API-负责人模块.md`：全局约定、错误码、21 个接口总览与请求/响应/失败码详述
+- `docs-framework/04_API-负责人模块.md`：全局约定、错误码、28 个接口总览与请求/响应/失败码详述
 - `docs-framework/03_Database-负责人相关表.md`：15 张相关表的字段说明与建表 DDL
 - `docs-framework/flow/`：面试排期与评分、拟录取与确认、统筹调剂、基础配置与账号管理（负责人相关部分）
 
@@ -48,10 +48,10 @@ lab-leader-module/
 
 ### 前端
 
-- 页面：`LeaderDashboardPage`、`LeaderMentorPage`、`LeaderInterviewSchedulePage`、`LeaderScoringPage`、`LeaderNominationPage`、`LeaderReallocationPage`
-- 弹窗组件：`SessionFormDialog`、`ScoreFormDialog`
-- API：`leaderInterview.ts`、`leaderMentor.ts`、`leaderScore.ts`、`leaderNomination.ts`、`leaderReallocation.ts`
-- 类型：`interview.ts`、`nomination.ts`、`reallocation.ts`
+- 页面：`LeaderDashboardPage`、`LeaderMentorPage`、`LeaderApplicantPage`、`LeaderInterviewSchedulePage`、`LeaderScoringPage`、`LeaderNominationPage`、`LeaderAdmissionPage`、`LeaderWaitlistPage`、`LeaderReallocationPage`
+- 弹窗组件：`SessionFormDialog`、`ScoreFormDialog`、`ScheduleDragBoard`
+- API：`leaderInterview.ts`、`leaderMentor.ts`、`leaderApplicant.ts`、`leaderScore.ts`、`leaderNomination.ts`、`leaderAdmission.ts`、`leaderWaitlist.ts`、`leaderReallocation.ts`
+- 类型：`interview.ts`、`nomination.ts`、`admission.ts`、`leader.ts`、`teacher.ts`、`reallocation.ts`
 
 ## 公共依赖（未复制，集成时使用主项目现有实现）
 
@@ -60,8 +60,8 @@ lab-leader-module/
 - 公共响应与工具：`Result`、`PageResult`、`ResultCode`、`BusinessException`、`GlobalExceptionHandler`、`StatusTextUtils`、`DesensitizeUtils`、`InterviewTimeUtils`
 - 安全与配置：`SecurityConfig`、`JwtAuthenticationFilter`、`LoginUser`
 - 实体与 Mapper：`SysUser`、`Lab`、`MentorProfile`、`SelectionRound`、`Intention`、`IntentionItem`、`InterviewSession`、`InterviewSessionInterviewer`、`InterviewSchedule`、`InterviewScore`、`Nomination`、`Reallocation`、`Admission`、`UserNotice`、`OperationLog`
-- 共用服务：`DashboardServiceImpl`（负责人工作台聚合）、`ReallocationServiceImpl`（本室内部调剂）、`MentorServiceImpl`（本室导师与名额调整）、`LabServiceImpl`
-- 共用接口：`IDashboardService`、`IReallocationService`、`IMentorService`
+- 共用服务：`DashboardServiceImpl`（负责人工作台聚合）、`ReallocationServiceImpl`（本室内部调剂）、`MentorServiceImpl`（本室导师与名额调整）、`AdmissionServiceImpl`（本室录取汇总与导出）、`WaitlistServiceImpl`（本室递补名单与顺位调整）、`NominationServiceImpl`（本室拟录取名单协调）、`TeacherApplicantServiceImpl`（本室报名学生与档案）、`LabServiceImpl`
+- 共用接口：`IDashboardService`、`IReallocationService`、`IMentorService`、`IAdmissionService`、`IWaitlistService`、`INominationService`、`ITeacherApplicantService`
 - 共用 DTO：`MentorListVO`、`MentorStatusReqDTO` 等
 
 ### 前端
@@ -71,7 +71,7 @@ lab-leader-module/
 - 登录态：`src/store/user.ts`
 - 本文件夹中标记为公共的文件：`api/dashboard.ts`、`api/public.ts`、`types/dashboard.ts`、`types/basic.ts`、`types/student.ts`
 
-## 后台接口清单（21 个）
+## 后台接口清单（28 个）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -86,15 +86,22 @@ lab-leader-module/
 | POST | /api/v1/leader/interview-sessions/publish/cancel | 取消并重排 |
 | GET | /api/v1/leader/interview-schedules/unassigned | 待排学生列表 |
 | POST | /api/v1/leader/interview-schedules/assign | 拖拽排期 |
+| PUT | /api/v1/leader/interview-schedules/{id}/status | 登记面试状态 |
 | GET | /api/v1/leader/interview-schedules | 排期列表 |
 | POST | /api/v1/leader/interview-schedules/auto | 自动分配 |
 | PUT | /api/v1/leader/interview-schedules | 手工调整排期 |
-| GET | /api/v1/leader/scores | 本室评分列表 |
-| POST | /api/v1/leader/scores | 录入/更新评分 |
-| POST | /api/v1/leader/scores/import | Excel 批量导入评分 |
+| GET | /api/v1/leader/scores | 本室评分汇总（按学生+导师） |
 | GET | /api/v1/leader/nominations | 本室拟录取汇总 |
 | POST | /api/v1/leader/nominations/submit | 提交本室名单 |
+| GET | /api/v1/leader/nominations/{mentorId} | 查看导师拟录取名单 |
+| PUT | /api/v1/leader/nominations/{mentorId} | 调整导师拟录取名单 |
+| GET | /api/v1/leader/applicants | 本室报名学生列表 |
+| GET | /api/v1/leader/students/{studentId}/archive | 本室报名学生档案 |
 | GET | /api/v1/leader/reallocation/candidates | 本室调剂候选 |
+| GET | /api/v1/leader/admissions | 本室录取确认汇总 |
+| GET | /api/v1/leader/admissions/export | 导出本室最终名单 |
+| GET | /api/v1/leader/waitlist | 本室递补名单 |
+| PUT | /api/v1/leader/waitlist/rank | 调整本室递补顺位 |
 | POST | /api/v1/leader/reallocation | 执行本室内部调剂 |
 
 接口契约见本模块 `docs-framework/04_API-负责人模块.md`，内容与主项目 `docs-framework/04_API.md` 同步。
@@ -105,9 +112,13 @@ lab-leader-module/
 |---|---|
 | /leader | 本室工作台 |
 | /leader/mentors | 本室导师与名额 |
+| /leader/applicants | 本室报名学生 |
 | /leader/interview-schedule | 面试排期 |
-| /leader/scoring | 本室评分录入 |
+| /leader/scoring | 本室评分汇总 |
 | /leader/nominations | 本室录取汇总 |
+| /leader/admissions | 录取确认汇总 |
+| /leader/final-list | 本室最终名单 |
+| /leader/waitlist | 本室递补名单 |
 | /leader/reallocation | 本室内部调剂 |
 
 ## 涉及数据表
@@ -129,6 +140,9 @@ lab-leader-module/
 - 已发布场次可通过「取消并重排」回退为草稿，必须填写原因并写入操作日志；学生收到「面试安排变更」通知，重新发布后再次通知。
 - 排期手工调整会校验学生时间冲突（409001）与场次容量（400002）。
 - 待排学生支持拖拽到草稿场次；分配时校验本室意向、重复排期、容量与跨室时间冲突。
-- 评分导入仅支持 `.xlsx`，列顺序：学号、学习态度、逻辑思维、编程基础、时间投入、评语；返回成功数、失败数与失败明细。
+- 负责人可查看本室录取确认汇总、最终名单并导出；最终名单默认仅含已确认与已入组记录。
+- 负责人可查看本室全部导师递补名单并调整顺位，调整必须填写理由并写操作日志。
+- 导师独立评分：导师只能给选择本人且已排期的学生评分，评分按“导师 + 学生”记录；负责人只汇总查看，不统一录分。
+- 导师评分导入仅支持 `.xlsx`，列顺序：学号、学习态度、逻辑思维、编程基础、时间投入、评语；返回成功数、失败数与失败明细。
 - 分数与金额以 JSON 数字返回，保留两位小数。
 - 拟录取汇总的状态文案：1 待提交、2 已提交、0 未提交；已勾选数量包含草稿与已提交。

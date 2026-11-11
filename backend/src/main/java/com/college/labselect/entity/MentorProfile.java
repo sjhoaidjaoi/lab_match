@@ -23,6 +23,8 @@ public class MentorProfile {
 
     private String researchDirection;
 
+    private String researchProjects;
+
     private Integer quota;
 
     private Integer quotaUsed;

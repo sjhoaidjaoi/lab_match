@@ -47,3 +47,8 @@ export interface NoticeSavePayload {
   attachmentUrl?: string
   status?: number
 }
+
+export interface NoticeAttachment {
+  fileName: string
+  url: string
+}

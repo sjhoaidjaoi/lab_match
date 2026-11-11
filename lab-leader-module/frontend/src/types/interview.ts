@@ -30,6 +30,8 @@ export interface InterviewSchedule {
   roundId: number
   labId: number
   labName: string
+  mentorId: number
+  mentorName: string
   studentId: number
   studentNo: string
   studentName: string
@@ -55,6 +57,7 @@ export interface ScheduleAdjustReq {
 export interface ScheduleAssignReq {
   roundId: number
   studentId: number
+  mentorId: number
   sessionId: number
 }
 
@@ -62,7 +65,8 @@ export interface UnassignedStudent {
   studentId: number
   studentNo: string
   studentName: string
-  mentorNames: string[]
+  mentorId: number
+  mentorName: string
 }
 
 export interface InterviewScoreRow {
@@ -70,6 +74,8 @@ export interface InterviewScoreRow {
   studentId: number
   studentNo: string
   studentName: string
+  mentorId: number
+  mentorName: string
   sessionName: string
   attitudeScore: number | null
   logicScore: number | null
@@ -103,6 +109,25 @@ export interface InterviewScoreResp {
   status: number
 }
 
+export interface TeacherScoreDetail {
+  id: number
+  studentId: number
+  mentorId: number
+  mentorName: string
+  studentNo: string
+  studentName: string
+  attitudeScore: number | null
+  logicScore: number | null
+  programmingScore: number | null
+  timeScore: number | null
+  systemTotal: number | null
+  manualTotal: number | null
+  finalTotal: number | null
+  adjustReason: string | null
+  comment: string | null
+  status: number
+}
+
 export interface ScoreImportFailItem {
   rowNo: number
   userNo: string
@@ -121,6 +146,8 @@ export interface StudentInterview {
   roundNo: number
   labId: number
   labName: string
+  mentorId: number
+  mentorName: string
   sessionName: string
   interviewDate: string
   startTime: string

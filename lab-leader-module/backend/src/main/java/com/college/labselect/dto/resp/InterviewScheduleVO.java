@@ -16,6 +16,8 @@ public class InterviewScheduleVO {
     private Long roundId;
     private Long labId;
     private String labName;
+    private Long mentorId;
+    private String mentorName;
     private Long sessionId;
     private String sessionName;
 

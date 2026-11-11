@@ -31,6 +31,35 @@ export interface PublicityDetail {
   list: PublicityRow[]
 }
 
+/** 管理员公示名单行，字段与 04_API.md §3.35.1 一致 */
+export interface PublicityAdminRow {
+  admissionId: number
+  studentId: number
+  studentNo: string
+  studentName: string
+  college: string
+  major: string
+  labId: number
+  labName: string
+  mentorId: number
+  mentorName: string
+  finalTotal: number | null
+  status: number
+  statusText: string
+  confirmTime: string | null
+}
+
+/** 管理员公示名单明细 */
+export interface PublicityAdminDetail {
+  id: number
+  title: string
+  startTime: string
+  endTime: string
+  status: number
+  total: number
+  list: PublicityAdminRow[]
+}
+
 export interface PublicityCreateReq {
   roundId: number
   title: string

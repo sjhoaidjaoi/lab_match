@@ -79,12 +79,19 @@
 | POST | /api/v1/leader/interview-sessions/publish/cancel | 取消并重排 | 负责人 |
 | GET | /api/v1/leader/interview-schedules/unassigned | 待排学生列表 | 负责人 |
 | POST | /api/v1/leader/interview-schedules/assign | 拖拽排期 | 负责人 |
-| GET | /api/v1/leader/scores | 本室评分列表 | 负责人 |
-| POST | /api/v1/leader/scores | 录入/更新评分 | 负责人 |
-| POST | /api/v1/leader/scores/import | Excel 批量导入评分 | 负责人 |
+| PUT | /api/v1/leader/interview-schedules/{id}/status | 登记面试状态 | 负责人 |
+| GET | /api/v1/leader/scores | 本室评分汇总（按学生+导师） | 负责人 |
 | GET | /api/v1/leader/nominations | 本室拟录取汇总 | 负责人 |
 | POST | /api/v1/leader/nominations/submit | 提交本室名单至学院 | 负责人 |
+| GET | /api/v1/leader/nominations/{mentorId} | 查看导师拟录取名单 | 负责人 |
+| PUT | /api/v1/leader/nominations/{mentorId} | 调整导师拟录取名单 | 负责人 |
+| GET | /api/v1/leader/applicants | 本室报名学生列表 | 负责人 |
+| GET | /api/v1/leader/students/{studentId}/archive | 本室报名学生档案 | 负责人 |
 | GET | /api/v1/leader/reallocation/candidates | 本室内部调剂候选 | 负责人 |
+| GET | /api/v1/leader/admissions | 本室录取确认汇总 | 负责人 |
+| GET | /api/v1/leader/admissions/export | 导出本室最终名单 | 负责人 |
+| GET | /api/v1/leader/waitlist | 本室递补名单 | 负责人 |
+| PUT | /api/v1/leader/waitlist/rank | 调整本室递补顺位 | 负责人 |
 | POST | /api/v1/leader/reallocation | 执行内部调剂 | 负责人 |
 
 
@@ -424,6 +431,14 @@
 { "code": 409001, "message": "与该生其他面试场次时间冲突" }
 ```
 
+### 3.25.7 登记面试状态 `PUT /api/v1/leader/interview-schedules/{id}/status`
+
+- 鉴权：负责人
+- 请求：`{ "status": "TINYINT, 2 已完成 / 3 缺席, 必填" }`
+- 校验：排期属于本室；批次未锁定
+- 成功响应：`{ "code": 200, "message": "success", "data": null }`
+- 失败响应：400001（状态非法）、400005（批次锁定）、403001（跨室）、404001（排期不存在）
+
 ### 3.26 发布排期 `POST /api/v1/leader/interview-sessions/publish`
 
 - 鉴权：负责人
@@ -471,9 +486,10 @@
 { "code": 400005, "message": "无可取消的已发布场次" }
 ```
 
-### 3.27 录入评分 `POST /api/v1/leader/scores`
+### 3.27 导师录入评分 `POST /api/v1/teacher/scores`
 
-- 鉴权：负责人
+- 鉴权：导师
+- 说明：负责人不统一录分；每位导师只给选择本人且已排期的学生评分，评分按 `(round_id, mentor_id, student_id)` 唯一，仅用于本人拟录取
 - 请求：
 
 ```json
@@ -515,12 +531,13 @@
 { "code": 400004, "message": "当前不在面试时间窗内" }
 { "code": 400005, "message": "当前不在面试阶段" }
 { "code": 400005, "message": "批次已锁定，不可录入评分" }
-{ "code": 403001, "message": "该学生未在本室面试" }
+{ "code": 403001, "message": "该学生未选择该导师或尚未排期" }
 ```
 
-### 3.27.1 本室评分列表 `GET /api/v1/leader/scores`
+### 3.27.1 本室评分汇总 `GET /api/v1/leader/scores`
 
 - 鉴权：负责人
+- 说明：按“学生 + 导师”返回本室本轮全部评分，供负责人汇总；负责人不录入、不修改分数
 - 查询参数：
 
 | 参数 | 类型 | 必填 | 说明 |
@@ -547,6 +564,8 @@
         "studentId": 1001,
         "studentNo": "2022****01",
         "studentName": "陈*丽",
+        "mentorId": 11,
+        "mentorName": "李海峰",
         "sessionId": 701,
         "sessionName": "第一场",
         "attitudeScore": 90.00,
@@ -564,12 +583,12 @@
 }
 ```
 
-- 说明：列表以本室本轮排期学生为基准，按学号升序返回；`status = 0` 时 `id` 与各项评分字段均为 `null`，`statusText = "未评分"`
+- 说明：列表以本室本轮“学生 + 导师”排期为基准，按学号升序返回；`status = 0` 时 `id` 与各项评分字段均为 `null`，`statusText = "未评分"`
 - 失败响应：`{ "code": 403001, "message": "仅实训室负责人可录入评分" }`
 
-### 3.27.2 Excel 批量导入评分 `POST /api/v1/leader/scores/import`
+### 3.27.2 导师 Excel 批量导入评分 `POST /api/v1/teacher/scores/import`
 
-- 鉴权：负责人
+- 鉴权：导师
 - 请求：`multipart/form-data`，字段名 `file`，仅支持 `.xlsx`
 - Excel 列顺序（首行为表头）：
 
@@ -679,6 +698,7 @@
 ### 3.30 本室内部调剂 `POST /api/v1/leader/reallocation`
 
 - 鉴权：负责人
+- 说明：仅在阶段 6 `inner_adjust_start ~ inner_adjust_end` 内开放；提交后生成 `admission.status = 1`、`pending_type = 4` 的待确认记录，学生确认后生效；确认截止 = `min(inner_adjust_end, 通知时刻 + 24 小时)`；逾期或拒绝时释放名额并触发同导师递补，不影响学生阶段 7 跨室调剂资格（需勾选服从跨室）
 - 请求：
 
 ```json
@@ -690,14 +710,29 @@
 }
 ```
 
-- 成功响应：`{ "code": 200, "message": "success", "data": { "reallocationId": 1401, "admissionId": 902 } }`
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "reallocationId": 1401,
+    "admissionId": 902,
+    "status": 1,
+    "confirmDeadline": "2026-11-05 18:00:00"
+  }
+}
+```
+
 - 失败响应：
 
 ```json
 { "code": 400001, "message": "调剂说明不能为空" }
 { "code": 400002, "message": "学生未勾选服从实训室内部调剂" }
 { "code": 400002, "message": "目标导师剩余名额不足" }
-{ "code": 400004, "message": "当前不在调剂时间窗内" }
+{ "code": 400004, "message": "本轮未配置内部调剂时间窗" }
+{ "code": 400004, "message": "当前不在内部调剂时间窗内" }
 { "code": 400005, "message": "批次已锁定，不可调剂" }
 { "code": 400005, "message": "学生本轮已有录取记录" }
 { "code": 403001, "message": "该学生不属于本实训室" }
@@ -749,4 +784,150 @@
 
 - 说明：`totalScore` 无面试评分时为 `null`；列表按总分降序、总分相同按学生 ID 升序，`null` 总分排在最后
 - 失败响应：`{ "code": 403001, "message": "仅实训室负责人可查看本室调剂候选" }`
+
+### 3.30.2 本室录取确认汇总 `GET /api/v1/leader/admissions`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选，默认最近轮次）、`finalOnly`（可选，默认 false；true 仅返回已确认/已入组记录）
+- 说明：仅返回负责人所在实训室的录取记录；学号与姓名脱敏；`confirmedCount` 统计 status = 2，`enrolledCount` 统计 status = 3，`abandonedCount` 统计 status ∈ {4,5}
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "roundId": 1,
+    "labId": 1,
+    "labName": "人工智能实训室",
+    "labQuota": 20,
+    "allocatedQuota": 18,
+    "quotaUsed": 8,
+    "remainQuota": 12,
+    "totalCount": 10,
+    "pendingCount": 1,
+    "confirmedCount": 6,
+    "enrolledCount": 2,
+    "abandonedCount": 1,
+    "items": [
+      {
+        "id": 901,
+        "studentId": 1001,
+        "studentNo": "2022****01",
+        "studentName": "陈*丽",
+        "mentorId": 11,
+        "mentorName": "李海峰",
+        "totalScore": 85.75,
+        "status": 2,
+        "statusText": "已确认",
+        "sourceType": 1,
+        "sourceTypeText": "拟录取",
+        "confirmTime": "2026-11-05 10:00:00",
+        "confirmDeadline": "2026-11-05 12:00:00"
+      }
+    ]
+  }
+}
+```
+
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可查看本室录取情况" }`
+
+### 3.30.3 导出本室最终名单 `GET /api/v1/leader/admissions/export`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选，默认最近轮次）
+- 说明：仅导出负责人所在实训室的录取记录；归档后从最终归档快照渲染
+- 成功响应：`application/octet-stream`，文件名 `leader-results.xlsx`
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可查看本室录取情况" }`
+
+### 3.30.4 本室递补名单 `GET /api/v1/leader/waitlist`
+
+- 鉴权：负责人
+- 查询参数：`roundId`（可选，默认最近轮次）
+- 说明：返回本室全部导师的递补名单，按导师、顺位升序；学号与姓名脱敏
+- 成功响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "id": 1101,
+      "roundId": 1,
+      "mentorId": 11,
+      "mentorName": "李海峰",
+      "rankNo": 1,
+      "studentId": 1002,
+      "studentNo": "2022****02",
+      "studentName": "张*强",
+      "totalScore": 78.50,
+      "isManual": 0,
+      "adjustReason": null,
+      "applyStatus": 1,
+      "applyStatusText": "待处理"
+    }
+  ]
+}
+```
+
+- 失败响应：`{ "code": 403001, "message": "仅实训室负责人可操作本室递补名单" }`
+
+### 3.30.6 本室报名学生列表 `GET /api/v1/leader/applicants`
+
+- 鉴权：负责人；查询参数 `roundId`、`keyword`、`pageNum`、`pageSize`
+- 盲选门禁：填报截止前 `visible = 0` 且列表为空
+- 返回学生基础信息、全部意向（实训室 + 导师）、两个调剂意愿、面试场次、总分、录取状态；学号姓名脱敏
+- 失败响应：403001（非本室负责人）
+
+### 3.30.7 本室报名学生档案 `GET /api/v1/leader/students/{studentId}/archive`
+
+- 鉴权：负责人；查询参数 `roundId`
+- 校验：填报截止后、学生已提交意向且包含本实训室
+- 返回字段同导师端档案接口，学号姓名脱敏；未创建档案返回 `data: null`
+- 失败响应：403001（未截止或未报名本室）、404001（学生不存在）
+
+### 3.30.8 查看导师拟录取名单 `GET /api/v1/leader/nominations/{mentorId}`
+
+- 鉴权：负责人；查询参数 `roundId`
+- 返回导师名额、已占用、当前选中学生 ID、候选学生（学号姓名脱敏、总分、是否已勾选）
+- 失败响应：403001（跨室导师）
+
+### 3.30.9 调整导师拟录取名单 `PUT /api/v1/leader/nominations/{mentorId}`
+
+- 鉴权：负责人
+- 请求：`{ "roundId", "studentIds": [], "reason": "必填" }`
+- 校验：名单提交时间窗内、批次未锁定；导师属于本室；学生已提交意向且选择该导师；已录入面试评分；不得超过个人名额
+- 副作用：覆盖该导师名单并置为已提交，差额调整 `quota_used`，写 `operation_log`
+- 失败响应：400003（超名额）、400005（窗口外/锁定）、400002（未评分/未选导师）、403001（跨室）
+
+
+### 3.30.5 调整本室递补顺位 `PUT /api/v1/leader/waitlist/rank`
+
+- 鉴权：负责人
+- 请求：
+
+```json
+{
+  "roundId": "BIGINT, 轮次ID, 必填",
+  "items": [
+    { "waitlistId": "BIGINT, 递补记录ID, 必填", "rankNo": "INT, 新顺位, 从1开始" }
+  ],
+  "adjustReason": "string, 调整理由, 必填, 最长200字"
+}
+```
+
+- 校验：递补记录必须属于本室导师；同一导师内顺位不可重复；批次锁定后拒绝；调整写 `operation_log`
+- 成功响应：`{ "code": 200, "message": "success", "data": null }`
+- 失败响应：
+
+```json
+{ "code": 400001, "message": "调整理由不能为空" }
+{ "code": 400002, "message": "同一导师递补顺位重复" }
+{ "code": 400002, "message": "递补记录不属于该轮次" }
+{ "code": 400005, "message": "批次已锁定，不可调整递补顺位" }
+{ "code": 403001, "message": "无权调整其他实训室的递补记录" }
+{ "code": 404001, "message": "递补记录不存在" }
+{ "code": 404001, "message": "选拔轮次不存在" }
+```
 

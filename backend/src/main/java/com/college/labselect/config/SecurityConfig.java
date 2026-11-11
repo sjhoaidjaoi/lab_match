@@ -48,8 +48,11 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
-                        .requestMatchers("/api/v1/public/**", "/v3/api-docs/**", "/swagger-ui/**",
+                        .requestMatchers("/api/v1/public/**", "/api/v1/files/**", "/v3/api-docs/**", "/swagger-ui/**",
                                 "/swagger-ui.html", "/doc.html", "/webjars/**", "/error").permitAll()
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/teacher/**", "/api/v1/leader/**").hasRole("TEACHER")
+                        .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated())
                 .exceptionHandling(handler -> handler
                         .authenticationEntryPoint((request, response, exception) ->

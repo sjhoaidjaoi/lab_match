@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h2>面试安排</h2>
-        <p class="subtitle">意向跨多个实训室时，请按场次分别参加面试</p>
+        <p class="subtitle">按“导师 + 场次”分别参加面试，请留意每位导师的安排</p>
       </div>
     </div>
 
@@ -21,6 +21,7 @@
           </el-tag>
         </div>
         <div class="info-row">实训室：{{ item.labName }}</div>
+        <div class="info-row">导师：{{ item.mentorName || '-' }}</div>
         <div class="info-row">时间：{{ item.interviewDate }} {{ item.startTime }} - {{ item.endTime }}</div>
         <div class="info-row">地点：{{ item.location }}</div>
         <div class="info-row">面试官：{{ item.interviewers.join('、') || '-' }}</div>

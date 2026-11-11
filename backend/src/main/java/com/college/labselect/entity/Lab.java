@@ -23,6 +23,8 @@ public class Lab {
 
     private String labName;
 
+    private String department;
+
     private String introduction;
 
     private String researchDirection;

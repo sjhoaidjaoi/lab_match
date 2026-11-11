@@ -5,7 +5,7 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 学生批量导入结果，响应结构对齐 04_API.md §3.32。
+ * 批量导入结果，学生导入对齐 04_API.md §3.32，教师导入对齐 §3.32.2。
  */
 @Data
 public class StudentImportResultVO {

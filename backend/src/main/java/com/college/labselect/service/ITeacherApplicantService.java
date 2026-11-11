@@ -1,5 +1,6 @@
 package com.college.labselect.service;
 
+import com.college.labselect.dto.resp.LeaderApplicantPageVO;
 import com.college.labselect.dto.resp.TeacherApplicantPageVO;
 import com.college.labselect.dto.resp.TeacherStudentArchiveVO;
 
@@ -30,4 +31,27 @@ public interface ITeacherApplicantService {
      * @return 学生档案，未创建档案时为 null
      */
     TeacherStudentArchiveVO getStudentArchive(Long teacherUserId, Long studentId);
+
+    /**
+     * 负责人查询本室全量报名学生与志愿情况，填报截止前执行门禁。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param roundId      轮次 ID
+     * @param keyword      学号或姓名关键词
+     * @param pageNum      页码
+     * @param pageSize     每页条数
+     * @return 本室报名学生分页
+     */
+    LeaderApplicantPageVO listLeaderApplicants(Long leaderUserId, Long roundId, String keyword,
+                                               long pageNum, long pageSize);
+
+    /**
+     * 负责人查看本室报名学生档案。
+     *
+     * @param leaderUserId 负责人用户 ID
+     * @param studentId    学生用户 ID
+     * @param roundId      轮次 ID
+     * @return 学生档案，未创建时为 null
+     */
+    TeacherStudentArchiveVO getLeaderStudentArchive(Long leaderUserId, Long studentId, Long roundId);
 }

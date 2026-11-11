@@ -51,8 +51,12 @@
       <el-form label-width="90px">
         <el-form-item label="轮次" required>
           <el-select v-model="createForm.roundId" class="full-width">
-            <el-option label="第 2 轮补录" :value="2" />
-            <el-option label="第 1 轮" :value="1" />
+            <el-option
+              v-for="round in rounds"
+              :key="round.id"
+              :label="round.roundName"
+              :value="round.id"
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="公示标题" required>
@@ -68,16 +72,41 @@
         <el-button type="primary" :loading="submitting" @click="handleCreate">发布</el-button>
       </template>
     </el-dialog>
-
-    <el-dialog v-model="rowsVisible" :title="rowsTitle" width="640px">
-      <el-table :data="rows" max-height="420" stripe>
-        <el-table-column prop="studentNo" label="学号" width="150" />
-        <el-table-column prop="studentName" label="姓名" width="120" />
-        <el-table-column prop="labName" label="实训室" min-width="170" />
-        <el-table-column prop="mentorName" label="导师" min-width="120" />
-      </el-table>
+    <el-dialog v-model="rowsVisible" :title="rowsTitle" width="960px">
+      <div v-loading="rowsLoading" class="rows-body">
+        <div v-if="rowsDetail" class="rows-meta">
+          <span>公示时间：{{ rowsDetail.startTime }} 至 {{ rowsDetail.endTime }}</span>
+          <span>名单人数：{{ rowsDetail.total }} 人</span>
+        </div>
+        <el-table
+          :data="rowsDetail?.list ?? []"
+          stripe
+          max-height="460"
+          empty-text="本批次暂无已确认名单"
+        >
+          <el-table-column prop="studentNo" label="学号" width="130" />
+          <el-table-column prop="studentName" label="姓名" width="100" />
+          <el-table-column label="学院 / 专业" min-width="180">
+            <template #default="{ row }">
+              <div>{{ row.college || '—' }}</div>
+              <div class="time-cell">{{ row.major || '—' }}</div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="labName" label="实训室" min-width="150" />
+          <el-table-column prop="mentorName" label="导师" width="100" />
+          <el-table-column label="总分" width="90">
+            <template #default="{ row }">{{ formatScore(row.finalTotal) }}</template>
+          </el-table-column>
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag size="small">{{ row.statusText }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="confirmTime" label="确认时间" min-width="160" />
+        </el-table>
+      </div>
       <template #footer>
-        <el-button type="primary" @click="rowsVisible = false">关闭</el-button>
+        <el-button @click="rowsVisible = false">关闭</el-button>
       </template>
     </el-dialog>
   </div>
@@ -86,24 +115,33 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { MockError } from '@/mock/auth'
+import { listRounds } from '@/api/adminRound'
+import { getCurrentRound } from '@/api/public'
 import {
-  mockAdminPublicityRows,
-  mockConfirmPublicity,
-  mockCreatePublicity,
-  mockEndPublicity,
-  mockPublicityList
-} from '@/mock/publicity'
-import type { PublicityBatch, PublicityRow } from '@/types/publicity'
+  confirmPublicity,
+  createPublicity,
+  endPublicity,
+  getAdminPublicityRows,
+  listAdminPublicities
+} from '@/api/publicity'
+import type { RoundListItem } from '@/types/basic'
+import type { PublicityAdminDetail, PublicityBatch } from '@/types/publicity'
 
 const loading = ref(false)
 const submitting = ref(false)
 const createVisible = ref(false)
-const rowsVisible = ref(false)
 const batches = ref<PublicityBatch[]>([])
-const rows = ref<PublicityRow[]>([])
-const rowsTitle = ref('')
-const createForm = reactive({ roundId: 2, title: '第 2 轮补录拟录取名单公示', durationHours: 24 })
+const rounds = ref<RoundListItem[]>([])
+const currentRoundId = ref(0)
+const createForm = reactive({ roundId: 0, title: '', durationHours: 24 })
+const rowsVisible = ref(false)
+const rowsLoading = ref(false)
+const rowsTitle = ref('公示名单')
+const rowsDetail = ref<PublicityAdminDetail | null>(null)
+
+function formatScore(value: number | null): string {
+  return value === null || value === undefined ? '—' : value.toFixed(2)
+}
 
 function tagType(status: number): 'success' | 'warning' | 'info' {
   if (status === 1) {
@@ -116,7 +154,7 @@ function remainText(row: PublicityBatch): string {
   if (row.status !== 1) {
     return '—'
   }
-  const seconds = Math.max(0, Math.floor((new Date(row.endTime.replace(' ', 'T')).getTime() - Date.now()) / 1000))
+  const seconds = Math.max(0, row.remainSeconds)
   const hours = Math.floor(seconds / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
   return `${hours} 时 ${minutes} 分`
@@ -125,30 +163,44 @@ function remainText(row: PublicityBatch): string {
 async function loadBatches() {
   loading.value = true
   try {
-    batches.value = await mockPublicityList()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载公示批次失败')
+    const result = await listAdminPublicities({ pageNum: 1, pageSize: 100 })
+    batches.value = result.list
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     loading.value = false
   }
 }
 
 function openCreateDialog() {
-  createForm.roundId = 2
-  createForm.title = '第 2 轮补录拟录取名单公示'
+  const target = rounds.value.find((round) => round.id === currentRoundId.value) ?? rounds.value[0]
+  createForm.roundId = target?.id ?? 0
+  createForm.title = target ? `${target.roundName}拟录取名单公示` : ''
   createForm.durationHours = 24
   createVisible.value = true
 }
 
 async function handleCreate() {
+  if (!createForm.roundId) {
+    ElMessage.warning('请选择轮次')
+    return
+  }
+  if (!createForm.title.trim()) {
+    ElMessage.warning('请填写公示标题')
+    return
+  }
   submitting.value = true
   try {
-    const result = await mockCreatePublicity({ ...createForm })
+    const result = await createPublicity({
+      roundId: createForm.roundId,
+      title: createForm.title.trim(),
+      durationHours: createForm.durationHours
+    })
     createVisible.value = false
     ElMessage.success(`公示已发布，共 ${result.admissionCount} 人`)
     await loadBatches()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '发起公示失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   } finally {
     submitting.value = false
   }
@@ -164,11 +216,11 @@ async function handleEnd(row: PublicityBatch) {
     return
   }
   try {
-    await mockEndPublicity(row.id)
+    await endPublicity(row.id)
     ElMessage.success('公示已结束')
     await loadBatches()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '结束公示失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   }
 }
 
@@ -181,25 +233,39 @@ async function handleConfirm(row: PublicityBatch) {
     return
   }
   try {
-    const result = await mockConfirmPublicity(row.id)
+    const result = await confirmPublicity(row.id)
     ElMessage.success(`已确认 ${result.confirmedCount} 名学生的入组结果`)
     await loadBatches()
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '确认失败')
+  } catch {
+    // 错误提示已由请求层统一处理
   }
 }
 
 async function openRowsDialog(row: PublicityBatch) {
+  rowsTitle.value = `${row.title} · 名单明细`
+  rowsDetail.value = null
+  rowsVisible.value = true
+  rowsLoading.value = true
   try {
-    rows.value = await mockAdminPublicityRows(row.id)
-    rowsTitle.value = row.title
-    rowsVisible.value = true
-  } catch (error) {
-    ElMessage.error(error instanceof MockError ? error.message : '加载名单失败')
+    rowsDetail.value = await getAdminPublicityRows(row.id)
+  } catch {
+    // 错误提示已由请求层统一处理
+  } finally {
+    rowsLoading.value = false
   }
 }
 
-onMounted(loadBatches)
+async function init() {
+  const [roundList, currentRound] = await Promise.all([
+    listRounds().catch(() => [] as RoundListItem[]),
+    getCurrentRound().catch(() => null)
+  ])
+  rounds.value = roundList
+  currentRoundId.value = currentRound?.id ?? 0
+  await loadBatches()
+}
+
+onMounted(init)
 </script>
 
 <style scoped>
@@ -243,5 +309,17 @@ onMounted(loadBatches)
 
 .full-width {
   width: 100%;
+}
+
+.rows-body {
+  min-height: 120px;
+}
+
+.rows-meta {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #606266;
 }
 </style>

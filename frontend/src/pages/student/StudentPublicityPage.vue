@@ -76,10 +76,13 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { listMyNotices } from '@/api/notice'
 import { getPublicityDetail, listMyDisputes, submitDispute } from '@/api/publicity'
 import type { PublicityDetail } from '@/types/publicity'
+
+const route = useRoute()
 
 const DISPUTE_TYPE_TEXT: Record<number, string> = {
   1: '录取结果有误',
@@ -144,7 +147,8 @@ async function loadDetail() {
   try {
     const noticePage = await listMyNotices({ noticeType: 5, pageNum: 1, pageSize: 50 })
     const notice = noticePage.list.find((item) => item.bizType === 'PUBLICITY' && item.bizId)
-    const targetId = notice?.bizId ?? null
+    const queryId = Number(route.query.publicityId)
+    const targetId = Number.isFinite(queryId) && queryId > 0 ? queryId : (notice?.bizId ?? null)
     if (!targetId) {
       detail.value = null
       publicityId.value = null
