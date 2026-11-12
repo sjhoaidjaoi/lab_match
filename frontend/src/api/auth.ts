@@ -1,15 +1,18 @@
-import { http } from './request'
-import type { LoginResponse, MeResponse } from '@/types'
+import { post } from './request'
+import type { ChangePasswordReq, LoginReq, LoginResp, TokenResp } from '@/types/auth'
 
-export interface LoginPayload {
-  username: string
-  password: string
+export function login(data: LoginReq): Promise<LoginResp> {
+  return post<LoginResp>('/auth/login', data)
 }
 
-export const authApi = {
-  login: (payload: LoginPayload) => http.post<LoginResponse>('/auth/login', payload),
-  me: () => http.get<MeResponse>('/auth/me'),
-  switchRole: (roleCode: string) => http.post<LoginResponse>('/auth/switch-role', { roleCode }),
-  logout: () => http.post<void>('/auth/logout'),
-  users: () => http.get<unknown[]>('/auth/users')
+export function logout(): Promise<void> {
+  return post<void>('/auth/logout')
+}
+
+export function refreshToken(): Promise<TokenResp> {
+  return post<TokenResp>('/auth/refresh')
+}
+
+export function changePassword(data: ChangePasswordReq): Promise<void> {
+  return post<void>('/auth/change-password', data)
 }

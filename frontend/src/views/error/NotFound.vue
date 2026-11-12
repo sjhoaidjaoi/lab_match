@@ -1,1 +1,0 @@
-<template><el-result icon="error" title="404 页面不存在" sub-title="请从工作台菜单进入有效页面。"><template #extra><el-button type="primary" @click="$router.push('/login')">返回登录</el-button></template></el-result></template>
