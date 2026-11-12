@@ -1,28 +1,31 @@
 # 依赖与构建产物
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
-backend/target/
-backend/uploads/
+node_modules/
+dist/
+target/
 *.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
 
-# 日志与临时文件
+# 临时文件
 *.log
 logs/
+.tmp/
 tmp/
+uploads/
+.screenshots/
+backend/data/.store.json
 
-# 环境变量与敏感配置
-.env
-.env.*
-!.env.example
-.trae/mcp.json
-
-# IDE 与操作系统文件
+# IDE
 .idea/
-.vscode/
 *.iml
+.vscode/*
+!.vscode/extensions.json
+
+# 本地环境
+.env
+.env.local
+.env.*.local
+
+# 系统文件
 .DS_Store
 Thumbs.db
-
-# 测试截图与过程产物
-.screenshots/
