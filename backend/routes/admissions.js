@@ -85,6 +85,44 @@ router.get('/lab/:labId', requireAuth, (req, res) => {
   res.json(ok(list))
 })
 
+// 学院端：全院拟录取/递补明细
+router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
+  const store = getStore()
+  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  if (!activeBatch) return res.json(ok([]))
+  const list = store.admissionIntentions
+    .filter((a) => a.batchId === activeBatch.id)
+    .map((a) => {
+      const stu = store.users.find((u) => u.id === a.studentId)
+      const lab = store.laboratories.find((l) => l.id === a.laboratoryId)
+      return {
+        ...a,
+        studentName: stu?.realName || '',
+        studentNumber: stu?.studentNumber || '',
+        laboratoryName: lab?.name || `实训室#${a.laboratoryId}`
+      }
+    })
+  res.json(ok(list))
+})
+
+// 学院端：逾期未确认的拟录取意向自动释放名额
+router.post('/expire', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
+  const store = getStore()
+  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const nowTs = Date.now()
+  let count = 0
+  store.admissionIntentions
+    .filter((a) => a.batchId === activeBatch.id && a.status === 'PENDING')
+    .forEach((a) => {
+      if (a.confirmationDeadline && new Date(a.confirmationDeadline).getTime() < nowTs) {
+        a.status = 'EXPIRED'
+        count += 1
+      }
+    })
+  persistStore(store)
+  res.json(ok({ expired: count }))
+})
+
 // 学院汇总
 router.get('/overview', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()

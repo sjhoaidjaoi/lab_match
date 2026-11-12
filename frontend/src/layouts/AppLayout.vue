@@ -56,11 +56,23 @@
 
     <!-- ========= 横向菜单条 ========= -->
     <div class="navbar">
-      <el-menu :default-active="route.path" router mode="horizontal" class="nav-menu">
-        <el-menu-item v-for="item in currentMenus" :key="item.path" :index="item.path">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.title }}</span>
-        </el-menu-item>
+      <el-menu :default-active="route.path" router mode="horizontal" :ellipsis="false" class="nav-menu">
+        <template v-for="item in currentMenus" :key="item.path || item.title">
+          <el-sub-menu v-if="item.children && item.children.length" :index="item.title">
+            <template #title>
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span>{{ item.title }}</span>
+            </template>
+            <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+              <el-icon><component :is="child.icon" /></el-icon>
+              <span>{{ child.title }}</span>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-menu-item v-else :index="item.path">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.title }}</span>
+          </el-menu-item>
+        </template>
       </el-menu>
     </div>
 

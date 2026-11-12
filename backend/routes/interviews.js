@@ -88,6 +88,28 @@ router.get('/my', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {
   res.json(ok(list))
 })
 
+// 学院端：全部面试明细（含学生、实训室、面试官名称）
+router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
+  const store = getStore()
+  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  if (!activeBatch) return res.json(ok([]))
+  const list = store.interviews
+    .filter((i) => i.batchId === activeBatch.id)
+    .map((i) => {
+      const stu = store.users.find((u) => u.id === i.studentId)
+      const interviewer = store.users.find((u) => u.id === i.interviewerId)
+      const lab = store.laboratories.find((l) => l.id === i.laboratoryId)
+      return {
+        ...i,
+        studentName: stu?.realName || '',
+        studentNumber: stu?.studentNumber || '',
+        interviewerName: interviewer?.realName || '',
+        laboratoryName: lab?.name || `实训室#${i.laboratoryId}`
+      }
+    })
+  res.json(ok(list))
+})
+
 // 学院端：全部面试进度
 router.get('/overview', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()

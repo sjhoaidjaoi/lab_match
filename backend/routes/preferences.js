@@ -96,6 +96,26 @@ router.get('/lab/:labId', requireAuth, (req, res) => {
   res.json(ok(list))
 })
 
+// 学院端：全院志愿明细（含学生与实训室名称）
+router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
+  const store = getStore()
+  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  if (!activeBatch) return res.json(ok([]))
+  const list = store.studentPreferences
+    .filter((p) => p.batchId === activeBatch.id)
+    .map((p) => {
+      const student = store.users.find((u) => u.id === p.studentId)
+      const lab = store.laboratories.find((l) => l.id === p.laboratoryId)
+      return {
+        ...p,
+        studentName: student?.realName || '',
+        studentNumber: student?.studentNumber || '',
+        laboratoryName: lab?.name || `实训室#${p.laboratoryId}`
+      }
+    })
+  res.json(ok(list))
+})
+
 // 学院端：全院志愿总览
 router.get('/overview', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()

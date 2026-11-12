@@ -38,32 +38,50 @@ const leaderPages: PageDefinition[] = [
   { path: 'supplementary', title: '本实训室补录统筹', description: '查看并统筹本室补录进度。', stage: '阶段六：分轮补录', api: 'GET /api/supplementary/lab' },
   { path: 'lab-capacity', title: '本实训室名额统计', description: '查看计划、已录取和剩余名额。', stage: '阶段七：统筹调剂录取', api: 'GET /api/statistics/capacity' }
 ]
-const collegePages: PageDefinition[] = [
-  { path: 'dashboard', title: '全院工作台', description: '全院选拔批次、八阶段和统计总览。', api: 'GET /api/statistics/college' },
-  { path: 'batches', title: '选拔批次管理', description: '管理批次与八阶段开放时间。', api: 'GET /api/batches' },
-  { path: 'labs', title: '全院实训室管理', description: '维护实训室、导师和招录名额。', api: 'GET /api/labs' },
-  { path: 'applications', title: '全院报名数据', description: '查看全院学生意向申请。', stage: '阶段三：意向填报', api: 'GET /api/applications' },
-  { path: 'selection-overview', title: '初选汇总', description: '查看各实训室初选和拟录取建议。', stage: '阶段四：导师初选与面试考核', api: 'GET /api/selections' },
-  { path: 'supplementary-overview', title: '补录汇总', description: '查看第二轮、第三轮补录进度。', stage: '阶段六：分轮补录', api: 'GET /api/supplementary' },
-  { path: 'allocation', title: '全院统筹调剂', description: '处理跨实训室调剂及全院名额统筹。', stage: '阶段七：统筹调剂录取', api: 'GET /api/allocations' },
-  { path: 'allocation/pool', title: '全院调剂池', description: '查看跨实训室调剂候选人与剩余名额。', stage: '阶段七：统筹调剂录取', api: 'GET /api/allocations/pool' },
-  { path: 'final-list', title: '最终名单汇总', description: '汇总待公示的最终录取名单。', stage: '阶段八：结果公示与正式入组', api: 'GET /api/enrollments' },
-  { path: 'publicity', title: '结果公示管理', description: '配置公示起止时间与公示状态。', stage: '阶段八：结果公示与正式入组', api: 'GET /api/publicity' },
-  { path: 'statistics', title: '全院数据统计', description: '查看各实训室选拔数据统计。', api: 'GET /api/statistics/college' },
-  { path: 'users', title: '用户与角色管理', description: '管理用户、角色与权限。', api: 'GET /api/users' },
-  { path: 'settings', title: '系统与批次配置', description: '维护全局系统配置。', api: 'GET /api/batches/current' },
-  { path: 'announcement', title: '宣讲内容维护', description: '维护宣讲文字、视频与附件。', stage: '阶段一：集中宣讲', api: 'GET /api/announcements', media: 'video' }
+// 学院总负责人端：新文档 4.5 节 18 个模块，使用真实页面组件
+const collegePages: Array<{ path: string; title: string; component: () => Promise<unknown> }> = [
+  { path: 'dashboard', title: '全院数据总览', component: () => import('@/views/college/CollegeDashboard.vue') },
+  { path: 'batches', title: '选拔批次管理', component: () => import('@/views/college/CollegeBatches.vue') },
+  { path: 'stages', title: '阶段时间管理', component: () => import('@/views/college/CollegeStages.vue') },
+  { path: 'students', title: '学生管理', component: () => import('@/views/college/CollegeStudents.vue') },
+  { path: 'labs', title: '实训室管理', component: () => import('@/views/college/CollegeLabs.vue') },
+  { path: 'labs/:id', title: '实训室详情与成员管理', component: () => import('@/views/college/CollegeLabDetail.vue') },
+  { path: 'briefing', title: '集中宣讲管理', component: () => import('@/views/college/CollegeBriefing.vue') },
+  { path: 'openday', title: '开放日管理', component: () => import('@/views/college/CollegeOpenDay.vue') },
+  { path: 'preferences', title: '志愿填报管理', component: () => import('@/views/college/CollegePreferences.vue') },
+  { path: 'interviews', title: '面试进度管理', component: () => import('@/views/college/CollegeInterviews.vue') },
+  { path: 'admissions', title: '拟录取名单管理', component: () => import('@/views/college/CollegeAdmissions.vue') },
+  { path: 'confirmation', title: '录取确认管理', component: () => import('@/views/college/CollegeConfirmation.vue') },
+  { path: 'allocation/vacancies', title: '实训室空缺统计', component: () => import('@/views/college/CollegeVacancies.vue') },
+  { path: 'allocation/candidates', title: '递补与调剂候选', component: () => import('@/views/college/CollegeCandidates.vue') },
+  { path: 'allocation/internal', title: '内部调剂汇总', component: () => import('@/views/college/CollegeInternal.vue') },
+  { path: 'allocation/cross', title: '跨实训室调剂', component: () => import('@/views/college/CollegeCross.vue') },
+  { path: 'allocation/placement', title: '未落实学生安置', component: () => import('@/views/college/CollegePlacement.vue') },
+  { path: 'final-list', title: '最终名单管理', component: () => import('@/views/college/CollegeFinalList.vue') },
+  { path: 'publicity', title: '公示管理', component: () => import('@/views/college/CollegePublicity.vue') },
+  { path: 'statistics', title: '数据统计与导出', component: () => import('@/views/college/CollegeStatistics.vue') },
+  { path: 'logs', title: '系统操作日志', component: () => import('@/views/college/CollegeLogs.vue') }
 ]
 function portal(prefix: string, roles: Role[], pages: PageDefinition[]): RouteRecordRaw {
   const children: RouteRecordRaw[] = pages.map((page) => ({ path: page.path, component: () => import('@/views/FrameworkPage.vue'), props: page, meta: { roles } }))
   children.push({ path: '', redirect: `/${prefix}/dashboard` })
   return { path: `/${prefix}`, component: () => import('@/layouts/AppLayout.vue'), meta: { roles }, children }
 }
+function collegePortal(): RouteRecordRaw {
+  const roles: Role[] = ['COLLEGE_ADMIN']
+  const children = collegePages.map((page) => ({
+    path: page.path,
+    component: page.component,
+    meta: { roles, title: page.title }
+  })) as unknown as RouteRecordRaw[]
+  children.push({ path: '', redirect: '/college/dashboard' })
+  return { path: '/college', component: () => import('@/layouts/AppLayout.vue'), meta: { roles }, children }
+}
 const router = createRouter({ history: createWebHistory(), routes: [
   { path: '/login', component: () => import('@/views/Login.vue'), meta: { public: true } },
   { path: '/profile', component: () => import('@/views/FrameworkPage.vue'), props: { title: '个人资料', description: '查看基础账号信息。', api: 'GET /api/auth/me' }, meta: { roles: ['STUDENT', 'LAB_TEACHER', 'LAB_LEADER', 'COLLEGE_ADMIN'] } },
   { path: '/announcements', component: () => import('@/views/FrameworkPage.vue'), props: { title: '公共通知', description: '查看选拔相关公共通知。', api: 'GET /api/announcements' }, meta: { roles: ['STUDENT', 'LAB_TEACHER', 'LAB_LEADER', 'COLLEGE_ADMIN'] } },
-  { path: '/403', component: () => import('@/views/error/Forbidden.vue'), meta: { public: true } }, portal('student', ['STUDENT'], studentPages), portal('teacher', ['LAB_TEACHER'], teacherPages), portal('leader', ['LAB_LEADER'], leaderPages), portal('college', ['COLLEGE_ADMIN'], collegePages),
+  { path: '/403', component: () => import('@/views/error/Forbidden.vue'), meta: { public: true } }, portal('student', ['STUDENT'], studentPages), portal('teacher', ['LAB_TEACHER'], teacherPages), portal('leader', ['LAB_LEADER'], leaderPages), collegePortal(),
   { path: '/:pathMatch(.*)*', component: () => import('@/views/error/NotFound.vue'), meta: { public: true } }
 ] })
 router.beforeEach((to) => { const auth = useAuthStore(); const home = ROLE_HOME[auth.currentRole] || null; if (!auth.isLoggedIn) return to.meta.public ? true : { path: '/login', query: { redirect: to.fullPath } }; if (!home) { auth.logout(); return { path: '/login' } }; if (to.meta.public || to.path === '/') return home; const roles = to.matched.flatMap((record) => (record.meta.roles as string[] | undefined) ?? []); return roles.length && !roles.includes(auth.currentRole) ? '/403' : true })

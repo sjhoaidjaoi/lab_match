@@ -20,6 +20,13 @@ router.get('/', (_req, res) => {
   res.json(ok(list))
 })
 
+// 学院端：全部公告（含草稿）
+router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
+  const store = getStore()
+  const list = [...store.announcements].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+  res.json(ok(list))
+})
+
 router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   const body = AnnouncementSchema.parse(req.body || {})
   const store = getStore()

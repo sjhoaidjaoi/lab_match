@@ -38,6 +38,9 @@ app.use('/api/media', require('./routes/media'))
 app.use('/api/announcements', require('./routes/announcements'))
 app.use('/api/notifications', require('./routes/notifications'))
 app.use('/api/logs', require('./routes/logs'))
+app.use('/api/users', require('./routes/users'))
+app.use('/api/statistics', require('./routes/statistics'))
+app.use('/api/open-days', require('./routes/openDays'))
 
 // ============ 错误处理 ============
 app.use(notFound)

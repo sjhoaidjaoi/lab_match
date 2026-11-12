@@ -10,6 +10,7 @@ const { z } = require('zod')
 const { ok } = require('../utils/result')
 const { getStore, persistStore, nextId } = require('../data/seed')
 const { requireAuth, requireRole, ROLES } = require('../middleware/auth')
+const { logOperation } = require('../utils/audit')
 
 const LabSchema = z.object({
   name: z.string().min(1),
@@ -18,6 +19,10 @@ const LabSchema = z.object({
   technologyStack: z.string().optional().default(''),
   recruitmentQuota: z.number().int().positive().optional().default(5),
   leaderId: z.number().int().optional().nullable(),
+  // 集中宣讲：每个实训室的文字介绍 + 外部视频（教师线下宣讲录制）
+  briefingText: z.string().optional().default(''),
+  briefingVideoUrl: z.string().optional().nullable(),
+  briefingVideoType: z.enum(['MP4', 'LINK', 'EMBED']).optional().default('LINK'),
   introductionVideo: z.string().optional().nullable(),
   panoramicResource: z.string().optional().nullable(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional().default('ACTIVE')
@@ -33,8 +38,29 @@ router.get('/', (req, res) => {
       recruitmentQuota: l.recruitmentQuota,
       leaderName: leader ? leader.realName : null,
       leaderId: l.leaderId,
+      briefingText: l.briefingText || '',
+      briefingVideoUrl: l.briefingVideoUrl || null,
+      briefingVideoType: l.briefingVideoType || 'LINK',
       introductionVideo: l.introductionVideo, panoramicResource: l.panoramicResource,
       status: l.status, createdAt: l.createdAt
+    }
+  })
+  res.json(ok(list))
+})
+
+// 学院端：全部实训室（含停用），用于管理页面
+router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
+  const store = getStore()
+  const list = store.laboratories.map((l) => {
+    const leader = store.users.find((u) => u.id === l.leaderId)
+    const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+    const applicationCount = activeBatch
+      ? store.studentPreferences.filter((p) => p.batchId === activeBatch.id && p.laboratoryId === l.id && p.status === 'SUBMITTED').length
+      : 0
+    return {
+      ...l,
+      leaderName: leader ? leader.realName : null,
+      applicationCount
     }
   })
   res.json(ok(list))
@@ -57,6 +83,10 @@ router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   const id = nextId(store.laboratories)
   const lab = { id, ...body, createdAt: new Date().toISOString() }
   store.laboratories.push(lab)
+  logOperation(store, req, {
+    operationType: 'CREATE_LAB', targetType: 'LABORATORY', targetId: id,
+    description: `新增实训室「${lab.name}」，招生名额 ${lab.recruitmentQuota}`
+  })
   persistStore(store)
   res.json(ok(lab))
 })
@@ -74,6 +104,10 @@ router.put('/:id', requireAuth, (req, res) => {
 
   const body = LabSchema.partial().parse(req.body || {})
   store.laboratories[idx] = { ...lab, ...body }
+  logOperation(store, req, {
+    operationType: 'UPDATE_LAB', targetType: 'LABORATORY', targetId: lab.id,
+    description: `修改实训室「${store.laboratories[idx].name}」信息`
+  })
   persistStore(store)
   res.json(ok(store.laboratories[idx]))
 })

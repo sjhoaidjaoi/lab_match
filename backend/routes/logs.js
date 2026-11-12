@@ -7,7 +7,20 @@ const { requireAuth, requireRole, ROLES } = require('../middleware/auth')
 
 router.get('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   const store = getStore()
-  const list = store.operationLogs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 200)
+  const keyword = (req.query.keyword || '').toString().trim()
+  const operationType = (req.query.operationType || '').toString().trim()
+  const list = [...(store.operationLogs || [])]
+    .filter((l) => (operationType ? l.operationType === operationType : true))
+    .filter((l) => {
+      if (!keyword) return true
+      return (l.operationDescription || '').includes(keyword) || (l.operationType || '').includes(keyword)
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 300)
+    .map((l) => {
+      const operator = store.users.find((u) => u.id === l.operatorId)
+      return { ...l, operatorName: operator?.realName || '系统' }
+    })
   res.json(ok(list))
 })
 

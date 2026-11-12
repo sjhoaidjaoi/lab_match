@@ -10,6 +10,7 @@ const { z } = require('zod')
 const { ok } = require('../utils/result')
 const { getStore, persistStore, nextId, STAGES_DEF } = require('../data/seed')
 const { requireAuth, requireRole, ROLES } = require('../middleware/auth')
+const { logOperation } = require('../utils/audit')
 
 router.get('/current', (req, res) => {
   const store = getStore()
@@ -43,6 +44,8 @@ router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   const body = schema.parse(req.body || {})
   const store = getStore()
   const id = nextId(store.recruitmentBatches)
+  // 同一时间只允许一个进行中的批次
+  store.recruitmentBatches.forEach((b) => { if (b.status === 'IN_PROGRESS') b.status = 'COMPLETED' })
   const batch = { id, ...body, status: 'IN_PROGRESS', createdAt: new Date().toISOString() }
   store.recruitmentBatches.push(batch)
   // 自动生成八阶段时间窗（默认各 1 天）
@@ -55,6 +58,10 @@ router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
       batchId: id, stageNumber: s.no, stageName: s.name, stageKey: s.key,
       startTime: start.toISOString(), endTime: end.toISOString(), stageStatus: 'NOT_STARTED', description: s.desc
     })
+  })
+  logOperation(store, req, {
+    operationType: 'CREATE_BATCH', targetType: 'BATCH', targetId: id,
+    description: `创建选拔批次「${batch.batchName}」（${batch.academicYear}）`
   })
   persistStore(store)
   res.json(ok(batch))
@@ -75,6 +82,10 @@ router.put('/:batchId/stages/:stageId', requireAuth, requireRole(ROLES.COLLEGE_A
   if (startTime) stage.startTime = startTime
   if (endTime) stage.endTime = endTime
   if (stageStatus) stage.stageStatus = stageStatus
+  logOperation(store, req, {
+    operationType: 'UPDATE_STAGE', targetType: 'STAGE', targetId: stage.id,
+    description: `调整阶段「第${stage.stageNumber}阶段 ${stage.stageName}」时间：${stage.startTime} ~ ${stage.endTime}`
+  })
   persistStore(store)
   res.json(ok(stage))
 })
