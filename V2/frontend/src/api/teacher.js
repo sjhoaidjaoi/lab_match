@@ -1,0 +1,31 @@
+import request from './request'
+
+// ---------------- 教师端 ----------------
+export const getDashboard = () => request.get('/teacher/dashboard')
+export const getApplications = (params) => request.get('/teacher/applications', { params })
+export const getStudentDetail = (studentId) => request.get(`/teacher/applications/${studentId}`)
+export const getInterviews = (params) => request.get('/teacher/interviews', { params })
+export const scheduleInterview = (data) => request.post('/teacher/interviews/schedules', data)
+export const rescheduleInterview = (id, data) => request.put(`/teacher/interviews/${id}/schedule`, data)
+export const saveEvaluation = (id, data) => request.put(`/teacher/interviews/${id}/evaluation`, data)
+export const getAdmissions = () => request.get('/teacher/admissions')
+export const saveAdmissions = (data) => request.put('/teacher/admissions', data)
+export const submitAdmissions = () => request.post('/teacher/admissions/submit')
+export const addFromInterview = (data) => request.post('/teacher/admissions/from-interview', data)
+export const confirmAdmission = (studentId) => request.post(`/teacher/admissions/${studentId}/confirm`)
+export const abandonAdmission = (studentId) => request.post(`/teacher/admissions/${studentId}/abandon`)
+export const getConfirmationStats = () => request.get('/teacher/confirmations/stats')
+export const getFinalList = () => request.get('/teacher/final')
+export const updateLabInfo = (labId, data) => request.put(`/teacher/labs/${labId}/info`, data)
+
+// ---------------- 组长端 ----------------
+export const getRoomSummary = () => request.get('/teacher/room/summary')
+export const getRoomTeachers = () => request.get('/teacher/room/teachers')
+export const getRoomInterviews = (params) => request.get('/teacher/room/interviews', { params })
+export const getVacancies = () => request.get('/teacher/room/vacancies')
+export const getAdjustmentCandidates = () => request.get('/teacher/room/adjustments/candidates')
+export const saveAdjustments = (data) => request.post('/teacher/room/adjustments', data)
+export const submitAdjustments = () => request.post('/teacher/room/adjustments/submit')
+export const getSubmissionState = () => request.get('/teacher/room/submission')
+export const submitToCollege = (data) => request.post('/teacher/room/submission', data)
+export const getLogs = (params) => request.get('/teacher/room/logs', { params })

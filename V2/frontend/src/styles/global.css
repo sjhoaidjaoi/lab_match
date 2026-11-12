@@ -1,0 +1,49 @@
+:root {
+  --trs-bg: #f5f7fb;
+  --trs-primary: #2f6fed;
+  --trs-text: #1f2937;
+  --trs-muted: #6b7280;
+  --trs-border: #e5e7eb;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; }
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  background: var(--trs-bg);
+  color: var(--trs-text);
+}
+
+.page { padding: 16px 20px 32px; }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.page-title { margin: 0; font-size: 20px; font-weight: 600; }
+.page-desc { margin: 6px 0 0; font-size: 13px; color: var(--trs-muted); }
+.card { background: #fff; border: 1px solid var(--trs-border); border-radius: 10px; padding: 16px; }
+.card + .card { margin-top: 16px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 12px; }
+.muted { color: var(--trs-muted); font-size: 13px; }
+
+/* ---------- 移动端适配 ---------- */
+@media (max-width: 900px) {
+  .page { padding: 12px 12px 28px; }
+  .page-header { flex-direction: column; align-items: stretch; }
+  .page-title { font-size: 18px; }
+  .card { padding: 12px; border-radius: 8px; }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .toolbar { gap: 8px; }
+  .toolbar .el-input,
+  .toolbar .el-select { width: 100% !important; }
+  .el-dialog { width: 94% !important; }
+  .el-drawer.ltr { width: 248px !important; }
+  .el-drawer { max-width: 92vw; }
+  .el-table { font-size: 12px; }
+}
+
+@media (max-width: 560px) {
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .page-title { font-size: 17px; }
+  .el-message-box { width: 90% !important; }
+}
