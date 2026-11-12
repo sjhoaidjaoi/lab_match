@@ -1,24 +1,58 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { ROLE_HOME } from '@/config/stages'
 import { useAuthStore } from '@/stores/auth'
+import { studentMvp } from '@/api/studentMvp'
 
 type Role = 'STUDENT' | 'LAB_TEACHER' | 'LAB_LEADER' | 'COLLEGE_ADMIN'
 interface PageDefinition { path: string; title: string; description: string; stage?: string; api: string; media?: 'video' | 'tour' }
 
-const studentPages: PageDefinition[] = [
-  { path: 'dashboard', title: '学生工作台', description: '查看当前选拔批次与八阶段流程进度。', api: 'GET /api/batches/current' },
-  { path: 'announcement', title: '集中宣讲', description: '宣讲文字、视频和资料入口。', stage: '阶段一：集中宣讲', api: 'GET /api/announcements', media: 'video' },
-  { path: 'labs', title: '实训室开放日', description: '浏览实训室介绍、导师团队和开放日信息。', stage: '阶段二：实训室开放日', api: 'GET /api/labs' },
-  { path: 'labs/:labId', title: '实训室详情', description: '查看实训室方向、成果、导师和培养方式。', stage: '阶段二：实训室开放日', api: 'GET /api/labs/{labId}' },
-  { path: 'labs/:labId/tour', title: '实训室全景云游', description: '预留普通视频与全景播放器容器；实际全景能力取决于素材。', stage: '阶段二：实训室开放日', api: 'GET /api/labs/{labId}/tour', media: 'tour' },
-  { path: 'application', title: '意向填报', description: '最多三个平行导师意向及调剂意愿。', stage: '阶段三：意向填报', api: 'GET /api/applications/me' },
-  { path: 'application/record', title: '我的填报记录', description: '查看当前批次的意向填报状态。', stage: '阶段三：意向填报', api: 'GET /api/applications/me' },
-  { path: 'interview', title: '面试安排', description: '查看本人面试通知与安排。', stage: '阶段四：导师初选与面试考核', api: 'GET /api/interviews/me' },
-  { path: 'admission-confirmation', title: '拟录取确认', description: '查看拟录取通知并确认唯一去向。', stage: '阶段五：拟录取与学生确认', api: 'GET /api/admissions/me' },
-  { path: 'supplementary', title: '分轮补录', description: '查看补录批次、剩余名额与补录入口。', stage: '阶段六：分轮补录', api: 'GET /api/supplementary/rounds' },
-  { path: 'allocation', title: '调剂通知', description: '查看调剂方案与确认状态。', stage: '阶段七：统筹调剂录取', api: 'GET /api/allocations/me' },
-  { path: 'result', title: '最终结果与公示', description: '查看个人录取结果和最终公示。', stage: '阶段八：结果公示与正式入组', api: 'GET /api/publicity/current' }
+const mvpStudentPages = [
+  { path: 'dashboard', page: 'dashboard' },
+  { path: 'labs', page: 'labs' },
+  { path: 'labs/:labId', page: 'lab-detail' },
+  { path: 'application', page: 'application' },
+  { path: 'application/record', page: 'record' },
+  { path: 'interview', page: 'interview' },
+  { path: 'admission-confirmation', page: 'admission-confirmation' },
+  { path: 'result', page: 'result' }
 ]
+
+const demoStudentPortal: RouteRecordRaw = {
+  path: '/student',
+  component: () => import('@/layouts/StudentLayout.vue'),
+  meta: { roles: ['STUDENT'] },
+  children: [
+    { path: '', redirect: '/student/dashboard' },
+    { path: 'dashboard', component: () => import('@/views/student/StudentHome.vue') },
+    { path: 'announcement', component: () => import('@/views/student/StudentLectures.vue') },
+    { path: 'labs', component: () => import('@/views/student/StudentCatalog.vue') },
+    { path: 'labs/:labId', component: () => import('@/views/student/StudentCatalog.vue') },
+    { path: 'labs/:labId/tour', component: () => import('@/views/student/StudentOpenDay.vue') },
+    { path: 'application', component: () => import('@/views/student/StudentApplication.vue') },
+    { path: 'application/record', component: () => import('@/views/student/StudentApplication.vue'), props: { record: true } },
+    { path: 'interview', component: () => import('@/views/student/StudentInterview.vue') },
+    { path: 'admission-confirmation', component: () => import('@/views/student/StudentOffer.vue') },
+    { path: 'supplementary', component: () => import('@/views/student/StudentSupplement.vue') },
+    { path: 'allocation', component: () => import('@/views/student/StudentAdjustment.vue'), props: { stage: 7 } },
+    { path: 'result', component: () => import('@/views/student/StudentPublication.vue') },
+    { path: 'messages', component: () => import('@/views/student/StudentMessages.vue') },
+    { path: 'profile', component: () => import('@/views/student/StudentProfile.vue') }
+  ]
+}
+const studentPortal: RouteRecordRaw = studentMvp ? {
+  ...demoStudentPortal,
+  children: [
+    { path: '', redirect: '/student/dashboard' },
+    { path: 'profile', component: () => import('@/views/student/StudentProfile.vue') },
+    ...mvpStudentPages.map(({ path, page }) => ({
+      path,
+      props: { page },
+      component: () => import('@/views/student/StudentMvp.vue')
+    })),
+    { path: ':rest(.*)*', redirect: '/student/dashboard' }
+  ]
+} : demoStudentPortal
+
 const teacherPages: PageDefinition[] = [
   { path: 'dashboard', title: '教师工作台', description: '本实训室选拔任务概览。', api: 'GET /api/statistics/lab' },
   { path: 'lab-info', title: '本实训室信息', description: '查看本实训室基本资料。', api: 'GET /api/labs/mine' },
@@ -63,8 +97,8 @@ const router = createRouter({ history: createWebHistory(), routes: [
   { path: '/login', component: () => import('@/views/Login.vue'), meta: { public: true } },
   { path: '/profile', component: () => import('@/views/FrameworkPage.vue'), props: { title: '个人资料', description: '查看基础账号信息。', api: 'GET /api/auth/me' }, meta: { roles: ['STUDENT', 'LAB_TEACHER', 'LAB_LEADER', 'COLLEGE_ADMIN'] } },
   { path: '/announcements', component: () => import('@/views/FrameworkPage.vue'), props: { title: '公共通知', description: '查看选拔相关公共通知。', api: 'GET /api/announcements' }, meta: { roles: ['STUDENT', 'LAB_TEACHER', 'LAB_LEADER', 'COLLEGE_ADMIN'] } },
-  { path: '/403', component: () => import('@/views/error/Forbidden.vue'), meta: { public: true } }, portal('student', ['STUDENT'], studentPages), portal('teacher', ['LAB_TEACHER'], teacherPages), portal('leader', ['LAB_LEADER'], leaderPages), portal('college', ['COLLEGE_ADMIN'], collegePages),
+  { path: '/403', component: () => import('@/views/error/Forbidden.vue'), meta: { public: true } }, studentPortal, portal('teacher', ['LAB_TEACHER'], teacherPages), portal('leader', ['LAB_LEADER'], leaderPages), portal('college', ['COLLEGE_ADMIN'], collegePages),
   { path: '/:pathMatch(.*)*', component: () => import('@/views/error/NotFound.vue'), meta: { public: true } }
 ] })
-router.beforeEach((to) => { const auth = useAuthStore(); const home = ROLE_HOME[auth.currentRole] || null; if (!auth.isLoggedIn) return to.meta.public ? true : { path: '/login', query: { redirect: to.fullPath } }; if (!home) { auth.logout(); return { path: '/login' } }; if (to.meta.public || to.path === '/') return home; const roles = to.matched.flatMap((record) => (record.meta.roles as string[] | undefined) ?? []); return roles.length && !roles.includes(auth.currentRole) ? '/403' : true })
+router.beforeEach((to) => { const auth = useAuthStore(); const home = ROLE_HOME[auth.currentRole] || null; if (auth.currentRole === 'STUDENT' && to.path === '/profile') return '/student/profile'; if (auth.currentRole === 'STUDENT' && to.path === '/announcements') return '/student/messages'; if (!auth.isLoggedIn) return to.meta.public ? true : { path: '/login', query: { redirect: to.fullPath } }; if (!home) { auth.logout(); return { path: '/login' } }; if (to.meta.public || to.path === '/') return home; const roles = to.matched.flatMap((record) => (record.meta.roles as string[] | undefined) ?? []); return roles.length && !roles.includes(auth.currentRole) ? '/403' : true })
 export default router

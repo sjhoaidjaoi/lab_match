@@ -1,14 +1,27 @@
 <template>
-  <PageStub
-    stage="阶段④ · 面试考核"
-    title="面试与问卷"
-    description="查看面试任务，在限时内完成导师问卷并提交；提交后不可修改。"
-    :tasks="['面试任务与导师信息', '限时问卷作答、自动保存与断线续答', '提交确认与完成状态展示']"
-    :apis="['GET /api/interviews/mine', 'GET /api/interviews/{id}', 'POST /api/interviews/{id}/submit']"
-    owner="学生端小组"
-  />
+  <section class="student-page">
+    <h1>面试安排</h1>
+    <el-empty v-if="!interviews.length" description="暂无面试通知" />
+    <div v-else class="student-grid">
+      <el-card v-for="lab in interviews" :key="lab.id" shadow="never">
+        <h2>{{ lab.name }}</h2>
+        <p>时间 · {{ formatTime(student.timeline[3].start + (lab.id + 1) * 3_600_000) }}</p>
+        <p>地点 · {{ lab.room }}</p>
+        <p>形式 · 线下面试，请准备自我介绍及项目经历。</p>
+        <el-tag :type="student.currentNumber === 4 ? 'success' : 'info'">
+          {{ student.currentNumber === 4 ? '已安排' : '面试阶段已结束' }}
+        </el-tag>
+      </el-card>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
-import PageStub from '@/components/PageStub.vue'
+import { computed } from 'vue'
+import { useStudentStore } from '@/stores/student'
+import { formatTime, labs } from './studentDemo'
+
+const student = useStudentStore()
+const interviews = computed(() => student.currentNumber >= 4
+  ? labs.filter(lab => student.receipt?.labIds.includes(lab.id)) : [])
 </script>

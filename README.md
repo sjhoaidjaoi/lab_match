@@ -23,6 +23,10 @@ lab_match/
 - 集中宣讲视频与全景云游播放器容器；未配置素材时明确显示占位提示。
 - Spring Boot 健康检查、开发演示登录、统一 `Result<T>`、全局异常、`@WebLog`、`@RateLimit`、LocaleResolver、OpenAPI JWT SecurityScheme 和 MyBatis-Plus Mapper/Service 分层占位。
 
+## 学生端 MySQL MVP
+
+学生端数据库联调使用独立的 `mvp` 配置。初始化、启动和跨角色验收步骤见 [学生端 MySQL MVP 联调](docs/requirements/STUDENT-MVP.md)。
+
 ## 启动方式
 
 ### 前端

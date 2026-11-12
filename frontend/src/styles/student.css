@@ -1,0 +1,26 @@
+.student-shell { min-height: 100vh; background: #f5f7fb; color: #18263b; }
+.student-top, .student-nav { background: white; padding: 0 clamp(16px, 4vw, 56px); border-bottom: 1px solid #dce4ef; }
+.student-top { display: flex; align-items: center; gap: 12px; min-height: 60px; flex-wrap: wrap; }
+.student-brand { margin-right: auto; font-weight: 700; color: #163764; text-decoration: none; }
+.student-nav { display: flex; overflow-x: auto; gap: 18px; }
+.student-nav a { padding: 13px 0; flex: none; color: #465770; text-decoration: none; }
+.student-nav .router-link-exact-active { color: #1853aa; border-bottom: 2px solid currentColor; font-weight: 600; }
+.student-main { max-width: 1180px; margin: 0 auto; padding: 14px clamp(16px, 4vw, 40px) 40px; }
+.student-demo-note { color: #4f6078; font-size: 13px; margin: 0 0 20px; }
+.student-page { display: grid; gap: 16px; }
+.student-page h1, .student-page h2, .student-page h3 { margin: 0; }
+.student-page p { line-height: 1.65; margin: 8px 0; }
+.student-page a { color: #1853aa; }
+.student-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
+.student-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.student-actions .el-button + .el-button { margin-left: 0; }
+.student-list { margin: 8px 0; padding-left: 22px; }
+.student-list li { margin-block: 8px; }
+.student-fields { display: grid; grid-template-columns: minmax(80px, 120px) 1fr; gap: 10px; }
+.student-fields dd { margin: 0; overflow-wrap: anywhere; }
+.student-fields dt { color: #4f6078; }
+.student-choice { display: grid; gap: 8px; }
+.student-choice .el-checkbox { margin: 0; height: auto; min-height: 34px; white-space: normal; }
+.student-timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); list-style: none; padding: 0; gap: 10px; }
+.student-timeline li { border: 1px solid #dce4ef; padding: 10px; border-radius: 6px; }
+.student-timeline .active { background: #eaf2ff; border-color: #8bb1e9; }
