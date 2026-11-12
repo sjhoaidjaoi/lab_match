@@ -1,436 +1,70 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
-import { useUserStore } from '@/store/user'
-import PublicLayout from '@/layouts/PublicLayout.vue'
-import StudentLayout from '@/layouts/StudentLayout.vue'
-import TeacherLayout from '@/layouts/TeacherLayout.vue'
-import AdminLayout from '@/layouts/AdminLayout.vue'
-import HomePage from '@/pages/public/HomePage.vue'
-import LabsPage from '@/pages/public/LabsPage.vue'
-import LabDetailPage from '@/pages/public/LabDetailPage.vue'
-import MentorDetailPage from '@/pages/public/MentorDetailPage.vue'
-import NoticesPage from '@/pages/public/NoticesPage.vue'
-import NoticeDetailPage from '@/pages/public/NoticeDetailPage.vue'
-import StudentLogin from '@/pages/student/StudentLogin.vue'
-import TeacherLogin from '@/pages/teacher/TeacherLogin.vue'
-import AdminLogin from '@/pages/admin/AdminLogin.vue'
-import ChangePassword from '@/pages/auth/ChangePassword.vue'
-import StudentDashboardPage from '@/pages/student/StudentDashboardPage.vue'
-import StudentArchivePage from '@/pages/student/StudentArchivePage.vue'
-import StudentIntentionPage from '@/pages/student/StudentIntentionPage.vue'
-import StudentInterviewPage from '@/pages/student/StudentInterviewPage.vue'
-import StudentExamsPage from '@/pages/student/StudentExamsPage.vue'
-import StudentExamTakePage from '@/pages/student/StudentExamTakePage.vue'
-import AdminLabsPage from '@/pages/admin/AdminLabsPage.vue'
-import AdminLeadersPage from '@/pages/admin/AdminLeadersPage.vue'
-import AdminMentorsPage from '@/pages/admin/AdminMentorsPage.vue'
-import AdminQuotasPage from '@/pages/admin/AdminQuotasPage.vue'
-import AdminStudentsPage from '@/pages/admin/AdminStudentsPage.vue'
-import AdminRoundsPage from '@/pages/admin/AdminRoundsPage.vue'
-import LeaderMentorPage from '@/pages/teacher/LeaderMentorPage.vue'
-import LeaderApplicantPage from '@/pages/teacher/LeaderApplicantPage.vue'
-import LeaderAdmissionPage from '@/pages/teacher/LeaderAdmissionPage.vue'
-import LeaderWaitlistPage from '@/pages/teacher/LeaderWaitlistPage.vue'
-import LeaderInterviewSchedulePage from '@/pages/teacher/LeaderInterviewSchedulePage.vue'
-import LeaderScoringPage from '@/pages/teacher/LeaderScoringPage.vue'
-import MentorNominationPage from '@/pages/teacher/MentorNominationPage.vue'
-import MentorWaitlistPage from '@/pages/teacher/MentorWaitlistPage.vue'
-import LeaderNominationPage from '@/pages/teacher/LeaderNominationPage.vue'
-import StudentConfirmCenterPage from '@/pages/student/StudentConfirmCenterPage.vue'
-import StudentSupplementPage from '@/pages/student/StudentSupplementPage.vue'
-import MentorApplicantsPage from '@/pages/teacher/MentorApplicantsPage.vue'
-import QuestionBankPage from '@/pages/teacher/QuestionBankPage.vue'
-import ExamPaperPage from '@/pages/teacher/ExamPaperPage.vue'
-import MentorReallocationPoolPage from '@/pages/teacher/MentorReallocationPoolPage.vue'
-import LeaderReallocationPage from '@/pages/teacher/LeaderReallocationPage.vue'
-import AdminReallocationPage from '@/pages/admin/AdminReallocationPage.vue'
-import StudentPublicityPage from '@/pages/student/StudentPublicityPage.vue'
-import StudentDisputesPage from '@/pages/student/StudentDisputesPage.vue'
-import StudentNoticesPage from '@/pages/student/StudentNoticesPage.vue'
-import StudentProfilePage from '@/pages/student/StudentProfilePage.vue'
-import AdminPublicityPage from '@/pages/admin/AdminPublicityPage.vue'
-import AdminDisputesPage from '@/pages/admin/AdminDisputesPage.vue'
-import AdminResultsPage from '@/pages/admin/AdminResultsPage.vue'
-import AdminNoticesPage from '@/pages/admin/AdminNoticesPage.vue'
-import TeacherDashboardPage from '@/pages/teacher/TeacherDashboardPage.vue'
-import TeacherProfilePage from '@/pages/teacher/TeacherProfilePage.vue'
-import MentorAdmissionPage from '@/pages/teacher/MentorAdmissionPage.vue'
-import LeaderDashboardPage from '@/pages/teacher/LeaderDashboardPage.vue'
-import AdminDashboardPage from '@/pages/admin/AdminDashboardPage.vue'
+import { ROLE_HOME } from '@/config/stages'
+import { useAuthStore } from '@/stores/auth'
 
-const routes: RouteRecordRaw[] = [
-  {
-    path: '/',
-    component: PublicLayout,
-    children: [
-      { path: '', name: 'home', component: HomePage, meta: { title: '首页' } },
-      { path: 'labs', name: 'public-labs', component: LabsPage, meta: { title: '实训室' } },
-      { path: 'labs/:id', name: 'public-lab-detail', component: LabDetailPage, meta: { title: '实训室详情' } },
-      { path: 'mentors/:id', name: 'public-mentor-detail', component: MentorDetailPage, meta: { title: '导师详情' } },
-      { path: 'notices', name: 'public-notices', component: NoticesPage, meta: { title: '公告栏' } },
-      { path: 'notices/:id', name: 'public-notice-detail', component: NoticeDetailPage, meta: { title: '公告详情' } },
-      { path: 'student/login', name: 'student-login', component: StudentLogin, meta: { title: '学生登录' } },
-      { path: 'teacher/login', name: 'teacher-login', component: TeacherLogin, meta: { title: '教师登录' } },
-      { path: 'admin/login', name: 'admin-login', component: AdminLogin, meta: { title: '管理员登录' } },
-      {
-        path: 'change-password',
-        name: 'change-password',
-        component: ChangePassword,
-        meta: { requiresAuth: true, title: '修改密码' }
-      }
-    ]
-  },
-  {
-    path: '/student',
-    component: StudentLayout,
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        name: 'student-home',
-        component: StudentDashboardPage,
-        meta: { title: '学生工作台' }
-      },
-      {
-        path: 'archive',
-        name: 'student-archive',
-        component: StudentArchivePage,
-        meta: { title: '我的档案' }
-      },
-      {
-        path: 'intention',
-        name: 'student-intention',
-        component: StudentIntentionPage,
-        meta: { title: '意向填报' }
-      },
-      {
-        path: 'interview',
-        name: 'student-interview',
-        component: StudentInterviewPage,
-        meta: { title: '面试安排' }
-      },
-      {
-        path: 'exams',
-        name: 'student-exams',
-        component: StudentExamsPage,
-        meta: { title: '在线笔试' }
-      },
-      {
-        path: 'exams/:paperId',
-        name: 'student-exam-take',
-        component: StudentExamTakePage,
-        meta: { title: '在线答题' }
-      },
-      {
-        path: 'confirm-center',
-        name: 'student-confirm-center',
-        component: StudentConfirmCenterPage,
-        meta: { title: '录取待确认' }
-      },
-      {
-        path: 'supplement',
-        name: 'student-supplement',
-        component: StudentSupplementPage,
-        meta: { title: '补录填报' }
-      },
-      {
-        path: 'publicity',
-        name: 'student-publicity',
-        component: StudentPublicityPage,
-        meta: { title: '名单公示' }
-      },
-      {
-        path: 'disputes',
-        name: 'student-disputes',
-        component: StudentDisputesPage,
-        meta: { title: '我的异议' }
-      },
-      {
-        path: 'notices',
-        name: 'student-notices',
-        component: StudentNoticesPage,
-        meta: { title: '消息通知' }
-      },
-      {
-        path: 'profile',
-        name: 'student-profile',
-        component: StudentProfilePage,
-        meta: { title: '个人中心' }
-      }
-    ]
-  },
-  {
-    path: '/leader',
-    component: TeacherLayout,
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        name: 'leader-home',
-        component: LeaderDashboardPage,
-        meta: { title: '本室工作台' }
-      },
-      {
-        path: 'mentors',
-        name: 'leader-mentors',
-        component: LeaderMentorPage,
-        meta: { title: '本室导师与名额' }
-      },
-      {
-        path: 'applicants',
-        name: 'leader-applicants',
-        component: LeaderApplicantPage,
-        meta: { title: '本室报名学生' }
-      },
-      {
-        path: 'interview-schedule',
-        name: 'leader-interview-schedule',
-        component: LeaderInterviewSchedulePage,
-        meta: { title: '面试排期' }
-      },
-      {
-        path: 'scoring',
-        name: 'leader-scoring',
-        component: LeaderScoringPage,
-        meta: { title: '本室评分汇总' }
-      },
-      {
-        path: 'nominations',
-        name: 'leader-nominations',
-        component: LeaderNominationPage,
-        meta: { title: '本室录取汇总' }
-      },
-      {
-        path: 'admissions',
-        name: 'leader-admissions',
-        component: LeaderAdmissionPage,
-        props: { mode: 'summary' },
-        meta: { title: '录取确认汇总' }
-      },
-      {
-        path: 'final-list',
-        name: 'leader-final-list',
-        component: LeaderAdmissionPage,
-        props: { mode: 'final' },
-        meta: { title: '本室最终名单' }
-      },
-      {
-        path: 'waitlist',
-        name: 'leader-waitlist',
-        component: LeaderWaitlistPage,
-        meta: { title: '本室递补名单' }
-      },
-      {
-        path: 'reallocation',
-        name: 'leader-reallocation',
-        component: LeaderReallocationPage,
-        meta: { title: '本室内部调剂' }
-      }
-    ]
-  },
-  {
-    path: '/teacher',
-    component: TeacherLayout,
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        name: 'teacher-home',
-        component: TeacherDashboardPage,
-        meta: { title: '导师工作台' }
-      },
-      {
-        path: 'nominations',
-        name: 'teacher-nominations',
-        component: MentorNominationPage,
-        meta: { title: '拟录取勾选' }
-      },
-      {
-        path: 'applicants',
-        name: 'teacher-applicants',
-        component: MentorApplicantsPage,
-        meta: { title: '报名学生' }
-      },
-      {
-        path: 'questions',
-        name: 'teacher-questions',
-        component: QuestionBankPage,
-        meta: { title: '题库管理' }
-      },
-      {
-        path: 'exam-papers',
-        name: 'teacher-exam-papers',
-        component: ExamPaperPage,
-        meta: { title: '在线试卷' }
-      },
-      {
-        path: 'reallocation-pool',
-        name: 'teacher-reallocation-pool',
-        component: MentorReallocationPoolPage,
-        meta: { title: '全院调剂池' }
-      },
-      {
-        path: 'waitlist',
-        name: 'teacher-waitlist',
-        component: MentorWaitlistPage,
-        meta: { title: '递补顺位' }
-      },
-      {
-        path: 'profile',
-        name: 'teacher-profile',
-        component: TeacherProfilePage,
-        meta: { title: '个人中心' }
-      },
-      {
-        path: 'admissions',
-        name: 'teacher-admissions',
-        component: MentorAdmissionPage,
-        meta: { title: '我的录取名单' }
-      }
-    ]
-  },
-  {
-    path: '/admin',
-    component: AdminLayout,
-    meta: { requiresAuth: true },
-    children: [
-      {
-        path: '',
-        name: 'admin-home',
-        component: AdminDashboardPage,
-        meta: { title: '全院工作台' }
-      },
-      {
-        path: 'labs',
-        name: 'admin-labs',
-        component: AdminLabsPage,
-        meta: { title: '实训室管理' }
-      },
-      {
-        path: 'leaders',
-        name: 'admin-leaders',
-        component: AdminLeadersPage,
-        meta: { title: '负责人提拔' }
-      },
-      {
-        path: 'mentors',
-        name: 'admin-mentors',
-        component: AdminMentorsPage,
-        meta: { title: '导师与名额' }
-      },
-      {
-        path: 'quotas',
-        name: 'admin-quotas',
-        component: AdminQuotasPage,
-        meta: { title: '名额总览' }
-      },
-      {
-        path: 'students',
-        name: 'admin-students',
-        component: AdminStudentsPage,
-        meta: { title: '学生账号' }
-      },
-      {
-        path: 'rounds',
-        name: 'admin-rounds',
-        component: AdminRoundsPage,
-        meta: { title: '轮次配置' }
-      },
-      {
-        path: 'notices',
-        name: 'admin-notices',
-        component: AdminNoticesPage,
-        meta: { title: '公告管理' }
-      },
-      {
-        path: 'reallocation',
-        name: 'admin-reallocation',
-        component: AdminReallocationPage,
-        meta: { title: '统筹调剂' }
-      },
-      {
-        path: 'publicity',
-        name: 'admin-publicity',
-        component: AdminPublicityPage,
-        meta: { title: '公示管理' }
-      },
-      {
-        path: 'disputes',
-        name: 'admin-disputes',
-        component: AdminDisputesPage,
-        meta: { title: '异议处理' }
-      },
-      {
-        path: 'results',
-        name: 'admin-results',
-        component: AdminResultsPage,
-        meta: { title: '录取总览' }
-      }
-    ]
-  },
-  { path: '/:pathMatch(.*)*', redirect: '/labs' }
+type Role = 'STUDENT' | 'LAB_TEACHER' | 'LAB_LEADER' | 'COLLEGE_ADMIN'
+interface PageDefinition { path: string; title: string; description: string; stage?: string; api: string; media?: 'video' | 'tour' }
+
+const studentPages: PageDefinition[] = [
+  { path: 'dashboard', title: '学生工作台', description: '查看当前选拔批次与八阶段流程进度。', api: 'GET /api/batches/current' },
+  { path: 'announcement', title: '集中宣讲', description: '宣讲文字、视频和资料入口。', stage: '阶段一：集中宣讲', api: 'GET /api/announcements', media: 'video' },
+  { path: 'labs', title: '实训室开放日', description: '浏览实训室介绍、导师团队和开放日信息。', stage: '阶段二：实训室开放日', api: 'GET /api/labs' },
+  { path: 'labs/:labId', title: '实训室详情', description: '查看实训室方向、成果、导师和培养方式。', stage: '阶段二：实训室开放日', api: 'GET /api/labs/{labId}' },
+  { path: 'labs/:labId/tour', title: '实训室全景云游', description: '预留普通视频与全景播放器容器；实际全景能力取决于素材。', stage: '阶段二：实训室开放日', api: 'GET /api/labs/{labId}/tour', media: 'tour' },
+  { path: 'application', title: '意向填报', description: '最多三个平行导师意向及调剂意愿。', stage: '阶段三：意向填报', api: 'GET /api/applications/me' },
+  { path: 'application/record', title: '我的填报记录', description: '查看当前批次的意向填报状态。', stage: '阶段三：意向填报', api: 'GET /api/applications/me' },
+  { path: 'interview', title: '面试安排', description: '查看本人面试通知与安排。', stage: '阶段四：导师初选与面试考核', api: 'GET /api/interviews/me' },
+  { path: 'admission-confirmation', title: '拟录取确认', description: '查看拟录取通知并确认唯一去向。', stage: '阶段五：拟录取与学生确认', api: 'GET /api/admissions/me' },
+  { path: 'supplementary', title: '分轮补录', description: '查看补录批次、剩余名额与补录入口。', stage: '阶段六：分轮补录', api: 'GET /api/supplementary/rounds' },
+  { path: 'allocation', title: '调剂通知', description: '查看调剂方案与确认状态。', stage: '阶段七：统筹调剂录取', api: 'GET /api/allocations/me' },
+  { path: 'result', title: '最终结果与公示', description: '查看个人录取结果和最终公示。', stage: '阶段八：结果公示与正式入组', api: 'GET /api/publicity/current' }
 ]
-
-const router = createRouter({
-  history: createWebHistory(),
-  routes
-})
-
-function loginPathFor(path: string): string {
-  if (path.startsWith('/teacher')) {
-    return '/teacher/login'
-  }
-  if (path.startsWith('/admin')) {
-    return '/admin/login'
-  }
-  return '/student/login'
+const teacherPages: PageDefinition[] = [
+  { path: 'dashboard', title: '教师工作台', description: '本实训室选拔任务概览。', api: 'GET /api/statistics/lab' },
+  { path: 'lab-info', title: '本实训室信息', description: '查看本实训室基本资料。', api: 'GET /api/labs/mine' },
+  { path: 'applications', title: '报名学生', description: '查看本实训室范围内的报名学生。', stage: '阶段三：意向填报', api: 'GET /api/applications' },
+  { path: 'interviews', title: '面试管理', description: '管理面试安排与学生评价。', stage: '阶段四：导师初选与面试考核', api: 'GET /api/interviews' },
+  { path: 'interviews/:applicationId', title: '面试详情与评价', description: '预留学习态度、逻辑思维、编程基础和时间投入评价。', stage: '阶段四：导师初选与面试考核', api: 'GET /api/interviews/{applicationId}' },
+  { path: 'selection', title: '初选与拟录取建议', description: '提交拟录取、递补和内部调剂候选建议。', stage: '阶段四：导师初选与面试考核', api: 'GET /api/selections' },
+  { path: 'confirmation-status', title: '学生确认进度', description: '查看拟录取学生的确认状态。', stage: '阶段五：拟录取与学生确认', api: 'GET /api/admissions/status' },
+  { path: 'supplementary', title: '补录管理', description: '处理本实训室分轮补录工作。', stage: '阶段六：分轮补录', api: 'GET /api/supplementary' },
+  { path: 'lab-members', title: '实训室成员', description: '查看正式入组成员名单。', stage: '阶段八：结果公示与正式入组', api: 'GET /api/enrollments/lab' }
+]
+const leaderPages: PageDefinition[] = [
+  { path: 'dashboard', title: '组长工作台', description: '汇总本实训室选拔、名额和确认进度。', api: 'GET /api/statistics/lab' },
+  { path: 'lab-selection', title: '本实训室选拔汇总', description: '查看各导师初选与面试进度。', stage: '阶段四：导师初选与面试考核', api: 'GET /api/selections/lab' },
+  { path: 'confirmation-status', title: '本实训室确认进度', description: '查看拟录取确认、逾期与空缺名额。', stage: '阶段五：拟录取与学生确认', api: 'GET /api/admissions/status' },
+  { path: 'internal-allocation', title: '本实训室内部调剂', description: '仅处理本实训室内部调剂。', stage: '阶段七：统筹调剂录取', api: 'GET /api/allocations/internal' },
+  { path: 'supplementary', title: '本实训室补录统筹', description: '查看并统筹本室补录进度。', stage: '阶段六：分轮补录', api: 'GET /api/supplementary/lab' },
+  { path: 'lab-capacity', title: '本实训室名额统计', description: '查看计划、已录取和剩余名额。', stage: '阶段七：统筹调剂录取', api: 'GET /api/statistics/capacity' }
+]
+const collegePages: PageDefinition[] = [
+  { path: 'dashboard', title: '全院工作台', description: '全院选拔批次、八阶段和统计总览。', api: 'GET /api/statistics/college' },
+  { path: 'batches', title: '选拔批次管理', description: '管理批次与八阶段开放时间。', api: 'GET /api/batches' },
+  { path: 'labs', title: '全院实训室管理', description: '维护实训室、导师和招录名额。', api: 'GET /api/labs' },
+  { path: 'applications', title: '全院报名数据', description: '查看全院学生意向申请。', stage: '阶段三：意向填报', api: 'GET /api/applications' },
+  { path: 'selection-overview', title: '初选汇总', description: '查看各实训室初选和拟录取建议。', stage: '阶段四：导师初选与面试考核', api: 'GET /api/selections' },
+  { path: 'supplementary-overview', title: '补录汇总', description: '查看第二轮、第三轮补录进度。', stage: '阶段六：分轮补录', api: 'GET /api/supplementary' },
+  { path: 'allocation', title: '全院统筹调剂', description: '处理跨实训室调剂及全院名额统筹。', stage: '阶段七：统筹调剂录取', api: 'GET /api/allocations' },
+  { path: 'allocation/pool', title: '全院调剂池', description: '查看跨实训室调剂候选人与剩余名额。', stage: '阶段七：统筹调剂录取', api: 'GET /api/allocations/pool' },
+  { path: 'final-list', title: '最终名单汇总', description: '汇总待公示的最终录取名单。', stage: '阶段八：结果公示与正式入组', api: 'GET /api/enrollments' },
+  { path: 'publicity', title: '结果公示管理', description: '配置公示起止时间与公示状态。', stage: '阶段八：结果公示与正式入组', api: 'GET /api/publicity' },
+  { path: 'statistics', title: '全院数据统计', description: '查看各实训室选拔数据统计。', api: 'GET /api/statistics/college' },
+  { path: 'users', title: '用户与角色管理', description: '管理用户、角色与权限。', api: 'GET /api/users' },
+  { path: 'settings', title: '系统与批次配置', description: '维护全局系统配置。', api: 'GET /api/batches/current' },
+  { path: 'announcement', title: '宣讲内容维护', description: '维护宣讲文字、视频与附件。', stage: '阶段一：集中宣讲', api: 'GET /api/announcements', media: 'video' }
+]
+function portal(prefix: string, roles: Role[], pages: PageDefinition[]): RouteRecordRaw {
+  const children: RouteRecordRaw[] = pages.map((page) => ({ path: page.path, component: () => import('@/views/FrameworkPage.vue'), props: page, meta: { roles } }))
+  children.push({ path: '', redirect: `/${prefix}/dashboard` })
+  return { path: `/${prefix}`, component: () => import('@/layouts/AppLayout.vue'), meta: { roles }, children }
 }
-
-function homeFor(userType: number | undefined): string {
-  if (userType === 2) {
-    return '/teacher'
-  }
-  if (userType === 3) {
-    return '/admin'
-  }
-  return '/student'
-}
-
-function requiredUserType(path: string): number | null {
-  if (path.startsWith('/student')) {
-    return 1
-  }
-  if (path.startsWith('/teacher') || path.startsWith('/leader')) {
-    return 2
-  }
-  if (path.startsWith('/admin')) {
-    return 3
-  }
-  return null
-}
-
-router.beforeEach((to) => {
-  const userStore = useUserStore()
-  if (to.meta.requiresAuth && !userStore.isLoggedIn) {
-    return { path: loginPathFor(to.path), query: { redirect: to.fullPath } }
-  }
-  if (userStore.isLoggedIn && !userStore.user) {
-    userStore.logout()
-    return { path: loginPathFor(to.path) }
-  }
-  if (userStore.isLoggedIn && userStore.needChangePwd === 1 && to.path !== '/change-password') {
-    return { path: '/change-password' }
-  }
-  const requiredType = requiredUserType(to.path)
-  if (userStore.isLoggedIn && requiredType !== null && userStore.user?.userType !== requiredType) {
-    return { path: homeFor(userStore.user?.userType) }
-  }
-  if (userStore.isLoggedIn && to.path.startsWith('/leader') && !userStore.isLeader) {
-    return { path: '/teacher' }
-  }
-  if (userStore.isLoggedIn && to.path.endsWith('/login')) {
-    return { path: homeFor(userStore.user?.userType) }
-  }
-  return true
-})
-
+const router = createRouter({ history: createWebHistory(), routes: [
+  { path: '/login', component: () => import('@/views/Login.vue'), meta: { public: true } },
+  { path: '/profile', component: () => import('@/views/FrameworkPage.vue'), props: { title: '个人资料', description: '查看基础账号信息。', api: 'GET /api/auth/me' }, meta: { roles: ['STUDENT', 'LAB_TEACHER', 'LAB_LEADER', 'COLLEGE_ADMIN'] } },
+  { path: '/announcements', component: () => import('@/views/FrameworkPage.vue'), props: { title: '公共通知', description: '查看选拔相关公共通知。', api: 'GET /api/announcements' }, meta: { roles: ['STUDENT', 'LAB_TEACHER', 'LAB_LEADER', 'COLLEGE_ADMIN'] } },
+  { path: '/403', component: () => import('@/views/error/Forbidden.vue'), meta: { public: true } }, portal('student', ['STUDENT'], studentPages), portal('teacher', ['LAB_TEACHER'], teacherPages), portal('leader', ['LAB_LEADER'], leaderPages), portal('college', ['COLLEGE_ADMIN'], collegePages),
+  { path: '/:pathMatch(.*)*', component: () => import('@/views/error/NotFound.vue'), meta: { public: true } }
+] })
+router.beforeEach((to) => { const auth = useAuthStore(); const home = ROLE_HOME[auth.currentRole] || null; if (!auth.isLoggedIn) return to.meta.public ? true : { path: '/login', query: { redirect: to.fullPath } }; if (!home) { auth.logout(); return { path: '/login' } }; if (to.meta.public || to.path === '/') return home; const roles = to.matched.flatMap((record) => (record.meta.roles as string[] | undefined) ?? []); return roles.length && !roles.includes(auth.currentRole) ? '/403' : true })
 export default router
