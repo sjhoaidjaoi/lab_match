@@ -1,70 +1,95 @@
-import axios, { type AxiosRequestConfig } from 'axios'
+import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios'
 import { ElMessage } from 'element-plus'
-import type { Result } from '@/types'
 
-const TOKEN_KEY = 'lm_token'
-const ROLE_KEY = 'lm_role'
-const USER_KEY = 'lm_user'
-const ROLES_KEY = 'lm_roles'
+export interface ApiResult<T> {
+  code: number
+  message: string
+  data: T
+}
 
-const service = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || '/api',
-  timeout: 15000
+const TOKEN_KEY = 'labselect_token'
+
+const request = axios.create({
+  baseURL: '/api/v1',
+  timeout: 10000
 })
 
-service.interceptors.request.use((config) => {
+function loginPath(): string {
+  const path = window.location.pathname
+  if (path.startsWith('/teacher')) {
+    return '/teacher/login'
+  }
+  if (path.startsWith('/leader')) {
+    return '/teacher/login'
+  }
+  if (path.startsWith('/admin')) {
+    return '/admin/login'
+  }
+  return '/student/login'
+}
+
+request.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY)
-  const role = localStorage.getItem(ROLE_KEY)
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
-  if (role) {
-    config.headers['X-Role'] = role
+  const method = (config.method ?? 'get').toLowerCase()
+  if (['post', 'put', 'delete'].includes(method) && !config.headers['Idempotency-Key']) {
+    config.headers['Idempotency-Key'] = createIdempotencyKey()
   }
   return config
 })
 
-service.interceptors.response.use(
-  (response) => {
-    const body = response.data as Result<unknown>
-    if (body && (body.code === 200 || body.code === 'OK')) {
-      // 拦截器统一解包业务数据，调用方通过 http.get<T>() 得到 T
-      return body.data as unknown as typeof response
-    }
-    const message = body?.message || '请求失败'
-    ElMessage.error(message)
-    return Promise.reject(new Error(message))
-  },
-  (error) => {
-    const status = error.response?.status
-    const message = error.response?.data?.message || error.message || '网络异常，请稍后重试'
-    ElMessage.error(message)
-    if (status === 401) {
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(ROLE_KEY)
-      localStorage.removeItem(USER_KEY)
-      localStorage.removeItem(ROLES_KEY)
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login'
-      }
-    }
+function createIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+request.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    ElMessage.error('网络异常，请稍后重试')
     return Promise.reject(error)
   }
 )
 
-export const http = {
-  get<T>(url: string, params?: Record<string, unknown>, config?: AxiosRequestConfig): Promise<T> {
-    return service.get(url, { params, ...config }) as Promise<T>
-  },
-  post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
-    return service.post(url, data, config) as Promise<T>
-  },
-  put<T>(url: string, data?: unknown): Promise<T> {
-    return service.put(url, data) as Promise<T>
-  },
-  delete<T>(url: string): Promise<T> {
-    return service.delete(url) as Promise<T>
+function unwrap<T>(response: AxiosResponse<ApiResult<T>>): T {
+  const result = response.data
+  if (result.code === 200) {
+    return result.data
   }
+  if (result.code === 401001) {
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem('labselect_user')
+    window.location.href = loginPath()
+  } else if (result.code === 401004) {
+    window.location.href = '/change-password'
+  } else {
+    ElMessage.error(result.message)
+  }
+  throw new Error(result.message)
 }
 
-export default service
+export async function get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  const response = await request.get<ApiResult<T>>(url, config)
+  return unwrap(response)
+}
+
+export async function post<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  const response = await request.post<ApiResult<T>>(url, data, config)
+  return unwrap(response)
+}
+
+export async function put<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  const response = await request.put<ApiResult<T>>(url, data, config)
+  return unwrap(response)
+}
+
+export async function del<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  const response = await request.delete<ApiResult<T>>(url, config)
+  return unwrap(response)
+}
+
+export default request
