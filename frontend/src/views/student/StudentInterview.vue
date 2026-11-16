@@ -1,27 +1,57 @@
 <template>
-  <section class="student-page">
+  <section v-loading="loading" class="student-page">
     <h1>面试安排</h1>
-    <el-empty v-if="!interviews.length" description="暂无面试通知" />
-    <div v-else class="student-grid">
-      <el-card v-for="lab in interviews" :key="lab.id" shadow="never">
-        <h2>{{ lab.name }}</h2>
-        <p>时间 · {{ formatTime(student.timeline[3].start + (lab.id + 1) * 3_600_000) }}</p>
-        <p>地点 · {{ lab.room }}</p>
-        <p>形式 · 线下面试，请准备自我介绍及项目经历。</p>
-        <el-tag :type="student.currentNumber === 4 ? 'success' : 'info'">
-          {{ student.currentNumber === 4 ? '已安排' : '面试阶段已结束' }}
-        </el-tag>
+    <el-alert v-if="failed" title="面试安排加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
+    <el-empty v-if="!loading && !interviews.length" description="暂无面试安排" />
+    <div v-else class="student-page">
+      <el-card v-for="item in interviews" :key="item.id" shadow="never">
+        <h2>{{ item.laboratoryName || '实训室#' + item.laboratoryId }}</h2>
+        <p>时间 · {{ formatDateTime(item.interviewTime) }}<span v-if="item.durationMinutes"> · {{ item.durationMinutes }} 分钟</span></p>
+        <p>地点 · {{ item.location || '—' }}</p>
+        <p>形式 · {{ item.interviewForm || '—' }}</p>
+        <p>指导教师 · {{ item.labTeacherName || '—' }} · 面试官 {{ item.interviewerName || '—' }}</p>
+        <p v-if="item.instructions">{{ item.instructions }}</p>
+        <el-tag :type="tagType(item.interviewStatus)">{{ statusLabel(item.interviewStatus) }}</el-tag>
       </el-card>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useStudentStore } from '@/stores/student'
-import { formatTime, labs } from './studentDemo'
+import { onMounted, ref } from 'vue'
+import { formatDateTime, studentApi, type StudentInterview } from '@/api/student'
 
-const student = useStudentStore()
-const interviews = computed(() => student.currentNumber >= 4
-  ? labs.filter(lab => student.receipt?.labIds.includes(lab.id)) : [])
+const statusLabels: Record<string, string> = {
+  SCHEDULED: '已安排', IN_PROGRESS: '进行中', COMPLETED: '已完成', CANCELLED: '已取消'
+}
+
+const loading = ref(false)
+const failed = ref(false)
+const interviews = ref<StudentInterview[]>([])
+
+function statusLabel(status?: string) {
+  return status ? statusLabels[status] ?? status : '—'
+}
+function tagType(status?: string) {
+  if (status === 'COMPLETED') return 'success'
+  if (status === 'IN_PROGRESS') return 'warning'
+  if (status === 'CANCELLED') return 'info'
+  return 'primary'
+}
+
+async function load() {
+  loading.value = true
+  try {
+    const items = await studentApi.myInterviews()
+    interviews.value = items.filter(item => item.interviewTime || item.interviewStatus === 'CANCELLED')
+      .sort((a, b) => (a.interviewTime || '').localeCompare(b.interviewTime || ''))
+    failed.value = false
+  } catch (error) {
+    failed.value = true
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
 </script>

@@ -1,20 +1,20 @@
 <template>
-  <el-container class="layout">
+  <el-container direction="vertical" class="layout workspace-theme" :data-role="auth.currentRole">
     <!-- ========= 顶部栏 ========= -->
-    <el-header class="topbar" height="56px">
-      <div class="brand">
-        <div class="brand-mark">LM</div>
+    <el-header class="topbar">
+      <RouterLink class="brand workspace-account" :to="ROLE_HOME[auth.currentRole] || '/'">
+        <img class="workspace-logo" :src="schoolLogo" alt="河北师范大学软件学院" />
         <div class="brand-text">
           <span class="brand-name">实训室进组选拔平台</span>
-          <span class="brand-sub">Lab Match</span>
+          <span class="brand-sub">{{ auth.roleName }} · LAB MATCH</span>
         </div>
-      </div>
+      </RouterLink>
 
       <div class="stage-pill">
         <el-icon class="stage-pill-icon"><Clock /></el-icon>
-        <span class="stage-pill-label">当前</span>
-        <span class="stage-pill-name">{{ cycleStore.currentStage?.stageName || '加载中' }}</span>
-        <el-tag size="small" effect="dark" :type="stageTagType">{{ stageStatusLabel }}</el-tag>
+        <span class="stage-pill-label">当前阶段</span>
+        <span class="stage-pill-name">{{ cycleStore.currentStage?.stageName || (cycleStore.loading ? '读取中' : '暂无阶段') }}</span>
+        <el-tag v-if="cycleStore.currentStage" size="small" effect="light" :type="stageTagType">{{ stageStatusLabel }}</el-tag>
         <span v-if="stageCountdown" class="stage-pill-countdown">{{ stageCountdown }}</span>
       </div>
 
@@ -24,6 +24,8 @@
           :model-value="auth.currentRole"
           size="small"
           class="role-select"
+          aria-label="切换工作台身份"
+          :disabled="switchingRole"
           @change="onRoleChange"
         >
           <el-option
@@ -33,8 +35,8 @@
             :value="role.roleCode"
           />
         </el-select>
-        <el-dropdown trigger="click" @command="onCommand">
-          <span class="user">
+        <el-dropdown trigger="click" popper-class="workspace-popover" @command="onCommand">
+          <button type="button" class="user workspace-account" aria-label="账号菜单">
             <el-avatar :size="28" class="user-avatar">
               {{ (auth.user?.realName || auth.user?.username || '?').slice(0, 1) }}
             </el-avatar>
@@ -43,10 +45,13 @@
               <span class="user-role">{{ auth.roleName }}</span>
             </div>
             <el-icon class="user-caret"><ArrowDown /></el-icon>
-          </span>
+          </button>
           <template #dropdown>
             <el-dropdown-menu>
               <el-dropdown-item disabled>{{ auth.roleName }}</el-dropdown-item>
+              <el-dropdown-item divided command="profile">个人信息</el-dropdown-item>
+              <el-dropdown-item command="announcements">系统公告</el-dropdown-item>
+              <el-dropdown-item command="help">帮助与说明</el-dropdown-item>
               <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -55,38 +60,68 @@
     </el-header>
 
     <!-- ========= 横向菜单条 ========= -->
-    <div class="navbar">
-      <el-menu :default-active="route.path" router mode="horizontal" class="nav-menu">
-        <el-menu-item v-for="item in currentMenus" :key="item.path" :index="item.path">
-          <el-icon><component :is="item.icon" /></el-icon>
-          <span>{{ item.title }}</span>
-        </el-menu-item>
+    <nav class="navbar" aria-label="工作台导航">
+      <el-menu :default-active="activeMenuPath" router mode="horizontal" menu-trigger="click"
+        :ellipsis="false" class="nav-menu">
+        <template v-for="item in currentMenus" :key="item.path || item.title">
+          <el-sub-menu v-if="item.children && item.children.length" :index="item.title" popper-class="workspace-popover">
+            <template #title>
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span>{{ item.title }}</span>
+            </template>
+            <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
+              <el-icon><component :is="child.icon" /></el-icon>
+              <span>{{ child.title }}</span>
+            </el-menu-item>
+          </el-sub-menu>
+          <el-menu-item v-else :index="item.path">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.title }}</span>
+          </el-menu-item>
+        </template>
       </el-menu>
-    </div>
+    </nav>
 
     <!-- ========= 内容区 ========= -->
     <el-main class="main">
-      <router-view />
+      <div ref="workspaceContent" class="workspace-content">
+        <WorkspaceRibbon :role="auth.currentRole" />
+        <router-view />
+        <WorkspaceBackdrop />
+      </div>
     </el-main>
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Clock } from '@element-plus/icons-vue'
 import { menus } from '@/router/menus'
 import { ROLE_HOME } from '@/config/stages'
 import { useAuthStore } from '@/stores/auth'
 import { useCycleStore } from '@/stores/cycle'
+import WorkspaceRibbon from '@/components/WorkspaceRibbon.vue'
+import WorkspaceBackdrop from '@/components/WorkspaceBackdrop.vue'
+import '@/styles/workspace.css'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const cycleStore = useCycleStore()
+const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.jpg`
 
 const currentMenus = computed(() => menus[auth.currentRole] ?? [])
+const activeMenuPath = computed(() => {
+  const items = currentMenus.value.flatMap(item => item.children || [item])
+  return items.find(item => route.path === item.path || route.path.startsWith(item.path + '/'))?.path ?? ''
+})
+const workspaceContent = ref<HTMLElement>()
+const switchingRole = ref(false)
+
+watch(() => route.path, () => {
+  workspaceContent.value?.parentElement?.scrollTo({ top: 0 })
+})
 
 // 阶段状态
 const now = ref(Date.now())
@@ -115,217 +150,184 @@ const stageCountdown = computed(() => {
 
 function onCommand(command: string) {
   if (command === 'logout') {
-    auth.logout()
+    auth.logout(true)
     router.replace('/login')
-    ElMessage.success('已退出登录')
+    return
+  }
+  if (command === 'profile') {
+    if (auth.currentRole === 'STUDENT') router.push('/student/profile')
+    else router.push('/profile')
+    return
+  }
+  if (command === 'announcements') {
+    if (auth.currentRole === 'STUDENT') router.push('/student/messages')
+    else router.push('/announcements')
+    return
+  }
+  if (command === 'help') {
+    const prefix: Record<string, string> = { LAB_TEACHER: '/teacher', LAB_LEADER: '/leader', COLLEGE_ADMIN: '/college' }
+    router.push(`${prefix[auth.currentRole] || ''}/help`)
   }
 }
 
 async function onRoleChange(value: string | number | boolean | undefined) {
   const roleCode = String(value ?? '')
-  if (!roleCode || roleCode === auth.currentRole) return
-  await auth.switchRole(roleCode)
-  await cycleStore.load(true)
-  router.replace(ROLE_HOME[roleCode] || '/')
+  if (!roleCode || roleCode === auth.currentRole || switchingRole.value) return
+  switchingRole.value = true
+  try {
+    await auth.switchRole(roleCode)
+    await router.replace(ROLE_HOME[roleCode] || '/')
+    await cycleStore.load(true)
+  } catch {
+    // 请求层呈现错误，保留当前页面可继续操作。
+  } finally {
+    switchingRole.value = false
+  }
 }
 
 onMounted(() => {
   auth.refresh().catch(() => undefined)
-  cycleStore.load()
+  cycleStore.load().catch(() => undefined)
   timer = window.setInterval(() => { now.value = Date.now() }, 1000)
 })
 onUnmounted(() => { if (timer) window.clearInterval(timer) })
 </script>
 
 <style scoped>
-/* ===== 布局 ===== */
-.layout {
-  height: 100%;
-  background: #f5f7fb;
-}
-
-/* ===== 顶栏：纯白 + 底部细线 ===== */
+.layout { height: 100%; min-width: 0; }
 .topbar {
-  background: #fff;
-  border-bottom: 1px solid #eef0f5;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 0 28px;
-  position: relative;
+  gap: 12px 18px;
+  min-height: 62px;
+  height: auto;
+  padding: 8px var(--workspace-gutter);
+  border-bottom: 1px solid var(--workspace-border);
 }
-/* 左侧一条细细的彩色点缀条 */
-.topbar::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, #2f6fed, #6f9bff);
-}
-
-/* ---- 品牌 ---- */
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #2f6fed, #6f9bff);
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  letter-spacing: 0.5px;
-  box-shadow: 0 2px 6px rgba(47, 111, 237, 0.28);
-}
-.brand-text {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.brand-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1f2937;
-}
-.brand-sub {
-  font-size: 11px;
-  color: #9aa3b2;
-  letter-spacing: 0.5px;
-}
-
-/* ---- 阶段 Pill ---- */
-.stage-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 14px 4px 10px;
-  height: 34px;
-  background: #f0f5ff;
-  border: 1px solid #dbe6ff;
-  border-radius: 17px;
-  font-size: 13px;
-  flex: 1;
-  max-width: 520px;
-  justify-content: center;
-  color: #3b4663;
+  gap: 12px;
+  min-width: 0;
+  padding: 5px;
+  margin-inline-start: -5px;
+  border-radius: 8px;
 }
-.stage-pill-icon {
-  font-size: 14px;
-  color: #2f6fed;
-}
-.stage-pill-label {
-  font-size: 11px;
-  color: #7b8aa8;
-  margin-right: 2px;
-}
-.stage-pill-name {
-  font-weight: 600;
-  color: #1f2937;
-}
-.stage-pill-countdown {
-  color: #2f6fed;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  font-size: 12px;
-}
-
-/* ---- 右侧 ---- */
-.topbar-right {
+.brand-text { display: grid; gap: 3px; white-space: nowrap; }
+.brand-name { font-size: 13px; font-weight: 680; color: var(--workspace-ink); }
+.brand-sub { font-size: 11px; color: var(--workspace-accent); }
+.stage-pill {
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex-shrink: 0;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px 12px;
+  background: var(--workspace-tint);
+  border: 1px solid var(--workspace-border);
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--workspace-ink);
 }
-
-.role-select {
-  width: 120px;
-}
-
+.stage-pill-icon { color: var(--workspace-accent); flex: none; }
+.stage-pill-label { color: var(--workspace-muted); font-size: 11px; white-space: nowrap; }
+.stage-pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.stage-pill-countdown { color: var(--workspace-accent); font: 12px var(--workspace-mono); white-space: nowrap; }
+.topbar-right { display: flex; align-items: center; gap: 10px; flex: none; }
+.role-select { width: 118px; }
 .user {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-height: 36px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 9px;
+  background: var(--workspace-paper);
+  color: var(--workspace-ink);
   cursor: pointer;
-  padding: 2px 10px 2px 2px;
-  border-radius: 18px;
-  transition: background 0.15s;
+  font: inherit;
+  text-align: start;
 }
-.user:hover { background: #f4f6fb; }
+.brand:hover, .user:hover, .user[aria-expanded="true"] { background: var(--workspace-tint); }
+.user-avatar { background: var(--workspace-tint); color: var(--workspace-accent); font-weight: 650; }
+.user-info { display: grid; line-height: 1.3; }
+.user-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 650; }
+.user-role { font-size: 10px; color: var(--workspace-muted); }
+.user-caret { color: var(--workspace-accent); }
 
-.user-avatar {
-  background: #e8f0ff;
-  color: #2f6fed;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.user-info {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-.user-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #1f2937;
-}
-.user-role {
-  font-size: 10.5px;
-  color: #9aa3b2;
-}
-.user-caret {
-  font-size: 11px;
-  color: #c4c9d4;
-}
-
-/* ===== 导航条 ===== */
 .navbar {
-  background: #fff;
-  border-bottom: 1px solid #eef0f5;
-  padding: 0 24px;
+  flex: none;
+  min-width: 0;
+  padding: 0 var(--workspace-gutter);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  background: var(--workspace-paper);
+  border-bottom: 1px solid var(--workspace-border);
 }
 .nav-menu {
-  border-bottom: none;
-  height: 46px;
-  line-height: 46px;
-  background: transparent;
+  --el-menu-horizontal-height: 52px;
+  --el-menu-bg-color: transparent;
+  --el-menu-text-color: var(--workspace-ink);
+  --el-menu-active-color: var(--workspace-accent);
+  --el-menu-hover-bg-color: var(--workspace-tint);
+  width: max-content;
+  align-items: center;
+  gap: 5px;
+  border: 0;
 }
-.nav-menu :deep(.el-menu-item) {
-  height: 46px;
-  line-height: 46px;
-  border-bottom: 2px solid transparent !important;
-  margin: 0 2px;
-  padding: 0 14px !important;
-  font-size: 13px;
-  color: #5b6472;
+.nav-menu > :deep(.el-menu-item),
+.nav-menu > :deep(.el-sub-menu > .el-sub-menu__title) {
+  height: 37px;
+  line-height: 37px;
+  padding: 0 clamp(9px, 1vw, 15px);
+  border: 0;
+  border-radius: 7px;
+  color: var(--workspace-ink);
+  white-space: nowrap;
 }
-.nav-menu :deep(.el-menu-item:hover) {
-  color: #2f6fed;
-  background: transparent;
+.nav-menu > :deep(.el-menu-item.is-active),
+.nav-menu > :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
+  color: var(--workspace-accent) !important;
+  background: var(--workspace-tint);
+  box-shadow: inset 0 -2px var(--workspace-accent);
+  font-weight: 650;
+  border: 0;
 }
-.nav-menu :deep(.el-menu-item.is-active) {
-  color: #2f6fed !important;
-  font-weight: 600;
-  border-bottom: 2px solid #2f6fed !important;
-  background: transparent !important;
+.nav-menu > :deep(.el-menu-item:hover),
+.nav-menu > :deep(.el-sub-menu > .el-sub-menu__title:hover) {
+  color: var(--workspace-accent);
+  background: var(--workspace-tint);
 }
-.nav-menu :deep(.el-icon) {
-  margin-right: 5px;
-  font-size: 14px;
-}
+.nav-menu > :deep(.el-menu-item:active),
+.nav-menu > :deep(.el-sub-menu:active > .el-sub-menu__title) { box-shadow: inset 0 -2px var(--workspace-accent); }
+.nav-menu :deep(.el-icon) { margin-inline-end: 5px; font-size: 14px; }
+.nav-menu :deep(.el-sub-menu__icon-arrow) { position: static; margin: 0 0 0 6px; }
 
-/* ===== 主内容区 ===== */
-.main {
-  padding: 20px 24px;
-  overflow-y: auto;
-  background: #f5f7fb;
+.main { min-width: 0; min-height: 0; padding: clamp(14px, 1.7vw, 25px) var(--workspace-gutter) 20px; overflow: auto; }
+.workspace-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1816px;
+  min-width: 0;
+  min-height: 100%;
+  margin-inline: auto;
+}
+@media (max-width: 1100px) {
+  .brand-text { display: none; }
+}
+@media (max-width: 720px) {
+  .topbar { flex-wrap: wrap; }
+  .stage-pill { order: 3; flex: 1 0 100%; }
+  .stage-pill-countdown { margin-inline-start: auto; }
+  .user-info { display: none; }
+  .brand { padding-inline-end: 0; }
+  .main :deep(.el-card__body) { padding: 12px; }
+}
+@media (max-width: 390px) {
+  .stage-pill-countdown { display: none; }
+  .role-select { width: 104px; }
 }
 </style>

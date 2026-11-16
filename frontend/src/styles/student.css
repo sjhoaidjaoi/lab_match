@@ -1,16 +1,27 @@
-.student-shell { min-height: 100vh; background: #f5f7fb; color: #18263b; }
-.student-top, .student-nav { background: white; padding: 0 clamp(16px, 4vw, 56px); border-bottom: 1px solid #dce4ef; }
-.student-top { display: flex; align-items: center; gap: 12px; min-height: 60px; flex-wrap: wrap; }
-.student-brand { margin-right: auto; font-weight: 700; color: #163764; text-decoration: none; }
-.student-nav { display: flex; overflow-x: auto; gap: 18px; }
-.student-nav a { padding: 13px 0; flex: none; color: #465770; text-decoration: none; }
-.student-nav .router-link-exact-active { color: #1853aa; border-bottom: 2px solid currentColor; font-weight: 600; }
-.student-main { max-width: 1180px; margin: 0 auto; padding: 14px clamp(16px, 4vw, 40px) 40px; }
+.student-shell { min-height: 100vh; }
+.student-top {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  min-height: 60px;
+  padding: 8px var(--workspace-gutter);
+  border-bottom: 1px solid var(--workspace-border);
+}
+.student-account { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; }
+.student-account .workspace-account { padding: 7px 9px; border-radius: 8px; }
+.student-account .el-button { margin: 0; }
+.student-user { padding-inline-end: 7px; color: var(--workspace-muted); font: 12px var(--workspace-mono); }
+.student-brand { display: inline-flex; padding-block: 5px; }
 .student-demo-note { color: #4f6078; font-size: 13px; margin: 0 0 20px; }
-.student-page { display: grid; gap: 16px; }
+.student-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .student-page h1, .student-page h2, .student-page h3 { margin: 0; }
 .student-page p { line-height: 1.65; margin: 8px 0; }
-.student-page a { color: #1853aa; }
+.student-page a, .student-top a { color: var(--workspace-accent); }
 .student-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
 .student-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .student-actions .el-button + .el-button { margin-left: 0; }
@@ -24,3 +35,123 @@
 .student-timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); list-style: none; padding: 0; gap: 10px; }
 .student-timeline li { border: 1px solid #dce4ef; padding: 10px; border-radius: 6px; }
 .student-timeline .active { background: #eaf2ff; border-color: #8bb1e9; }
+
+.student-frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  gap: clamp(14px, 1.6vw, 24px);
+  width: 100%;
+  min-height: calc(100svh - 60px);
+  align-content: start;
+  max-width: 1920px;
+  margin-inline: auto;
+  padding: clamp(14px, 1.7vw, 25px) var(--workspace-gutter) 0;
+}
+.student-nav {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  background: var(--workspace-paper);
+  padding: 7px 9px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+}
+.student-nav section { display: flex; flex: none; align-items: center; gap: 3px; }
+.student-nav section + section { padding-inline-start: 10px; border-inline-start: 1px solid var(--workspace-border); }
+.student-nav p { margin: 0 4px; color: var(--workspace-muted); font-size: 11px; }
+.student-nav a {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 39px;
+  padding: 8px clamp(8px, .75vw, 13px);
+  border-radius: 7px;
+  color: var(--workspace-ink);
+  white-space: nowrap;
+}
+.student-nav .student-nav-active {
+  color: var(--workspace-accent);
+  background: var(--workspace-tint);
+  box-shadow: inset 0 -2px var(--workspace-accent);
+  font-weight: 650;
+}
+@media (hover: hover) {
+  .student-nav a:hover, .student-account .workspace-account:hover {
+    color: var(--workspace-accent);
+    background: var(--workspace-tint);
+  }
+}
+.student-main { width: 100%; min-width: 0; }
+.student-page h1 { font-size: clamp(23px, 3vw, 35px); letter-spacing: -.025em; }
+.student-page h2 { font-size: 18px; }
+.student-lab-list { display: grid; min-width: 0; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.student-page .student-lab-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 14px clamp(14px, 3vw, 24px);
+  border: 1px solid #e9ded5;
+  border-radius: 12px;
+  background: #fffcf8;
+  color: #302622;
+  text-decoration: none;
+}
+.student-page .student-lab-link:hover { border-color: #bd7967; background: #fff7f0; }
+.student-lab-summary { min-width: 0; overflow-wrap: anywhere; }
+.student-lab-summary h2 { font-size: clamp(15px, 2vw, 18px); }
+.student-page .student-lab-summary p { margin: 3px 0 0; color: #6b5a50; font-size: 13px; }
+.student-lab-action { color: #8c3827; font-weight: 600; font-size: 13px; white-space: nowrap; }
+@media (max-width: 480px) {
+  .student-page .student-lab-link { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
+.student-welcome {
+  position: relative;
+  isolation: isolate;
+  padding: clamp(20px, 3vw, 42px);
+  border: 1px solid var(--workspace-border);
+  border-radius: 18px;
+  background:
+    var(--workspace-grid),
+    linear-gradient(118deg, var(--workspace-paper) 36%, var(--workspace-tint));
+  background-size: 34px 34px, 34px 34px, 100% 100%;
+}
+.student-welcome::after {
+  content: '</>' / '';
+  position: absolute;
+  z-index: -1;
+  inset: 2px 22px auto auto;
+  color: var(--workspace-accent);
+  opacity: .08;
+  font: 600 clamp(32px, 6vw, 96px)/1 var(--workspace-mono);
+  letter-spacing: -.1em;
+  pointer-events: none;
+}
+.student-welcome > p { color: var(--workspace-muted); }
+.student-progress { min-width: 0; }
+.student-progress .student-timeline { display: flex; overflow-x: auto; scrollbar-width: thin; gap: 0; padding: 8px 4px; margin-bottom: 0; }
+.student-progress .student-timeline li { flex: 1 0 108px; padding: 0 6px; border: 0; border-radius: 0; background: transparent; position: relative; }
+.student-progress .student-timeline li:not(:last-child)::before { content: ''; position: absolute; top: 22px; left: 27px; right: -27px; border-top: 1px solid #dbc9bf; }
+.student-progress .student-timeline li a { display: grid; align-content: start; height: 100%; gap: 5px; padding: 8px; border-radius: 8px; position: relative; font-size: 13px; }
+.student-progress .student-timeline li a:hover { background: color-mix(in srgb, var(--workspace-tint) 75%, transparent); }
+.student-step { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid #dbc9bf; background: var(--workspace-paper); font: 600 12px var(--workspace-mono); }
+.student-timeline .active .student-step { background: var(--workspace-accent); border-color: var(--workspace-accent); color: white; }
+.student-timeline .done .student-step { background: #e5efdf; color: #325439; }
+.student-timeline small { color: #6b5a51; }
+.student-home-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.85fr); gap: 16px; }
+.student-blackboard { padding: clamp(16px, 2vw, 24px); color: #f5f6eb; background: linear-gradient(150deg, #22362f, #2d453b); border: 1px solid #526c5a; border-radius: 14px; }
+.student-blackboard details { border-bottom: 1px solid #ffffff2f; }
+.student-blackboard summary { padding: 10px 6px; border-radius: 6px; cursor: pointer; overflow-wrap: anywhere; }
+.student-blackboard summary:hover, .student-blackboard details[open] summary { background: #ffffff12; }
+.student-blackboard :is(summary, a):focus-visible { outline-color: #fae2b9; }
+.student-blackboard small { display: block; color: #c9d6c9; margin: 5px 0 0 14px; }
+.student-blackboard a { display: inline-block; margin-top: 14px; color: #fae2b9; }
+.student-blackboard a:hover { text-decoration: underline; }
+.student-personal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.student-preference { min-width: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); margin: 14px 0; padding: 12px; border: 1px solid #e9ded5; border-radius: 10px; }
+.student-preference legend { color: #784535; padding: 0 6px; }
+@media (max-width: 950px) { .student-home-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 460px) { .student-personal { grid-template-columns: minmax(0, 1fr); } }

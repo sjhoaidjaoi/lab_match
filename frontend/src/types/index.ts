@@ -16,6 +16,9 @@ export interface UserInfo {
   studentNo?: string
   role: string
   phone?: string | null
+  email?: string | null
+  laboratoryId?: number | null
+  mustChangePassword?: boolean
 }
 
 export interface RoleInfo {
@@ -68,6 +71,12 @@ export interface LabView {
   recruitmentQuota: number
   leaderId?: number | null
   leaderName?: string | null
+  applicationCount?: number
+  briefingText?: string
+  briefingVideoUrl?: string | null
+  briefingVideoType?: 'MP4' | 'LINK' | 'EMBED'
+  tourVideoUrl?: string | null
+  tourVideoType?: 'MP4' | 'LINK' | 'EMBED'
   introductionVideo?: string | null
   panoramicResource?: string | null
   status: string
@@ -75,6 +84,9 @@ export interface LabView {
 }
 
 export interface PreferenceItem {
+  resume?: { id: string; name: string; size: number } | null
+  labTeacherId?: number
+  labTeacherName?: string
   id: number
   batchId: number
   studentId: number
@@ -232,4 +244,212 @@ export interface PanoramaPayload {
   coverUrl?: string | null
   sortNo?: number
   status?: string
+}
+
+// ========== 学院总负责人端（新文档 4.5 节 / 6.6 节） ==========
+
+export interface CollegeBatch {
+  id: number
+  batchName: string
+  academicYear: string
+  status: string
+  description?: string
+}
+
+export interface CollegeLabProgress {
+  laboratoryId: number
+  laboratoryName: string
+  quota: number
+  applicationCount: number
+  interviewScheduled: number
+  interviewCompleted: number
+  intended: number
+  alternate: number
+  confirmed: number
+  rejected: number
+  admitted: number
+  remaining: number
+}
+
+export interface CollegeDashboard {
+  batch: CollegeBatch | null
+  stages: StageInfo[]
+  currentStage: StageInfo | null
+  students: { total: number; submitted: number; unsubmitted: number }
+  perLab: CollegeLabProgress[]
+  totals: { quota: number; admitted: number; remaining: number }
+  adjustments: { INTERNAL: number; CROSS_LAB: number; MANUAL_PLACEMENT: number; confirmed: number }
+  lists: { intended: number; alternate: number; confirmed: number; rejected: number }
+}
+
+export interface CapacityRow {
+  laboratoryId: number
+  laboratoryName: string
+  leaderId?: number | null
+  quota: number
+  intended: number
+  confirmed: number
+  admitted: number
+  remaining: number
+}
+
+export interface UnplacedStudent {
+  studentId: number
+  studentName: string
+  studentNumber: string
+  phone?: string | null
+  preferenceLabs: string[]
+  obeyInternalAdjustment: boolean
+  obeyCollegeAdjustment: boolean
+  interviewList: Array<{
+    laboratoryId: number
+    laboratoryName: string
+    interviewStatus: string
+    comprehensiveScore?: number | null
+    recommendation?: string
+  }>
+  admittedIntended: number
+  alternateIntended: number
+  hasPreference: boolean
+}
+
+export interface CandidateRow {
+  studentId: number
+  studentName: string
+  studentNumber: string
+  phone?: string | null
+  preferenceLabs: string[]
+  alternateLabs: string[]
+  obeyInternalAdjustment: boolean
+  obeyCollegeAdjustment: boolean
+  interviewCount: number
+  averageScore: number | null
+  adjustment: {
+    id: number
+    adjustmentType: string
+    status: string
+    targetLabName: string
+  } | null
+  suggestedPriority: number
+  hasPreference: boolean
+}
+
+export interface FinalCheck {
+  batchId: number
+  batchName: string
+  quotaTotal: number
+  admittedTotal: number
+  perLab: Array<{ laboratoryId: number; laboratoryName: string; quota: number; count: number; over: boolean }>
+  overQuota: Array<{ laboratoryId: number; laboratoryName: string; quota: number; count: number; over: boolean }>
+  duplicates: Array<{ studentId: number; studentName: string; studentNumber: string; count: number }>
+  unplacedCount: number
+  review: { batchId: number; status: string; comment: string; reviewedAt: string } | null
+  canReview: boolean
+}
+
+export interface ObjectionItem {
+  id: number
+  studentId: number
+  studentName: string
+  studentNumber: string
+  type: string
+  content: string
+  status: string
+  handlingNote: string
+  handlerName: string
+  createdAt: string
+  handledAt: string | null
+}
+
+export interface OpenDaySchedule {
+  id: number
+  laboratoryId: number
+  laboratoryName: string
+  title: string
+  date: string
+  startTime: string
+  endTime: string
+  location: string
+  note: string
+}
+
+export interface UserAccount {
+  id: number
+  username: string
+  realName: string
+  studentNumber?: string | null
+  role: string
+  roleName?: string
+  phone?: string | null
+  laboratoryId?: number | null
+  status: string
+  createdAt?: string
+}
+
+export interface UserPayload {
+  username?: string
+  password?: string
+  employeeNumber?: string
+  realName?: string
+  studentNumber?: string | null
+  role?: string
+  phone?: string | null
+  laboratoryId?: number | null
+  status?: string
+}
+
+export interface PreferenceDetail extends PreferenceItem {
+  studentName: string
+  studentNumber: string
+}
+
+export interface InterviewDetail extends InterviewItem {
+  laboratoryName: string
+}
+
+export interface AdmissionDetail extends AdmissionItem {
+  studentName: string
+  studentNumber: string
+}
+
+export interface AdjustmentDetail extends AdjustmentItem {
+  studentNumber?: string
+  sourceLabName?: string | null
+  targetLabName?: string
+  operatorName?: string
+}
+
+export interface OperationLogItem {
+  id: number
+  operatorId?: number | null
+  operatorName?: string
+  operationType: string
+  targetType: string
+  targetId?: number | null
+  operationDescription: string
+  createdAt: string
+}
+
+export interface FinalAdmissionDetail extends FinalAdmissionItem {
+  laboratoryName?: string
+  finalStatus: string
+}
+
+export interface PublicationInfo {
+  id?: number
+  title: string
+  content?: string
+  startAt: string
+  endAt: string
+  status?: string
+  createdAt?: string
+}
+
+/** 服务端分页返回结构（请求带 page 参数时） */
+export interface PageResult<T> {
+  list: T[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }

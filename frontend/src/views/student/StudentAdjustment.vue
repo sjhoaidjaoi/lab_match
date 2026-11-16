@@ -1,53 +1,107 @@
 <template>
-  <section class="student-page">
-    <h1>{{ stage === 6 ? '分轮补录 · 实训室内部调剂' : '学院统筹调剂' }}</h1>
+  <section v-loading="loading" class="student-page">
+    <h1>调剂与补录</h1>
     <el-card shadow="never">
-      <h2>我的调剂意愿</h2>
-      <p>实训室内部调剂 · {{ intention(student.receipt?.internal) }}</p>
-      <p>学院跨实训室调剂 · {{ intention(student.receipt?.college) }}</p>
+      <el-radio-group v-model="stage" aria-label="调剂阶段">
+        <el-radio-button :value="6">先 · 实训室内部调剂</el-radio-button>
+        <el-radio-button :value="7">后 · 学院统筹调剂</el-radio-button>
+      </el-radio-group>
+      <p v-if="preference">本阶段调剂意愿：{{ (stage === 6 ? preference.obeyInternalAdjustment : preference.obeyCollegeAdjustment) ? '服从' : '不服从' }}</p>
+      <p v-if="currentStage">批次当前阶段：{{ currentStage }}</p>
     </el-card>
-    <el-card v-if="visibleLab" shadow="never">
-      <h2>{{ labName(visibleLab) }}</h2>
-      <p>确认截止 {{ formatTime(student.timeline[stage - 1].end) }}</p>
-      <p>处理结果 · {{ decision ? (decision.accepted ? '已接受' : '已拒绝') : student.currentNumber === stage ? '待确认' : '逾期未确认' }}</p>
-      <div v-if="!decision && student.currentNumber === stage" class="student-actions">
-        <el-button type="primary" @click="confirm(true)">接受调剂</el-button>
-        <el-button @click="confirm(false)">拒绝调剂</el-button>
-      </div>
-    </el-card>
-    <el-empty v-else :description="student.confirmed ? '已确认录取去向，暂无待处理调剂' : '暂无个人调剂通知'" />
-    <p v-if="stage === 7 && student.currentNumber >= 7 && !student.confirmed && !target">
-      如收到学院沟通安置通知，请按通知安排参加面谈。当前暂无本人安置结果。
-    </p>
+    <el-alert v-if="failed" title="调剂数据读取失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
+    <el-empty v-if="!loading && !visible.length" description="暂无个人调剂通知" />
+    <div v-else class="student-grid">
+      <el-card v-for="item in visible" :key="item.id" shadow="never">
+        <h2>{{ item.targetLabName || '实训室#' + item.targetLaboratoryId }}</h2>
+        <p>调剂类型 · {{ typeLabel(item.adjustmentType) }}</p>
+        <p>目标导师 · {{ item.targetTeacherName || '由实训室统筹' }}</p>
+        <p v-if="item.sourceLabName && item.sourceLabName !== item.targetLabName">来源实训室 · {{ item.sourceLabName }}</p>
+        <p v-if="item.reason">调剂说明 · {{ item.reason }}</p>
+        <p>通知时间 · {{ formatDateTime(item.createdAt) }}</p>
+        <p>处理结果 · <el-tag :type="statusTag(item.status)">{{ statusLabel(item.status) }}</el-tag></p>
+        <div v-if="item.status === 'PENDING'" class="student-actions">
+          <el-button type="primary" :loading="savingId === item.id" @click="decide(item, true)">接受调剂</el-button>
+          <el-button :loading="savingId === item.id" @click="decide(item, false)">拒绝调剂</el-button>
+        </div>
+      </el-card>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import type { PreferenceItem } from '@/types'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useStudentStore } from '@/stores/student'
-import { formatTime, labName } from './studentDemo'
+import { formatDateTime, studentApi, type StudentAdjustmentRecord } from '@/api/student'
 
-const props = defineProps<{ stage: 6 | 7 }>()
-const student = useStudentStore()
-const target = computed(() => student.currentNumber >= props.stage ? student.adjustmentLab(props.stage) : undefined)
-const decision = computed(() => student.decisionFor(props.stage))
-const visibleLab = computed(() => decision.value?.labId ?? (student.confirmed ? undefined : target.value))
+const route = useRoute()
+const stage = ref(route.query.stage === '6' ? 6 : 7)
+watch(() => route.query.stage, value => { stage.value = value === '6' ? 6 : 7 })
+const preference = ref<PreferenceItem>()
+const currentStage = ref('')
+const failed = ref(false)
 
-function intention(value?: boolean | null) {
-  if (value == null) return '未提交'
-  return value ? '服从' : '不服从'
+const loading = ref(false)
+const savingId = ref<number | null>(null)
+const records = ref<StudentAdjustmentRecord[]>([])
+
+const visible = computed(() => {
+  if (stage.value === 6) return records.value.filter((item) => item.adjustmentType === 'INTERNAL')
+  return records.value.filter((item) => item.adjustmentType === 'CROSS_LAB' || item.adjustmentType === 'MANUAL_PLACEMENT')
+})
+
+function typeLabel(type: string) {
+  const labels: Record<string, string> = {
+    INTERNAL: '实训室内部调剂', CROSS_LAB: '跨实训室调剂', MANUAL_PLACEMENT: '沟通安置'
+  }
+  return labels[type] ?? type
+}
+function statusLabel(status: string) {
+  const labels: Record<string, string> = { PENDING: '待确认', CONFIRMED: '已接受', REJECTED: '已拒绝' }
+  return labels[status] ?? status
+}
+function statusTag(status: string) {
+  if (status === 'CONFIRMED') return 'success'
+  if (status === 'PENDING') return 'warning'
+  return 'info'
 }
 
-async function confirm(accepted: boolean) {
-  const labId = target.value
-  if (!labId) return
-  const action = accepted ? '接受' : '拒绝'
-  const agreed = await ElMessageBox.confirm('确认' + action + labName(labId) + '的调剂？', '调剂确认')
-    .then(() => true, () => false)
+async function load() {
+  loading.value = true
+  try {
+    const [items, choices, batch] = await Promise.all([studentApi.myAdjustments(), studentApi.myPreferences(), studentApi.batchesCurrent()])
+    records.value = items
+    preference.value = choices[0]
+    currentStage.value = batch?.currentStage?.name ?? ''
+    failed.value = false
+  } catch (error) {
+    failed.value = true
+  } finally {
+    loading.value = false
+  }
+}
+
+async function decide(item: StudentAdjustmentRecord, confirmed: boolean) {
+  if (savingId.value !== null) return
+  const name = item.targetLabName || '该实训室'
+  const agreed = await ElMessageBox.confirm(
+    confirmed ? `确认接受「${name}」的调剂？` : `确认拒绝「${name}」的调剂？`,
+    '调剂确认', { type: confirmed ? 'warning' : 'info' }
+  ).then(() => true, () => false)
   if (!agreed) return
-  const error = student.decide(props.stage, labId, accepted)
-  if (error) ElMessage.error(error)
-  else ElMessage.success('调剂结果已保存')
+  savingId.value = item.id
+  try {
+    await studentApi.confirmAdjustment(item.id, confirmed)
+    ElMessage.success('调剂结果已保存')
+    await load()
+  } catch (error) {
+    console.error('调剂确认失败', error)
+  } finally {
+    savingId.value = null
+  }
 }
+
+onMounted(load)
 </script>

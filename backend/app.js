@@ -15,6 +15,20 @@ app.use(cors({ origin: true, credentials: true }))
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
 
+// ============ 写操作串行化（模拟事务，避免并发读改写丢失） ============
+let mutationQueue = Promise.resolve()
+app.use('/api', (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
+  let release
+  const previous = mutationQueue
+  mutationQueue = new Promise((resolve) => { release = resolve })
+  previous.then(() => {
+    res.once('finish', release)
+    res.once('close', release)
+    next()
+  })
+})
+
 // ============ 静态资源（上传文件） ============
 const uploadDir = path.join(__dirname, 'uploads')
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
@@ -22,7 +36,11 @@ app.use('/uploads', express.static(uploadDir))
 
 // ============ 健康检查 ============
 app.get('/api/health', (_req, res) => {
-  res.json({ code: 'OK', message: 'ok', data: { status: 'UP', time: new Date().toISOString() } })
+  res.json({ code: 'OK', message: 'ok', data: {
+    status: 'UP',
+    storage: process.env.DB_DRIVER === 'mysql' ? 'mysql' : 'file',
+    time: new Date().toISOString()
+  } })
 })
 
 // ============ 路由挂载 ============
@@ -32,12 +50,16 @@ app.use('/api/laboratories', require('./routes/laboratories'))
 app.use('/api/preferences', require('./routes/preferences'))
 app.use('/api/interviews', require('./routes/interviews'))
 app.use('/api/admissions', require('./routes/admissions'))
+app.use('/api/recruitment-reviews', require('./routes/recruitmentReviews'))
 app.use('/api/adjustments', require('./routes/adjustments'))
 app.use('/api/final', require('./routes/final'))
 app.use('/api/media', require('./routes/media'))
 app.use('/api/announcements', require('./routes/announcements'))
 app.use('/api/notifications', require('./routes/notifications'))
 app.use('/api/logs', require('./routes/logs'))
+app.use('/api/users', require('./routes/users'))
+app.use('/api/statistics', require('./routes/statistics'))
+app.use('/api/open-days', require('./routes/openDays'))
 
 // ============ 错误处理 ============
 app.use(notFound)
@@ -49,11 +71,13 @@ seedMockData()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`[lab-match] backend listening on http://localhost:${PORT}`)
+      console.log(`[lab-match] 数据存储: ${process.env.DB_DRIVER === 'mysql' ? 'MySQL' : 'JSON 文件'}`)
       console.log(`[lab-match] 健康检查 -> http://localhost:${PORT}/api/health`)
     })
   })
   .catch((err) => {
-    console.error('[lab-match] 启动失败：', err)
+    console.error('[lab-match] 启动失败：', err.message)
+    console.error('[lab-match] 若使用 MySQL，请确认数据库已通过 npm run db:init 初始化，或设置 DB_DRIVER=file 使用文件存储')
     process.exit(1)
   })
 
