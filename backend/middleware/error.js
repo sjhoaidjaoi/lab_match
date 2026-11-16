@@ -13,8 +13,8 @@ function handleError(err, req, res, _next) {
     return send(res, fail(ResultCode.VALIDATION_FAILED, msg), 400)
   }
   // 业务错误
-  if (err && err.code && err.message) {
-    return send(res, fail(err.code, err.message, err.data || null), err.status || 400)
+  if (err instanceof BusinessError) {
+    return res.status(err.status).json(fail(err.code, err.message, err.data || null))
   }
   console.error('[ERROR]', req.originalUrl, err)
   return send(res, fail(ResultCode.INTERNAL_ERROR, '服务器内部错误'), 500)

@@ -1,38 +1,51 @@
 <template>
-  <section class="student-page">
-    <h1>集中宣讲</h1>
-    <el-card shadow="never">
-      <h2>{{ announcements[0].title }}</h2>
-      <p>{{ announcements[0].content }}</p>
-      <p>宣讲时间 · {{ formatTime(student.timeline[0].start) }} 至 {{ formatTime(student.timeline[0].end) }}</p>
-    </el-card>
-    <div class="student-grid">
-      <el-card v-for="lab in labs" :key="lab.id" shadow="never">
-        <h2>{{ lab.name }}</h2>
-        <p>{{ lab.direction }} · {{ lab.leader }}</p>
-        <div class="student-actions">
-          <RouterLink :to="'/student/labs/' + lab.id">项目介绍</RouterLink>
-          <RouterLink :to="{ path: '/student/announcement', query: { lab: lab.id } }">查看视频</RouterLink>
-        </div>
-      </el-card>
-    </div>
-    <el-card v-if="selected" shadow="never">
-      <h2>{{ selected.name }}宣讲视频</h2>
-      <VideoPlayer v-if="video" :item="video" />
-      <el-empty v-else description="该实训室暂未配置宣讲视频" />
-    </el-card>
+  <section v-loading="loading" class="student-page">
+    <header class="student-welcome">
+      <h1>{{ openDay ? '实训室开放日' : '集中宣讲' }}</h1>
+      <p>{{ openDay ? '选择实训室，观看组长发布的云游视频。' : '选择实训室，查看简介、宣讲文稿和介绍视频。' }}</p>
+    </header>
+    <el-input v-model="query" clearable placeholder="搜索实训室或研究方向" aria-label="搜索实训室" />
+    <el-alert v-if="failed" title="实训室加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
+    <el-empty v-else-if="!loading && !filteredLabs.length" description="没有匹配的实训室" />
+    <ul v-else class="student-lab-list" aria-label="实训室列表">
+      <li v-for="lab in filteredLabs" :key="lab.id">
+        <RouterLink class="student-lab-link"
+          :to="openDay ? '/student/labs/' + lab.id + '/tour' : '/student/announcement/' + lab.id">
+          <div class="student-lab-summary">
+            <h2>{{ lab.name }}</h2>
+            <p v-if="lab.projectDirection">{{ lab.projectDirection }}</p>
+          </div>
+          <span class="student-lab-action">
+            {{ openDay ? '进入开放日' : '查看宣讲资料' }} <span aria-hidden="true">→</span>
+          </span>
+        </RouterLink>
+      </li>
+    </ul>
   </section>
 </template>
-
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute } from 'vue-router'
-import VideoPlayer from '@/components/media/VideoPlayer.vue'
-import { useStudentStore } from '@/stores/student'
-import { announcements, formatTime, labs, videos } from './studentDemo'
+import { computed, onMounted, ref } from 'vue'
+import type { LabView } from '@/types'
+import { studentApi } from '@/api/student'
 
-const route = useRoute()
-const student = useStudentStore()
-const selected = computed(() => labs.find(lab => String(lab.id) === route.query.lab))
-const video = computed(() => videos.find(item => item.laboratoryId === selected.value?.id))
+defineProps<{ openDay?: boolean }>()
+const labs = ref<LabView[]>([])
+const query = ref('')
+const loading = ref(false)
+const failed = ref(false)
+const filteredLabs = computed(() => labs.value.filter(lab =>
+  [lab.name, lab.projectDirection].some(value => value?.toLowerCase().includes(query.value.trim().toLowerCase()))
+))
+async function load() {
+  loading.value = true
+  failed.value = false
+  try {
+    labs.value = await studentApi.labs()
+  } catch {
+    failed.value = true
+  } finally {
+    loading.value = false
+  }
+}
+onMounted(load)
 </script>

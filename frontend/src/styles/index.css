@@ -84,3 +84,22 @@ a {
 .el-table .cell {
   line-height: 1.5;
 }
+
+.el-message.logout-notice {
+  min-width: 0;
+  max-width: calc(100vw - 32px);
+  padding: 12px 20px;
+  border: 1px solid #ead9ca;
+  border-radius: 999px;
+  background: #fff9f2;
+  box-shadow: 0 8px 26px rgba(78, 49, 34, 0.12);
+}
+
+.el-message.logout-notice .el-message__content {
+  color: #573e32;
+  font-weight: 600;
+}
+
+.el-message.logout-notice .el-message__icon {
+  color: #547154;
+}

@@ -11,11 +11,13 @@ const router = express.Router()
 const { ok, fail, ResultCode } = require('../utils/result')
 const { sign } = require('../utils/hash')
 const { getStore, persistStore } = require('../data/seed')
-const { requireAuth, ROLES } = require('../middleware/auth')
+const { requireAuth, requireAccountAuth, ROLES, allowedRolesOf } = require('../middleware/auth')
 const { BusinessError } = require('../middleware/error')
+const { logOperation } = require('../utils/audit')
+const { INITIAL_PASSWORD, isManagedAccount } = require('../utils/accountCredentials')
 
 const LoginSchema = z.object({
-  username: z.string().min(1, '请输入账号'),
+  username: z.string().trim().min(1, '请输入账号'),
   password: z.string().min(1, '请输入密码')
 })
 
@@ -34,47 +36,71 @@ router.post('/login', (req, res) => {
     throw new BusinessError('账号或密码错误', ResultCode.UNAUTHORIZED, 401)
   }
 
-  // 多角色支持：LAB_LEADER 同时是 LAB_TEACHER，可切换
-  const roles = [{ roleCode: user.role, roleName: roleLabel(user.role) }]
-  if (user.role === ROLES.LAB_LEADER) {
-    roles.push({ roleCode: ROLES.LAB_TEACHER, roleName: roleLabel(ROLES.LAB_TEACHER) })
-  }
-
-  const token = sign({
-    uid: user.id,
-    username: user.username,
-    activeRole: user.role,
-    roles: roles.map((r) => r.roleCode)
-  })
-
-  res.json(ok({
-    token,
-    user: {
-      id: user.id, username: user.username, realName: user.realName,
-      studentNumber: user.studentNumber, role: user.role, phone: user.phone
-    },
-    roles,
-    activeRole: user.role
-  }))
+  res.json(ok(sessionFor(user, user.role)))
 })
 
-router.post('/logout', requireAuth, (_req, res) => {
+router.post('/logout', requireAccountAuth, (_req, res) => {
   res.json(ok(null, '已退出登录'))
 })
 
-router.get('/me', requireAuth, (req, res) => {
+// 查看个人信息
+router.get('/me', requireAccountAuth, (req, res) => {
   const store = getStore()
   const user = store.users.find((u) => u.id === req.user.uid)
   if (!user) throw new BusinessError('用户不存在', ResultCode.NOT_FOUND, 404)
-  const roles = [{ roleCode: user.role, roleName: roleLabel(user.role) }]
-  if (user.role === ROLES.LAB_LEADER) {
-    roles.push({ roleCode: ROLES.LAB_TEACHER, roleName: roleLabel(ROLES.LAB_TEACHER) })
-  }
+  res.json(ok(accountInfo(user, req.user.activeRole)))
+})
+
+// 修改个人信息（手机号 / 邮箱；姓名与学号由学院统一维护）
+router.put('/profile', requireAuth, (req, res) => {
+  const body = z.object({
+    phone: z.string().max(20).optional().nullable(),
+    email: z.string().email('邮箱格式不正确').max(128).optional().nullable().or(z.literal(''))
+  }).parse(req.body || {})
+  const store = getStore()
+  const user = store.users.find((u) => u.id === req.user.uid)
+  if (!user) throw new BusinessError('用户不存在', ResultCode.NOT_FOUND, 404)
+  if (body.phone !== undefined) user.phone = body.phone || null
+  if (body.email !== undefined) user.email = body.email || null
+  logOperation(store, req, {
+    operationType: 'UPDATE_PROFILE', targetType: 'USER', targetId: user.id,
+    description: '修改个人信息（手机号 / 邮箱）'
+  })
+  persistStore(store)
   res.json(ok({
-    user: { id: user.id, username: user.username, realName: user.realName, studentNumber: user.studentNumber, role: user.role, phone: user.phone },
-    roles,
-    activeRole: req.user.activeRole || user.role
+    id: user.id, username: user.username, realName: user.realName,
+    studentNumber: user.studentNumber, role: user.role,
+    phone: user.phone, email: user.email ?? null,
+    laboratoryId: user.laboratoryId ?? null
   }))
+})
+
+// 修改密码
+router.put('/password', requireAccountAuth, (req, res) => {
+  const body = z.object({
+    oldPassword: z.string().min(1, '请输入原密码'),
+    newPassword: z.string().min(6, '新密码至少 6 位')
+      .refine(password => Buffer.byteLength(password, 'utf8') <= 72, '新密码最多 72 字节')
+  }).parse(req.body || {})
+  const store = getStore()
+  const user = store.users.find((u) => u.id === req.user.uid)
+  if (!user) throw new BusinessError('用户不存在', ResultCode.NOT_FOUND, 404)
+  if (!bcrypt.compareSync(body.oldPassword, user.passwordHash)) {
+    throw new BusinessError('原密码不正确', ResultCode.VALIDATION_FAILED, 400)
+  }
+  if ((isManagedAccount(user.role) && body.newPassword === INITIAL_PASSWORD) ||
+      bcrypt.compareSync(body.newPassword, user.passwordHash)) {
+    throw new BusinessError('新密码不能与当前密码或初始密码相同', ResultCode.VALIDATION_FAILED, 400)
+  }
+  user.passwordHash = bcrypt.hashSync(body.newPassword, 10)
+  user.mustChangePassword = false
+  user.credentialVersion = (user.credentialVersion ?? 0) + 1
+  logOperation(store, req, {
+    operationType: 'CHANGE_PASSWORD', targetType: 'USER', targetId: user.id,
+    description: '修改登录密码'
+  })
+  persistStore(store)
+  res.json(ok(sessionFor(user, req.user.activeRole), '密码已修改'))
 })
 
 // 角色切换（多角色账号）
@@ -84,19 +110,12 @@ router.post('/switch-role', requireAuth, (req, res) => {
   const user = store.users.find((u) => u.id === req.user.uid)
   if (!user) throw new BusinessError('用户不存在', ResultCode.NOT_FOUND, 404)
 
-  const allowed = [user.role]
-  if (user.role === ROLES.LAB_LEADER) allowed.push(ROLES.LAB_TEACHER)
+  const allowed = allowedRolesOf(user)
   if (!allowed.includes(roleCode)) {
     throw new BusinessError(`该账号不支持切换到 ${roleCode}`, ResultCode.ROLE_FORBIDDEN, 403)
   }
 
-  const token = sign({ uid: user.id, username: user.username, activeRole: roleCode, roles: allowed })
-  res.json(ok({
-    token,
-    user: { id: user.id, username: user.username, realName: user.realName, studentNumber: user.studentNumber, role: user.role, phone: user.phone },
-    roles: allowed.map((r) => ({ roleCode: r, roleName: roleLabel(r) })),
-    activeRole: roleCode
-  }))
+  res.json(ok(sessionFor(user, roleCode)))
 })
 
 // 账号列表（COLLEGE_ADMIN）
@@ -119,6 +138,31 @@ router.get('/users', requireAuth, (req, res) => {
   }))
   res.json(ok(list))
 })
+
+function accountInfo(user, activeRole) {
+  return {
+    user: {
+      id: user.id, username: user.username, realName: user.realName,
+      studentNumber: user.studentNumber, role: user.role, phone: user.phone,
+      email: user.email ?? null, laboratoryId: user.laboratoryId ?? null,
+      mustChangePassword: Boolean(user.mustChangePassword)
+    },
+    roles: allowedRolesOf(user).map(roleCode => ({ roleCode, roleName: roleLabel(roleCode) })),
+    activeRole
+  }
+}
+
+function sessionFor(user, activeRole) {
+  const info = accountInfo(user, activeRole)
+  return {
+    ...info,
+    token: sign({
+      uid: user.id, username: user.username, activeRole,
+      roles: info.roles.map(role => role.roleCode),
+      credentialVersion: user.credentialVersion ?? 0
+    })
+  }
+}
 
 function roleLabel(code) {
   return ({

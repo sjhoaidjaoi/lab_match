@@ -1,0 +1,279 @@
+.workspace-theme {
+  --workspace-accent: #a4402a;
+  --workspace-tint: #f7e5db;
+  --workspace-paper: #fffdf9;
+  --workspace-canvas: #f4efe8;
+  --workspace-border: #e9ddd2;
+  --workspace-ink: #292423;
+  --workspace-muted: #645851;
+  --workspace-gutter: clamp(16px, 2.6vw, 52px);
+  --workspace-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  --workspace-grid:
+    linear-gradient(90deg, color-mix(in srgb, var(--workspace-accent) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--workspace-accent) 8%, transparent) 1px, transparent 1px);
+  --lm-bg: var(--workspace-canvas);
+  --lm-text: var(--workspace-ink);
+  --lm-text-secondary: var(--workspace-muted);
+  --lm-border: var(--workspace-border);
+  --lm-primary: var(--workspace-accent);
+  --lm-primary-dark: color-mix(in srgb, var(--workspace-accent) 80%, #1c1717);
+  --lm-radius: 13px;
+  --el-color-primary: var(--workspace-accent);
+  --el-color-primary-dark-2: var(--lm-primary-dark);
+  --el-color-primary-light-3: color-mix(in srgb, var(--workspace-accent) 80%, white);
+  --el-color-primary-light-5: color-mix(in srgb, var(--workspace-accent) 53%, white);
+  --el-color-primary-light-7: color-mix(in srgb, var(--workspace-accent) 33%, white);
+  --el-color-primary-light-8: color-mix(in srgb, var(--workspace-accent) 20%, white);
+  --el-color-primary-light-9: color-mix(in srgb, var(--workspace-accent) 10%, white);
+  --el-text-color-primary: var(--workspace-ink);
+  --el-text-color-regular: var(--workspace-muted);
+  --el-border-radius-base: 9px;
+  --el-border-color-light: var(--workspace-border);
+  --el-border-color-lighter: color-mix(in srgb, var(--workspace-border) 55%, white);
+  color: var(--workspace-ink);
+  background-color: var(--workspace-canvas);
+  background-image:
+    radial-gradient(color-mix(in srgb, var(--workspace-accent) 12%, transparent) 1px, transparent 1px),
+    radial-gradient(ellipse at 96% 76%, #d4dceb55, transparent 48%),
+    radial-gradient(ellipse at 2% 98%, var(--workspace-tint), transparent 58%);
+  background-size: 24px 24px, 100% 100%, 100% 100%;
+}
+
+.workspace-theme[data-role="LAB_TEACHER"] { --workspace-accent: #774453; --workspace-tint: #f4e5eb; }
+.workspace-theme[data-role="LAB_LEADER"] { --workspace-accent: #73572e; --workspace-tint: #f3e9d7; }
+.workspace-theme[data-role="COLLEGE_ADMIN"] { --workspace-accent: #594779; --workspace-tint: #eee7f3; }
+
+.workspace-backdrop {
+  position: relative;
+  flex: none;
+  align-self: stretch;
+  block-size: clamp(150px, 19vw, 198px);
+  margin-block-start: auto;
+  pointer-events: none;
+  user-select: none;
+}
+.workspace-backdrop-code {
+  position: absolute;
+  inset: auto auto 20px clamp(5px, 4vw, 66px);
+  display: grid;
+  gap: 6px;
+  padding: 3px 0 3px 12px;
+  border-inline-start: 1px solid currentColor;
+  color: color-mix(in srgb, var(--workspace-accent) 34%, transparent);
+  font: 500 clamp(11px, 1.2vw, 15px)/1.55 var(--workspace-mono);
+}
+.workspace-backdrop-code code { font: inherit; }
+.workspace-backdrop-branch {
+  position: absolute;
+  inset: 30% 6% 21% 29%;
+  border: 1px solid color-mix(in srgb, var(--workspace-accent) 17%, transparent);
+  border-inline-end: 0;
+  border-radius: 38px 0 0 38px;
+}
+.workspace-backdrop-branch::before, .workspace-backdrop-branch::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: 0;
+  width: 7px;
+  height: 7px;
+  border: 1px solid color-mix(in srgb, var(--workspace-accent) 24%, transparent);
+  border-radius: 50%;
+  background: var(--workspace-canvas);
+}
+.workspace-backdrop-branch::before { inset-block-start: -4px; }
+.workspace-backdrop-branch::after { inset-block-end: -4px; }
+.workspace-backdrop-stickers {
+  position: absolute;
+  inset: 0;
+}
+.workspace-sticker {
+  position: absolute;
+  display: block;
+  width: clamp(70px, 8vw, 116px);
+  aspect-ratio: 1;
+  background-image: url('/brand/workspace-robot-stickers.png');
+  background-repeat: no-repeat;
+  background-size: 300% 100%;
+  opacity: .53;
+  filter: saturate(.73);
+}
+.workspace-sticker--type { inset: 11% auto auto 18%; background-position: left center; transform: rotate(-8deg) scale(.93); }
+.workspace-sticker--wave { inset: 30% auto auto 52%; background-position: center; transform: rotate(4deg); }
+.workspace-sticker--book { inset: 8% 8% auto auto; background-position: right center; transform: rotate(8deg) scale(.86); }
+@media (max-width: 700px) {
+  .workspace-backdrop { block-size: 132px; }
+  .workspace-backdrop-code { inset-block-end: 5px; }
+  .workspace-sticker { width: clamp(54px, 12vw, 76px); opacity: .45; }
+  .workspace-sticker--type { inset: 3% auto auto 5%; }
+  .workspace-sticker--wave { inset: 21% auto auto 42%; }
+  .workspace-sticker--book { inset: 5% 4% auto auto; }
+  .workspace-backdrop-branch { display: none; }
+}
+
+.workspace-theme .topbar,
+.workspace-theme .student-top {
+  background: #fffbf7;
+  border-bottom-color: var(--workspace-border);
+}
+
+.workspace-logo {
+  display: block;
+  width: clamp(116px, 15vw, 190px);
+  height: auto;
+  mix-blend-mode: multiply;
+}
+
+.workspace-ribbon {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  align-items: center;
+  gap: 16px;
+  padding: clamp(18px, 2.5vw, 30px);
+  border: 1px solid var(--workspace-border);
+  border-radius: 16px;
+  background:
+    var(--workspace-grid),
+    linear-gradient(110deg, var(--workspace-paper) 35%, var(--workspace-tint));
+  background-size: 32px 32px, 32px 32px, 100% 100%;
+  box-shadow: 0 10px 32px #34241c08;
+}
+
+.workspace-ribbon strong { font-size: clamp(17px, 2vw, 22px); }
+.workspace-ribbon p { margin: 5px 0 0; color: var(--workspace-muted); line-height: 1.55; }
+.workspace-ribbon-code {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--workspace-accent);
+  font: 500 13px var(--workspace-mono);
+}
+.workspace-ribbon-code::before {
+  content: '';
+  display: block;
+  width: clamp(12px, 4vw, 64px);
+  height: 12px;
+  border-block-end: 1px solid currentColor;
+  border-inline-start: 1px solid currentColor;
+  border-radius: 0 0 0 6px;
+  opacity: .38;
+}
+.workspace-ribbon-code code { font: inherit; }
+.workspace-ribbon-sigil { font-size: 18px; opacity: .65; }
+
+.workspace-theme .page { padding: clamp(18px, 2.8vw, 30px) 0 28px; min-width: 0; }
+.workspace-theme .page-title { color: var(--workspace-ink); font-size: clamp(21px, 2.2vw, 28px); font-weight: 700; }
+.workspace-theme .page-desc { color: var(--workspace-muted); }
+.workspace-theme :where(.el-card, .card) {
+  --el-card-border-color: var(--workspace-border);
+  --el-card-border-radius: var(--lm-radius);
+  --el-card-bg-color: var(--workspace-paper);
+}
+.workspace-theme .el-card__header {
+  background: color-mix(in srgb, var(--workspace-tint) 38%, var(--workspace-paper));
+  font-weight: 650;
+}
+.workspace-theme .el-card__header::before {
+  content: '';
+  display: block;
+  float: inline-start;
+  width: 8px;
+  height: 8px;
+  margin: .45em 9px .25em 0;
+  border: 1px solid var(--workspace-accent);
+  border-radius: 2px;
+}
+.workspace-theme .stat-card {
+  min-width: 0;
+  background: linear-gradient(135deg, var(--workspace-paper) 55%, var(--workspace-tint));
+  border: 1px solid var(--workspace-border);
+  border-inline-start: 2px solid var(--workspace-accent);
+  border-radius: var(--lm-radius);
+  font-variant-numeric: tabular-nums;
+}
+.workspace-theme .el-table {
+  --el-table-header-bg-color: var(--workspace-tint);
+  --el-table-row-hover-bg-color: var(--el-color-primary-light-9);
+  --el-table-header-text-color: var(--workspace-ink);
+}
+.workspace-theme .el-tabs__item { min-height: 40px; }
+.workspace-theme .el-dropdown__popper { --el-dropdown-menuItem-hover-fill: var(--workspace-tint); }
+
+/* 链接、主操作及菜单由同一组 hover / focus / pressed 状态区分。 */
+.workspace-theme :is(.workspace-action, .student-lab-link, .student-nav a, .workspace-account, .el-button),
+.workspace-popover :is(.el-menu-item, .el-dropdown-menu__item) {
+  transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, color .16s ease, transform .16s ease;
+}
+.workspace-theme .el-button:not(.is-text, .is-link, .is-circle) {
+  border-radius: 9px;
+  font-weight: 600;
+}
+.workspace-theme .el-button--primary:not(.is-text, .is-link, .is-plain, .is-disabled) {
+  box-shadow: inset 0 -2px 0 #17101138;
+}
+.workspace-theme :is(a, button, summary, [role="menuitem"], .el-tabs__item):focus-visible,
+.workspace-popover :is(.el-menu-item, .el-dropdown-menu__item):focus-visible {
+  outline: 2px solid var(--workspace-accent, #594779);
+  outline-offset: 2px;
+}
+.workspace-theme :is(.workspace-action, .student-lab-link, .student-nav a, .workspace-account, .el-button:not(.is-disabled, .is-loading)):active {
+  transform: translateY(1px);
+}
+
+.workspace-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(155px, 100%), 1fr));
+  gap: 10px;
+}
+.workspace-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 13px;
+  border: 1px solid var(--workspace-border);
+  border-radius: 9px;
+  background: var(--workspace-paper);
+  color: var(--workspace-accent);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.workspace-action .el-icon { flex: none; }
+.workspace-action .workspace-arrow { margin-inline-start: auto; flex: none; }
+@media (hover: hover) {
+  .workspace-theme .workspace-action:hover {
+    background: var(--workspace-tint);
+    border-color: var(--el-color-primary-light-5);
+    box-shadow: 0 3px 8px #32231d13;
+  }
+  .workspace-theme .el-button:not(.is-text, .is-link, .is-disabled, .is-loading):hover {
+    box-shadow: inset 0 -2px 0 #17101125, 0 3px 8px #32231d13;
+  }
+}
+
+.workspace-popover {
+  --workspace-accent: #594779;
+  --workspace-tint: #eee7f3;
+  --el-menu-hover-bg-color: var(--workspace-tint);
+  --el-menu-active-color: var(--workspace-accent);
+  --el-dropdown-menuItem-hover-fill: var(--workspace-tint);
+  --el-dropdown-menuItem-hover-color: var(--workspace-accent);
+}
+.workspace-popover .el-menu--popup { padding: 6px; border-radius: 10px; }
+.workspace-popover .el-menu-item { border-radius: 7px; }
+
+@media (max-width: 600px) {
+  .workspace-ribbon { grid-template-columns: minmax(0, 1fr); }
+  .workspace-ribbon-code { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-theme :is(.workspace-action, .student-lab-link, .student-nav a, .workspace-account, .el-button, [role="menuitem"]),
+  .workspace-popover :is(.el-menu-item, .el-dropdown-menu__item) {
+    transition: none;
+    transform: none;
+  }
+}

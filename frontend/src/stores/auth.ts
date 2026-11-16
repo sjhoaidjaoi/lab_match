@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { ElMessage } from 'element-plus'
 import { authApi, type LoginPayload } from '@/api/auth'
 import type { LoginResponse, MeResponse, RoleInfo, UserInfo } from '@/types'
 
@@ -46,6 +47,10 @@ export const useAuthStore = defineStore('auth', {
       this.applyLogin(data)
       return data
     },
+    async changePassword(oldPassword: string, newPassword: string) {
+      const data = await authApi.changePassword(oldPassword, newPassword)
+      this.applyLogin(data)
+    },
     async refresh() {
       if (!this.token) return
       const data: MeResponse = await authApi.me()
@@ -67,8 +72,8 @@ export const useAuthStore = defineStore('auth', {
       localStorage.setItem(USER_KEY, JSON.stringify(this.user))
       localStorage.setItem(ROLES_KEY, JSON.stringify(this.roles))
     },
-    logout() {
-      authApi.logout().catch(() => undefined)
+    logout(showNotice = false) {
+      const token = this.token
       this.token = ''
       this.user = null
       this.roles = []
@@ -77,6 +82,15 @@ export const useAuthStore = defineStore('auth', {
       localStorage.removeItem(ROLE_KEY)
       localStorage.removeItem(USER_KEY)
       localStorage.removeItem(ROLES_KEY)
+      if (token) authApi.logout(token).catch(() => undefined)
+      if (showNotice && token) {
+        ElMessage.success({
+          message: '已安全退出登录',
+          customClass: 'logout-notice',
+          duration: 2400,
+          offset: 28
+        })
+      }
     }
   }
 })

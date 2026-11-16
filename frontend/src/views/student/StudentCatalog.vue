@@ -1,51 +1,87 @@
 <template>
-  <section class="student-page">
-    <h1>{{ lab?.name ?? (route.params.labId ? '实训室详情' : '实训室开放日') }}</h1>
-    <template v-if="route.params.labId">
-      <RouterLink to="/student/labs">返回实训室列表</RouterLink>
-      <el-empty v-if="!lab" description="未找到该实训室" />
-      <el-card v-else shadow="never">
-        <h2>项目与开放日安排</h2>
-        <dl class="student-fields">
-          <dt>负责人</dt><dd>{{ lab.leader }}</dd>
-          <dt>项目方向</dt><dd>{{ lab.direction }}</dd>
-          <dt>技术栈</dt><dd>{{ lab.tools }}</dd>
-          <dt>预期成果</dt><dd>{{ lab.project }}</dd>
-          <dt>招生名额</dt><dd>{{ lab.quota }} 人</dd>
-          <dt>招新要求</dt><dd>{{ lab.requirement }}</dd>
-          <dt>培养计划</dt><dd>{{ lab.training }}</dd>
-          <dt>考核方式</dt><dd>{{ lab.assessment }}</dd>
-          <dt>开放时间</dt><dd>{{ formatTime(openDayTime) }} 起，开放两小时</dd>
-          <dt>场地与设备</dt><dd>{{ lab.room }} · {{ lab.equipment }}</dd>
-        </dl>
-        <div class="student-actions">
-          <RouterLink :to="'/student/labs/' + lab.id + '/tour'">全景云游</RouterLink>
-          <RouterLink :to="{ path: '/student/announcement', query: { lab: lab.id } }">宣讲视频</RouterLink>
-        </div>
+  <section v-loading="loading" class="student-page">
+    <RouterLink :to="openDay ? '/student/labs' : '/student/announcement'">
+      ← 返回{{ openDay ? '实训室开放日' : '集中宣讲' }}
+    </RouterLink>
+    <el-alert v-if="failed" title="实训室资料加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
+    <template v-else-if="lab">
+      <header class="student-welcome">
+        <p>{{ openDay ? '实训室开放日' : '集中宣讲' }}</p>
+        <h1>{{ lab.name }}</h1>
+        <p v-if="lab.projectDirection">{{ lab.projectDirection }}</p>
+      </header>
+      <el-card v-if="!openDay" shadow="never">
+        <h2>实训室简介</h2>
+        <p class="lab-introduction">{{ lab.description || lab.briefingText || '组长尚未发布简介。' }}</p>
+        <p v-if="lab.technologyStack">技术栈 · {{ lab.technologyStack }}</p>
+        <p>计划招生 {{ lab.recruitmentQuota }} 人</p>
+        <template v-if="lab.description && lab.briefingText && lab.briefingText.trim() !== lab.description.trim()">
+          <h2>宣讲介绍</h2>
+          <p class="lab-introduction">{{ lab.briefingText }}</p>
+        </template>
+        <template v-if="lab.teachers?.length">
+          <h2>指导教师</h2>
+          <ul class="student-list"><li v-for="teacher in lab.teachers" :key="teacher.id">
+            {{ teacher.name }}<template v-if="teacher.direction"> · {{ teacher.direction }}</template>
+            <template v-if="teacher.recruitmentQuota != null"> · 招生 {{ teacher.recruitmentQuota }} 人</template>
+          </li></ul>
+        </template>
+        <BriefingMaterials :lab-id="lab.id" />
       </el-card>
-    </template>
-    <template v-else>
-      <p>现场参观于 {{ formatTime(openDayTime) }} 开始，开放两小时。请到对应实训室门口集合。</p>
-      <div class="student-grid">
-        <el-card v-for="item in labs" :key="item.id" shadow="never">
-          <h2>{{ item.name }}</h2>
-          <p>{{ item.direction }}</p>
-          <p>{{ item.room }} · 招生 {{ item.quota }} 人</p>
-          <RouterLink :to="'/student/labs/' + item.id">项目与设备详情</RouterLink>
-        </el-card>
-      </div>
+      <el-card shadow="never">
+        <h2>{{ openDay ? '云游视频' : '介绍视频' }}</h2>
+        <a v-if="video?.videoType === 'LINK' && /^https?:\/\//i.test(video.videoUrl)"
+          :href="video.videoUrl" target="_blank" rel="noopener noreferrer">在新窗口观看{{ openDay ? '云游视频' : '介绍视频' }} ↗</a>
+        <VideoPlayer v-else-if="video" :item="video" />
+        <el-empty v-else :description="openDay ? '组长尚未发布云游视频' : '组长尚未发布介绍视频'" />
+        <p v-if="openDay && lab.panoramicResource && /^https?:\/\//i.test(lab.panoramicResource)">
+          <a :href="lab.panoramicResource" target="_blank" rel="noopener noreferrer">打开空间全景 ↗</a>
+        </p>
+      </el-card>
     </template>
   </section>
 </template>
-
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { useStudentStore } from '@/stores/student'
-import { formatTime, labs } from './studentDemo'
+import VideoPlayer from '@/components/media/VideoPlayer.vue'
+import BriefingMaterials from '@/components/media/BriefingMaterials.vue'
+import { studentApi, type LabDetail } from '@/api/student'
+import type { VideoItem } from '@/types'
 
+const props = defineProps<{ openDay?: boolean }>()
 const route = useRoute()
-const student = useStudentStore()
-const lab = computed(() => labs.find(item => String(item.id) === route.params.labId))
-const openDayTime = computed(() => student.timeline[1].start + 6 * 3_600_000)
+const lab = ref<LabDetail>()
+const loading = ref(false)
+const failed = ref(false)
+const video = computed<VideoItem | undefined>(() => {
+  const item = lab.value
+  if (!item) return
+  const url = props.openDay ? item.tourVideoUrl : item.briefingVideoUrl
+  if (!url) return
+  return {
+    id: item.id, laboratoryId: item.id, labName: item.name, title: props.openDay ? '实训室云游' : '实训室介绍',
+    videoType: (props.openDay ? item.tourVideoType : item.briefingVideoType) ?? 'LINK',
+    videoUrl: url, sortNo: 1, status: 'PUBLISHED'
+  }
+})
+async function load() {
+  const id = Number(route.params.labId)
+  if (!id) return
+  loading.value = true
+  failed.value = false
+  lab.value = undefined
+  try {
+    const detail = await studentApi.labDetail(id)
+    if (Number(route.params.labId) === id) lab.value = detail
+  } catch {
+    if (Number(route.params.labId) === id) failed.value = true
+  } finally {
+    if (Number(route.params.labId) === id) loading.value = false
+  }
+}
+watch(() => route.params.labId, load, { immediate: true })
 </script>
+<style scoped>
+.lab-introduction { white-space: pre-wrap; }
+</style>

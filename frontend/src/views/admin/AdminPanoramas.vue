@@ -1,6 +1,6 @@
 <template>
-  <div class="page">
-    <div class="page-header">
+  <div :class="{ page: !labId }">
+    <div v-if="!labId" class="page-header">
       <el-tag size="small" effect="plain" class="stage-tag">阶段② · 实训室开放日</el-tag>
       <h1 class="page-title">全景资源管理</h1>
       <p class="page-desc">维护各实训室的 720° 全景云游资源，支持第三方全景作品链接与等距柱状全景图直链。</p>
@@ -15,7 +15,7 @@
       </template>
 
       <el-table v-loading="loading" :data="rows" border>
-        <el-table-column prop="labName" label="实训室" min-width="160" />
+        <el-table-column v-if="!labId" prop="laboratoryName" label="实训室" min-width="160" />
         <el-table-column prop="name" label="名称" min-width="200" />
         <el-table-column label="类型" width="110">
           <template #default="{ row }">{{ typeLabel(row.panoramaType) }}</template>
@@ -41,9 +41,9 @@
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑全景资源' : '新增全景资源'" width="560px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑全景资源' : '新增全景资源'" width="min(560px, 94vw)">
       <el-form :model="form" label-width="96px">
-        <el-form-item label="实训室" required>
+        <el-form-item v-if="!labId" label="实训室" required>
           <el-select v-model="form.labId" placeholder="请选择实训室" style="width: 100%">
             <el-option v-for="lab in labs" :key="lab.id" :label="lab.name" :value="lab.id" />
           </el-select>
@@ -116,6 +116,8 @@ const emptyForm = (): PanoramaForm => ({
   status: 'PUBLISHED'
 })
 
+const props = defineProps<{ labId?: number }>()
+const emit = defineEmits<{ updated: [] }>()
 const loading = ref(false)
 const saving = ref(false)
 const rows = ref<PanoramaItem[]>([])
@@ -132,7 +134,7 @@ function typeLabel(type: string) {
 async function load() {
   loading.value = true
   try {
-    rows.value = await mediaApi.adminPanoramas()
+    rows.value = await mediaApi.adminPanoramas(props.labId)
   } finally {
     loading.value = false
   }
@@ -141,14 +143,14 @@ async function load() {
 function openCreate() {
   editingId.value = null
   Object.assign(form, emptyForm())
-  form.labId = labs.value[0]?.id || 0
+  form.labId = props.labId ?? labs.value[0]?.id ?? 0
   dialogVisible.value = true
 }
 
 function openEdit(row: PanoramaItem) {
   editingId.value = row.id
   Object.assign(form, {
-    labId: row.labId,
+    labId: props.labId ?? row.laboratoryId,
     name: row.name,
     description: row.description || '',
     panoramaType: row.panoramaType,
@@ -174,7 +176,7 @@ async function submit() {
     return
   }
   const payload: PanoramaPayload = {
-    labId: form.labId,
+    laboratoryId: props.labId ?? form.labId,
     name: form.name.trim(),
     description: form.description.trim() || undefined,
     panoramaType: form.panoramaType,
@@ -194,7 +196,9 @@ async function submit() {
     }
     dialogVisible.value = false
     await load()
-  } finally {
+    emit('updated')
+  } catch { /* 请求层显示错误。 */ }
+  finally {
     saving.value = false
   }
 }
@@ -208,10 +212,11 @@ async function remove(row: PanoramaItem) {
   await mediaApi.deletePanorama(row.id)
   ElMessage.success('已删除')
   await load()
+  emit('updated')
 }
 
 onMounted(async () => {
-  labs.value = await catalogApi.labs()
+  if (!props.labId) labs.value = await catalogApi.labs()
   await load()
 })
 </script>

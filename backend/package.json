@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "db:init": "node scripts/db.js init",
+    "db:check": "node scripts/db.js check",
+    "test": "node tests/api.smoke.js"
   },
   "keywords": ["lab", "match", "selection", "express"],
   "author": "Lab Match Team",

@@ -1,5 +1,5 @@
 <template>
-  <StudentAdjustment :stage="6" />
+  <StudentAdjustment />
 </template>
 
 <script setup lang="ts">

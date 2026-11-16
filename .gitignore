@@ -14,6 +14,7 @@ tmp/
 uploads/
 .screenshots/
 backend/data/.store.json
+backend/data/private-resumes/
 
 # IDE
 .idea/
