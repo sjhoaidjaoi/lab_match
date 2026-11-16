@@ -1,6 +1,6 @@
 <template>
-  <section v-loading="loading" class="student-page" aria-live="polite">
-    <h1>{{ title }}</h1>
+  <section v-loading="loading" class="student-page" aria-live="polite" :aria-label="title">
+    <h1 v-if="['dashboard', 'labs', 'lab-detail'].includes(page)">{{ title }}</h1>
     <el-alert v-if="failed" type="error" show-icon :closable="false" title="暂时无法读取选拔数据" />
     <el-button v-if="failed" @click="load">重试</el-button>
     <template v-if="workspace && !failed">

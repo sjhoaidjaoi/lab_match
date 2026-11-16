@@ -1,6 +1,5 @@
 <template>
-  <section v-loading="loading" class="student-page">
-    <h1>意向填报</h1>
+  <section v-loading="loading" class="student-page student-application" :class="{ 'student-application-submitted': record || preferences.length }" aria-label="意向填报">
     <p v-if="batch">{{ batch.batchName }}</p>
     <el-alert v-if="loadError" title="填报数据加载失败，请重新加载" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
     <el-alert v-if="!record && !open" type="info" show-icon :closable="false" :title="windowHint" />
@@ -58,7 +57,7 @@
         <p>提交时间 · {{ formatDateTime(preferences[0].submittedAt) }}</p>
         <p>个人简历 · <el-button v-if="preferences[0].resume" link type="primary" @click="downloadResume(preferences[0].resume)">{{ preferences[0].resume.name }} · 下载</el-button><span v-else>未上传</span></p>
       </template>
-      <el-empty v-else description="暂无提交记录" />
+      <el-empty :image-size="88" v-else description="暂无提交记录" />
       <RouterLink v-if="record" to="/student/application">前往意向填报</RouterLink>
     </el-card>
   </section>
