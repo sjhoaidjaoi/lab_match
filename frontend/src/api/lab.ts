@@ -171,6 +171,9 @@ export const labApi = {
   createStaff: (id: number, profile: TeacherAccountProfile) => http.post(`/users/labs/${id}/staff`, profile),
   updateStaff: (id: number, userId: number, profile: TeacherAccountProfile) => http.put(`/users/labs/${id}/staff/${userId}`, profile),
   resetStaffPassword: (id: number, userId: number) => http.post(`/users/labs/${id}/staff/${userId}/reset-password`),
+  setStaffStatus: (id: number, userId: number, status: 'ACTIVE' | 'INACTIVE') =>
+    http.put<UserAccount>(`/users/labs/${id}/staff/${userId}/status`, { status }),
+  deleteStaff: (id: number, userId: number) => http.delete<UserAccount>(`/users/labs/${id}/staff/${userId}`),
   mentors: (id: number) => http.get<LabTeacher[]>(`/laboratories/${id}/teachers/manage`),
   createMentor: (id: number, profile: MentorProfile) => http.post(`/laboratories/${id}/teachers`, profile),
   updateMentor: (id: number, mentorId: number, profile: MentorProfile) => http.put(`/laboratories/${id}/teachers/${mentorId}`, profile),

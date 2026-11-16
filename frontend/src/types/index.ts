@@ -48,6 +48,8 @@ export interface StageInfo {
   startTime: string
   endTime: string
   stageStatus: string
+  /** 人工干预：PAUSED（暂停）/ COMPLETED（提前结束）；为空表示按时间窗自动流转 */
+  statusOverride?: 'PAUSED' | 'COMPLETED' | null
   description?: string
 }
 
@@ -57,6 +59,10 @@ export interface BatchInfo {
   academicYear: string
   description?: string
   status: string
+  statusLabel?: string
+  writable?: boolean
+  stoppedAt?: string | null
+  stopReason?: string | null
   createdAt: string
   stages?: StageInfo[]
   currentStage?: { no: number; name: string; key: string } | null
@@ -254,6 +260,9 @@ export interface CollegeBatch {
   academicYear: string
   status: string
   description?: string
+  stoppedAt?: string | null
+  stopReason?: string | null
+  writable?: boolean
 }
 
 export interface CollegeLabProgress {
@@ -273,6 +282,8 @@ export interface CollegeLabProgress {
 
 export interface CollegeDashboard {
   batch: CollegeBatch | null
+  overview: { students: number; teachers: number; laboratories: number }
+  todos: CollegeTodo[]
   stages: StageInfo[]
   currentStage: StageInfo | null
   students: { total: number; submitted: number; unsubmitted: number }
@@ -280,6 +291,16 @@ export interface CollegeDashboard {
   totals: { quota: number; admitted: number; remaining: number }
   adjustments: { INTERNAL: number; CROSS_LAB: number; MANUAL_PLACEMENT: number; confirmed: number }
   lists: { intended: number; alternate: number; confirmed: number; rejected: number }
+}
+
+/** 学院端待办事项 */
+export interface CollegeTodo {
+  key: string
+  title: string
+  count: number
+  desc: string
+  path: string
+  level: 'info' | 'warning' | 'danger' | 'success'
 }
 
 export interface CapacityRow {

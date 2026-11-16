@@ -16,6 +16,7 @@ const { requireAuth, requireRole, ROLES, guardLab } = require('../middleware/aut
 const { logOperation } = require('../utils/audit')
 const { mentorCapacityError, occupiesInvitation } = require('../utils/mentorCapacity')
 const { scopedChoice, stageOpen } = require('../utils/applicationScope')
+const { currentBatch, batchWritableError, stageOf } = require('../utils/recruitment')
 
 const AdjustmentSchema = z.object({
   studentId: z.number().int(),
@@ -28,7 +29,7 @@ const AdjustmentSchema = z.object({
 })
 
 function activeBatchOf(store) {
-  return store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  return currentBatch(store)
 }
 
 // 目标实训室已占用名额（学生去重，避免重复计数）
@@ -109,23 +110,18 @@ function validateAdjustment(store, batch, body, ignoreAdjustmentId) {
 
 function adjustmentWindow(store, batch, stageNumber) {
   if (!batch) return '没有活跃批次'
-  const stages = store.recruitmentStages.filter(stage => stage.batchId === batch.id)
-  const stage = stages.find(item => item.stageNumber === stageNumber)
+  const stage = stageOf(store, batch.id, stageNumber)
   if (stageNumber === 6) {
-    const firstRound = stages.find(item => item.stageNumber === 5)
+    const firstRound = stageOf(store, batch.id, 5)
     if ([4, 5].some(number => stageOpen(store, batch.id, number)) ||
-      !(firstRound?.stageStatus === 'COMPLETED' ||
-        (firstRound?.endTime && Date.parse(firstRound.endTime) < Date.now()))) {
+      firstRound?.stageStatus !== 'COMPLETED') {
       return '首轮录取确认结束后才能进行实训室内部调剂'
     }
   }
-  if (stageNumber === 7 && !stages.some(item => item.stageNumber === 6 && item.stageStatus === 'COMPLETED')) {
+  if (stageNumber === 7 && stageOf(store, batch.id, 6)?.stageStatus !== 'COMPLETED') {
     return '实训室内部调剂结束后才能进行学院统筹调剂'
   }
-  const now = Date.now()
-  if (stage?.stageStatus !== 'IN_PROGRESS' ||
-      (stage.startTime && Date.parse(stage.startTime) > now) ||
-      (stage.endTime && Date.parse(stage.endTime) < now)) return '当前调剂阶段未开放'
+  if (stage?.stageStatus !== 'IN_PROGRESS') return '当前调剂阶段未开放'
   return null
 }
 
@@ -135,6 +131,8 @@ router.post('/internal', requireAuth, requireRole(ROLES.LAB_LEADER), (req, res) 
   const store = getStore()
   const batch = activeBatchOf(store)
   if (!batch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
+  const stopError = batchWritableError(batch)
+  if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   if (!guardLab(req, res, body.targetLaboratoryId)) return
   if (!scopedChoice(store, req.user, batch.id, body.studentId, body.targetLaboratoryId)) return res.status(403).json({ message: '学生未选择本室导师' })
   const windowError = adjustmentWindow(store, batch, 6)
@@ -179,6 +177,8 @@ router.post('/cross', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) 
   const body = AdjustmentSchema.parse(req.body || {})
   const store = getStore()
   const batch = activeBatchOf(store)
+  const stopError = batchWritableError(batch)
+  if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   const windowError = adjustmentWindow(store, batch, 7)
   if (windowError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: windowError, data: null })
   const invalid = validateAdjustment(store, batch, body)
@@ -206,6 +206,8 @@ router.post('/cross-batch', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req,
   const body = z.object({ items: z.array(AdjustmentSchema).min(1, '请选择至少一名学生') }).parse(req.body || {})
   const store = getStore()
   const batch = activeBatchOf(store)
+  const stopError = batchWritableError(batch)
+  if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   const windowError = adjustmentWindow(store, batch, 7)
   if (windowError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: windowError, data: null })
   const created = []
@@ -241,6 +243,8 @@ router.post('/placement', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, r
   const body = AdjustmentSchema.parse(req.body || {})
   const store = getStore()
   const batch = activeBatchOf(store)
+  const stopError = batchWritableError(batch)
+  if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   const windowError = adjustmentWindow(store, batch, 7)
   if (windowError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: windowError, data: null })
   const invalid = validateAdjustment(store, batch, body)
@@ -294,6 +298,8 @@ router.put('/:id/status', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, r
   const store = getStore()
   const item = store.adjustments.find((a) => a.id === Number(req.params.id))
   if (!item) return res.status(404).json({ code: 'NOT_FOUND', message: '调剂记录不存在', data: null })
+  const batchStopError = batchWritableError(store.recruitmentBatches.find((b) => b.id === item.batchId))
+  if (batchStopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: batchStopError, data: null })
   if (status === 'CONFIRMED') {
     const batch = store.recruitmentBatches.find((b) => b.id === item.batchId)
     if (batch?.id !== activeBatchOf(store)?.id) return res.status(409).json({ message: '该调剂不属于当前批次' })
@@ -320,6 +326,8 @@ router.post('/:id/confirm', requireAuth, requireRole(ROLES.STUDENT), (req, res) 
   if (idx < 0) return res.status(404).json({ code: 'NOT_FOUND', message: '未找到此调剂通知', data: null })
   const item = store.adjustments[idx]
   const activeBatch = activeBatchOf(store)
+  const stopError = batchWritableError(activeBatch)
+  if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   const windowError = item.batchId !== activeBatch?.id ? '该调剂不属于当前批次'
     : adjustmentWindow(store, activeBatch, item.adjustmentType === ADJUSTMENT_TYPE.INTERNAL ? 6 : 7)
   if (windowError) return res.status(409).json({ message: windowError })

@@ -1,6 +1,6 @@
 .workspace-theme {
-  --workspace-accent: #a4402a;
-  --workspace-tint: #f7e5db;
+  --workspace-accent: #ea580c;
+  --workspace-tint: #fdece1;
   --workspace-paper: #fffdf9;
   --workspace-canvas: #f4efe8;
   --workspace-border: #e9ddd2;
@@ -39,9 +39,10 @@
   background-size: 24px 24px, 100% 100%, 100% 100%;
 }
 
-.workspace-theme[data-role="LAB_TEACHER"] { --workspace-accent: #774453; --workspace-tint: #f4e5eb; }
-.workspace-theme[data-role="LAB_LEADER"] { --workspace-accent: #73572e; --workspace-tint: #f3e9d7; }
-.workspace-theme[data-role="COLLEGE_ADMIN"] { --workspace-accent: #594779; --workspace-tint: #eee7f3; }
+/* 四端统一橙白主色，仅用极浅的底色差异区分端别，避免各端各一套色系 */
+.workspace-theme[data-role="LAB_TEACHER"] { --workspace-tint: #fbe8da; }
+.workspace-theme[data-role="LAB_LEADER"] { --workspace-tint: #fbe4d2; }
+.workspace-theme[data-role="COLLEGE_ADMIN"] { --workspace-tint: #fdeee2; }
 
 .workspace-backdrop {
   position: relative;

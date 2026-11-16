@@ -2,21 +2,50 @@
   <div
     ref="landingRef"
     class="landing"
-    :class="{ ready: !booting }"
+    :class="{ ready: !booting, booting }"
     @scroll="onScroll"
     @wheel="onChapterWheel"
     @mousemove="onPointerMove"
   >
     <transition name="boot-exit">
       <aside v-if="booting" class="boot" aria-label="欢迎">
-        <div class="boot-panel">
-          <div class="boot-caption"><span aria-hidden="true">&lt;/&gt;</span> LAB MATCH</div>
-          <p class="boot-greeting" :aria-label="bootGreeting">
-            <span class="boot-measure" aria-hidden="true">{{ bootGreeting }}&nbsp;</span>
-            <span class="boot-typing" aria-hidden="true">{{ bootText }}<i></i></span>
-          </p>
-          <p class="boot-school">河北师范大学软件学院</p>
-          <button type="button" class="boot-skip" @click="finishBoot">跳过开场</button>
+        <div class="boot-backdrop" aria-hidden="true">
+          <span class="boot-glow glow-warm"></span>
+          <span class="boot-glow glow-pink"></span>
+          <span class="boot-grid"></span>
+          <span class="boot-scan"></span>
+          <span class="boot-ghost">01</span>
+          <span class="boot-tick tick-a">+</span>
+          <span class="boot-tick tick-b">+</span>
+          <span class="boot-tick tick-c">+</span>
+          <span class="boot-tick tick-d">+</span>
+        </div>
+
+        <div class="boot-frame">
+          <header class="boot-top">
+            <span class="boot-chip"><i aria-hidden="true">&lt;/&gt;</i> LAB MATCH</span>
+            <span class="boot-meta">SOFTWARE COLLEGE · 2026</span>
+          </header>
+
+          <div class="boot-core">
+            <p class="boot-kicker"><b>00</b> WELCOME</p>
+            <h1 class="boot-title" :aria-label="bootGreeting">
+              <span class="boot-line"><span class="boot-word word-en">Hello<i class="boot-dot">.</i></span></span>
+              <span class="boot-line"><span class="boot-word word-zh">软件人</span></span>
+            </h1>
+            <div class="boot-rule" aria-hidden="true"><i></i></div>
+            <p class="boot-sub">河北师范大学软件学院 · 实训室双向选拔与统筹调剂平台</p>
+          </div>
+
+          <footer class="boot-foot">
+            <span class="boot-progress" aria-hidden="true">
+              <span class="boot-progress-label">BOOTING WORKSPACE</span>
+              <span class="boot-progress-track"><i></i></span>
+            </span>
+            <button type="button" class="boot-skip" @click="finishBoot">
+              跳过开场 <span aria-hidden="true">→</span>
+            </button>
+          </footer>
         </div>
       </aside>
     </transition>
@@ -336,7 +365,6 @@ const heroRef = ref<HTMLElement | null>(null)
 const statsRef = ref<HTMLElement | null>(null)
 const booting = ref(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 const bootGreeting = 'Hello 软件人'
-const bootText = ref('')
 let bootTimer = 0
 const formRef = ref<FormInstance>()
 const accountRef = ref<InputInstance>()
@@ -649,15 +677,8 @@ function finishBoot() {
 
 function runBoot() {
   if (!booting.value) return
-  let length = 0
-  function typeGreeting() {
-    length += 1
-    bootText.value = bootGreeting.slice(0, length)
-    bootTimer = length < bootGreeting.length
-      ? window.setTimeout(typeGreeting, 90)
-      : window.setTimeout(finishBoot, 300)
-  }
-  bootTimer = window.setTimeout(typeGreeting, 140)
+  // 开场为整屏大字入场动画，进度条走完即自动进入首页。
+  bootTimer = window.setTimeout(finishBoot, 2000)
 }
 
 onMounted(() => {
@@ -726,75 +747,376 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 90;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  background:
-    radial-gradient(ellipse at 72% 77%, #f3ded7, transparent 58%),
-    #f4f0e9;
+  isolation: isolate;
+  overflow: hidden;
+  background: #f4f0e9;
+  color: #14161a;
+  font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
 }
-.boot-panel {
+
+.boot-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.boot-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(72px);
+  animation: bootFloat 16s ease-in-out infinite;
+}
+
+.glow-warm {
+  top: -18%;
+  right: -8%;
+  width: min(46vw, 700px);
+  height: min(46vw, 700px);
+  background: radial-gradient(circle, rgba(255, 178, 107, 0.52), transparent 70%);
+}
+
+.glow-pink {
+  bottom: -20%;
+  left: -10%;
+  width: min(42vw, 620px);
+  height: min(42vw, 620px);
+  background: radial-gradient(circle, rgba(255, 95, 158, 0.28), transparent 70%);
+  animation-delay: -7s;
+}
+
+@keyframes bootFloat {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(24px, -18px, 0); }
+}
+
+/* 细网格：只在中间区域显影，避免满屏颗粒感 */
+.boot-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(20, 22, 26, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(20, 22, 26, 0.07) 1px, transparent 1px);
+  background-size: 76px 76px;
+  -webkit-mask-image: radial-gradient(115% 85% at 46% 46%, #000 18%, transparent 76%);
+  mask-image: radial-gradient(115% 85% at 46% 46%, #000 18%, transparent 76%);
+  animation: bootFade 1.6s ease both;
+}
+
+/* 一次性扫光，强化"开场"仪式感 */
+.boot-scan {
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 42vw;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62), transparent);
+  transform: translateX(-55vw) skewX(-14deg);
+  animation: bootScan 2.1s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
+}
+
+@keyframes bootScan {
+  to { transform: translateX(125vw) skewX(-14deg); }
+}
+
+/* 巨型描边序号，撑住右下角留白 */
+.boot-ghost {
+  position: absolute;
+  right: -1.5vw;
+  bottom: -9vh;
+  font-size: min(50vw, 600px);
+  font-weight: 800;
+  line-height: 0.76;
+  letter-spacing: -0.06em;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(20, 22, 26, 0.075);
+  animation: bootGhost 2.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes bootGhost {
+  from { opacity: 0; transform: translate3d(28px, 22px, 0) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+.boot-tick {
+  position: absolute;
+  font: 400 15px/1 ui-monospace, Consolas, monospace;
+  color: rgba(255, 95, 158, 0.55);
+  animation: bootTwinkle 4.2s ease-in-out infinite;
+}
+
+.tick-a { top: 16%; left: 8%; }
+.tick-b { top: 26%; right: 16%; animation-delay: -1.1s; }
+.tick-c { bottom: 22%; left: 14%; animation-delay: -2.2s; }
+.tick-d { bottom: 30%; right: 8%; animation-delay: -3.1s; }
+
+@keyframes bootTwinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 0.95; transform: scale(1.12); }
+}
+
+.boot-frame {
   position: relative;
-  width: min(100%, 650px);
-  padding: clamp(24px, 6vw, 68px);
-  border: 1px solid #dfd4cb;
-  border-radius: 20px;
-  background:
-    linear-gradient(90deg, #98725a12 1px, transparent 1px),
-    linear-gradient(#98725a12 1px, transparent 1px),
-    #fffaf5;
-  background-size: 32px 32px;
-  box-shadow: 0 24px 72px #51352d16;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: clamp(18px, 3.2vh, 38px) clamp(20px, 5vw, 76px) clamp(16px, 2.8vh, 32px);
 }
-.boot-caption {
+
+.boot-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #7a4437;
-  font: 600 13px var(--workspace-mono, Consolas, monospace);
-  letter-spacing: .14em;
+  justify-content: space-between;
+  gap: 16px;
+  animation: bootFade 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
 }
-.boot-caption span {
+
+.boot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 8px;
+  border: 1px solid #e2d5c9;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  color: #7a4437;
+  font: 600 11px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.18em;
+}
+
+.boot-chip i {
   padding: 4px 6px;
-  border: 1px solid #e7d3c8;
   border-radius: 5px;
   background: #faeae0;
+  color: #a4402a;
+  font-style: normal;
+  letter-spacing: 0.02em;
 }
-.boot-greeting {
-  display: inline-grid;
-  margin: 18px 0 8px;
-  color: #292321;
-  font: 750 clamp(26px, 6vw, 63px)/1.18 Consolas, "Microsoft YaHei", monospace;
-  letter-spacing: -.045em;
+
+.boot-meta {
+  font: 600 10.5px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.26em;
+  color: #8a8781;
   white-space: nowrap;
 }
-.boot-greeting > span { grid-area: 1 / 1; }
-.boot-measure { visibility: hidden; }
-.boot-typing i {
-  display: inline-block;
-  width: .09em;
-  height: .82em;
-  margin-inline-start: .15em;
-  vertical-align: -.03em;
-  border-radius: 1px;
-  background: #a4402a;
+
+.boot-core {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
 }
-.boot-school { margin: 0; color: #64534a; font-size: 13px; letter-spacing: .06em; }
-.boot-skip {
+
+.boot-kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 clamp(12px, 2.6vh, 26px);
+  font: 600 11px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.3em;
+  color: #8a8781;
+  animation: bootFade 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.boot-kicker b {
+  color: #ff5f9e;
+  font-weight: 700;
+}
+
+.boot-title {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+/* 逐行遮罩上浮，制造"压上来"的视觉冲击 */
+.boot-line {
   display: block;
-  margin: 20px 0 0 auto;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: #7a4437;
-  cursor: pointer;
-  font: inherit;
+  overflow: hidden;
+  padding-bottom: 0.04em;
 }
-.boot-skip:hover, .boot-skip:focus-visible { background: #faeae0; }
-.boot-skip:focus-visible { outline: 2px solid #a4402a; outline-offset: 2px; }
-.boot-exit-leave-active { transition: opacity .26s ease; pointer-events: none; }
-.boot-exit-leave-to { opacity: 0; }
+
+.boot-word {
+  display: block;
+  animation: bootRise 1.15s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.word-en {
+  font-size: clamp(64px, min(15.5vw, 23vh), 196px);
+  font-weight: 800;
+  line-height: 0.88;
+  letter-spacing: -0.055em;
+  animation-delay: 0.26s;
+}
+
+.word-en .boot-dot {
+  color: #ff5f9e;
+  font-style: normal;
+}
+
+.word-zh {
+  font-size: clamp(72px, min(18.5vw, 27vh), 236px);
+  font-weight: 800;
+  line-height: 0.96;
+  letter-spacing: 0.04em;
+  background: linear-gradient(98deg, #ff8a5c 0%, #ff5f9e 62%, #d8408c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation-delay: 0.4s;
+}
+
+@keyframes bootRise {
+  from { opacity: 0; transform: translateY(112%); }
+  to { opacity: 1; transform: none; }
+}
+
+.boot-rule {
+  position: relative;
+  height: 1px;
+  max-width: min(760px, 82vw);
+  margin: clamp(18px, 3.4vh, 34px) 0 0;
+  background: rgba(20, 22, 26, 0.14);
+  transform-origin: left center;
+  animation: bootRule 1s cubic-bezier(0.22, 1, 0.36, 1) 0.62s both;
+}
+
+.boot-rule i {
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: clamp(72px, 9vw, 132px);
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ffb26b, #ff5f9e);
+}
+
+@keyframes bootRule {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.boot-sub {
+  margin: 16px 0 0;
+  font-size: clamp(12.5px, 1.15vw, 15px);
+  letter-spacing: 0.1em;
+  color: #6b6862;
+  animation: bootFade 1s cubic-bezier(0.22, 1, 0.36, 1) 0.78s both;
+}
+
+.boot-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-top: clamp(12px, 2vh, 20px);
+  border-top: 1px solid rgba(20, 22, 26, 0.1);
+  animation: bootFade 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.9s both;
+}
+
+.boot-progress {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  max-width: min(760px, 62vw);
+}
+
+.boot-progress-label {
+  font: 600 10px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.24em;
+  color: #8a8781;
+  white-space: nowrap;
+}
+
+.boot-progress-track {
+  position: relative;
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(20, 22, 26, 0.12);
+  overflow: hidden;
+}
+
+.boot-progress-track i {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ffb26b, #ff5f9e);
+  transform-origin: left center;
+  animation: bootBar 1.85s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes bootBar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.boot-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: 1px solid rgba(20, 22, 26, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #3b3a37;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+
+.boot-skip span {
+  color: #ff5f9e;
+  transition: color 0.25s ease;
+}
+
+.boot-skip:hover,
+.boot-skip:focus-visible {
+  background: #14161a;
+  border-color: #14161a;
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.boot-skip:hover span,
+.boot-skip:focus-visible span {
+  color: #ffb26b;
+}
+
+.boot-skip:focus-visible {
+  outline: 2px solid #ff5f9e;
+  outline-offset: 3px;
+}
+
+@keyframes bootFade {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.boot-exit-leave-active { transition: opacity 0.34s ease, transform 0.34s ease; pointer-events: none; }
+.boot-exit-leave-to { opacity: 0; transform: scale(1.015); }
+
+/* 开场期间不渲染首屏 3D，避免画布盖到开场层之上 */
+.landing.booting .hero-visual { opacity: 0; }
+
+@media (max-width: 720px) {
+  .boot-meta { display: none; }
+  .boot-ghost { opacity: 0.6; }
+  .boot-progress { max-width: none; }
+  .boot-progress-label { display: none; }
+  .boot-foot { justify-content: flex-end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-scan { display: none; }
+}
 
 .grid-bg {
   position: fixed;

@@ -1,11 +1,22 @@
 :root {
-  --lm-primary: #2f6fed;
-  --lm-primary-dark: #1d4ed8;
-  --lm-bg: #f4f6fb;
-  --lm-text: #1f2937;
-  --lm-text-secondary: #5b6472;
-  --lm-border: #e5e9f2;
-  --lm-radius: 10px;
+  /* 与登录页一致的橙白视觉体系 */
+  --lm-primary: #ea580c;
+  --lm-primary-dark: #c2410c;
+  --lm-bg: #f7f4ef;
+  --lm-text: #1f2328;
+  --lm-text-secondary: #6b6a66;
+  --lm-border: #eae1d6;
+  --lm-radius: 12px;
+
+  /* Element Plus 主题色同步为暖橙 */
+  --el-color-primary: #ea580c;
+  --el-color-primary-light-3: #f2925c;
+  --el-color-primary-light-5: #f7b78f;
+  --el-color-primary-light-7: #fbd6bd;
+  --el-color-primary-light-8: #fce3d2;
+  --el-color-primary-light-9: #fdf2e9;
+  --el-color-primary-dark-2: #c2410c;
+
   font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
   color: var(--lm-text);
   background-color: var(--lm-bg);

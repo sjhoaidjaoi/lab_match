@@ -11,6 +11,7 @@ const { ok } = require('../utils/result')
 const { getStore, persistStore, nextId } = require('../data/seed')
 const { requireAuth, requireRole, ROLES, guardLab } = require('../middleware/auth')
 const { currentBatch, scopedChoice, stageOpen } = require('../utils/applicationScope')
+const { findBatch, batchWritableError } = require('../utils/recruitment')
 const { logOperation } = require('../utils/audit')
 
 const ScheduleSchema = z.object({
@@ -38,9 +39,11 @@ const ScoreSchema = z.object({
 router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), (req, res) => {
   const body = ScheduleSchema.parse(req.body || {})
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = currentBatch(store)
   const lab = store.laboratories.find((l) => l.id === body.laboratoryId)
   if (!activeBatch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有选拔批次', data: null })
+  const stopError = batchWritableError(activeBatch)
+  if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
   if (!guardLab(req, res, body.laboratoryId)) return
 
@@ -102,6 +105,8 @@ router.post('/:id/score', requireAuth, requireRole(ROLES.LAB_TEACHER), (req, res
   const record = store.interviews[idx]
   if (!guardLab(req, res, record.laboratoryId)) return
   if (!scopedChoice(store, req.user, record.batchId, record.studentId, record.laboratoryId)) return res.status(403).json({ message: '无权评分该学生' })
+  const stopError = batchWritableError(findBatch(store, record.batchId))
+  if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   if (record.batchId !== currentBatch(store)?.id || !stageOpen(store, record.batchId, 4)) return res.status(409).json({ message: '本批次面试评分已关闭' })
   if (!record.interviewTime || record.interviewStatus === 'CANCELLED') return res.status(409).json({ message: '请先安排有效的面试' })
   if (body.recommendation !== 'INTENDED' && store.admissionIntentions.some(item =>
@@ -138,7 +143,7 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.COLL
   const lab = store.laboratories.find((l) => l.id === labId)
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
   if (!guardLab(req, res, labId)) return
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = currentBatch(store)
   const list = store.interviews
     .filter((i) => i.laboratoryId === labId && i.batchId === activeBatch?.id &&
       scopedChoice(store, req.user, i.batchId, i.studentId, labId))

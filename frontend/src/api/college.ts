@@ -25,6 +25,10 @@ export const collegeApi = {
   stages: (batchId: number) => http.get<StageInfo[]>(`/batches/${batchId}/stages`),
   updateStage: (batchId: number, stageId: number, payload: { startTime?: string; endTime?: string; stageStatus?: string }) =>
     http.put<StageInfo>(`/batches/${batchId}/stages/${stageId}`, payload),
+  stopBatch: (id: number, reason: string) =>
+    http.post<{ id: number; status: string; statusLabel: string; stoppedAt: string; stopReason: string }>(`/batches/${id}/stop`, { reason }),
+  reopenBatch: (id: number, reason: string) =>
+    http.post<{ id: number; status: string; statusLabel: string }>(`/batches/${id}/reopen`, { reason }),
 
   // ---- 学生 / 教师 / 组长 ----
   users: (params?: { role?: string; keyword?: string; laboratoryId?: number; page?: number; pageSize?: number }) =>
@@ -36,6 +40,8 @@ export const collegeApi = {
   updateUser: (id: number, payload: UserPayload) => http.put<UserAccount>(`/users/${id}`, payload),
   resetPassword: (id: number) => http.post<null>(`/users/${id}/reset-password`),
   disableUser: (id: number) => http.delete<UserAccount>(`/users/${id}`),
+  setUserStatus: (id: number, status: 'ACTIVE' | 'INACTIVE') =>
+    http.put<UserAccount>(`/users/${id}/status`, { status }),
 
   // ---- 实训室 ----
   labs: () => http.get<LabView[]>('/laboratories/all'),

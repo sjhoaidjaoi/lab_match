@@ -242,7 +242,7 @@ async function initDatabase() {
       'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?', [database]
     )
     const schemaFile = path.join(__dirname, '../../database/schema.sql')
-    const prerequisiteMigrations = ['migration_v2.sql', 'migration_v3.sql']
+    const prerequisiteMigrations = ['migration_v2.sql', 'migration_v3.sql', 'migration_v6.sql']
     const studentMigration = fs.readFileSync(path.join(__dirname, '../../database/migration_v4.sql'), 'utf8')
     const reviewMigration = fs.readFileSync(path.join(__dirname, '../../database/migration_v5.sql'), 'utf8')
     const created = !dbRows.length

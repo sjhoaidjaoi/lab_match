@@ -55,6 +55,44 @@ function installPassword(user, password) {
   user.credentialVersion = (user.credentialVersion ?? 0) + 1
 }
 
+// 强制旧会话失效（改密、停用、删除时调用）
+function bumpCredentials(user) {
+  user.credentialVersion = (user.credentialVersion ?? 0) + 1
+}
+
+// 一个实训室同时只能有一名有效组长
+function leaderConflict(store, laboratoryId, ignoreUserId) {
+  const lab = store.laboratories.find((l) => l.id === Number(laboratoryId))
+  if (!lab) return '实训室不存在'
+  const other = store.users.find((u) =>
+    u.role === ROLES.LAB_LEADER && u.status === 'ACTIVE' &&
+    u.laboratoryId === lab.id && u.id !== ignoreUserId)
+  return other ? `该实训室已有组长「${other.realName}」，请先停用或解除原组长` : null
+}
+
+// 组长绑定/变更后同步实训室的 leaderId
+function syncLabLeader(store, laboratoryId, userId) {
+  const lab = store.laboratories.find((l) => l.id === Number(laboratoryId))
+  if (!lab) return
+  const leader = store.users.find((u) => u.id === userId)
+  if (leader && leader.role === ROLES.LAB_LEADER && leader.status === 'ACTIVE' && leader.laboratoryId === lab.id) {
+    lab.leaderId = leader.id
+  } else if (lab.leaderId != null) {
+    const current = store.users.find((u) => u.id === lab.leaderId)
+    if (!current || current.status !== 'ACTIVE' || current.role !== ROLES.LAB_LEADER) lab.leaderId = null
+  }
+}
+
+// 解除账号与实训室的绑定关系（保留历史业务记录）
+function releaseAccount(store, user) {
+  store.laboratories.forEach((lab) => {
+    if (lab.leaderId === user.id) lab.leaderId = null
+  })
+  ;(store.labTeachers || []).forEach((item) => {
+    if (item.userId === user.id) item.status = 'INACTIVE'
+  })
+}
+
 function toView(u) {
   return {
     id: u.id, username: u.username, realName: u.realName,
@@ -105,6 +143,8 @@ router.post('/labs/:labId/staff', requireAuth, leader, (req, res) => {
     role: ROLES.LAB_TEACHER, laboratoryId: lab.id, status, createdAt: new Date().toISOString() }
   installPassword(user, INITIAL_PASSWORD)
   store.users.push(user)
+  // 导师档案（职称/方向/名额）仍由组长在「导师资料」中单独建立并绑定该账号，
+  // 账号与导师资料解耦，避免重复建档与名额口径混乱
   logOperation(store, req, { operationType: 'CREATE_LAB_STAFF', targetType: 'USER', targetId: user.id, description: '新增本实训室教师账号' })
   persistStore(store)
   res.json(ok(toView(user)))
@@ -139,13 +179,53 @@ router.post('/labs/:labId/staff/:userId/reset-password', requireAuth, leader, (r
   res.json(ok(null, '密码已重置'))
 })
 
+// 组长启用/停用本室教师账号
+router.put('/labs/:labId/staff/:userId/status', requireAuth, leader, (req, res) => {
+  const { store, teacher } = staffContext(req, true)
+  const { status } = z.object({ status: STATUS_ENUM }).parse(req.body || {})
+  if (status === 'INACTIVE' && teacher.status !== 'INACTIVE') {
+    bumpCredentials(teacher)
+    teacher.status = 'INACTIVE'
+  } else if (status === 'ACTIVE') {
+    teacher.status = 'ACTIVE'
+    delete teacher.deletedAt
+    ;(store.labTeachers || []).forEach((item) => {
+      if (item.userId === teacher.id && item.laboratoryId === teacher.laboratoryId) item.status = 'ACTIVE'
+    })
+  }
+  logOperation(store, req, {
+    operationType: status === 'ACTIVE' ? 'ENABLE_USER' : 'DISABLE_USER', targetType: 'USER', targetId: teacher.id,
+    description: `组长${status === 'ACTIVE' ? '启用' : '停用'}本室教师账号 ${teacher.username}（${teacher.realName}）`
+  })
+  persistStore(store)
+  res.json(ok(toView(teacher)))
+})
+
+// 组长删除本室教师账号（软删除：保留历史业务记录，导师档案停用）
+router.delete('/labs/:labId/staff/:userId', requireAuth, leader, (req, res) => {
+  const { store, teacher } = staffContext(req, true)
+  teacher.status = 'INACTIVE'
+  teacher.deletedAt = new Date().toISOString()
+  bumpCredentials(teacher)
+  releaseAccount(store, teacher)
+  teacher.laboratoryId = null
+  logOperation(store, req, {
+    operationType: 'DELETE_LAB_STAFF', targetType: 'USER', targetId: teacher.id,
+    description: `组长删除本室教师账号 ${teacher.username}（${teacher.realName}），历史业务记录保留`
+  })
+  persistStore(store)
+  res.json(ok(toView(teacher)))
+})
+
 // 用户列表
 router.get('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   const store = getStore()
   const role = (req.query.role || '').toString().trim()
   const keyword = (req.query.keyword || '').toString().trim()
   const laboratoryId = req.query.laboratoryId ? Number(req.query.laboratoryId) : null
+  // 已软删除的账号不再进入账号管理列表；历史业务记录与操作日志仍然保留
   const list = store.users
+    .filter((u) => !u.deletedAt)
     .filter((u) => (role ? u.role === role : true))
     .filter((u) => (laboratoryId ? u.laboratoryId === laboratoryId : true))
     .filter((u) => {
@@ -160,6 +240,7 @@ router.get('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
 router.get('/staff', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()
   const list = store.users
+    .filter((u) => !u.deletedAt)
     .filter((u) => u.role === ROLES.LAB_TEACHER || u.role === ROLES.LAB_LEADER)
     .map((u) => ({ id: u.id, realName: u.realName, role: u.role, roleName: roleLabel(u.role), laboratoryId: u.laboratoryId ?? null, status: u.status }))
   res.json(ok(list))
@@ -223,6 +304,14 @@ router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   if (accountExists(store.users, username)) {
     return res.status(400).json(fail(ResultCode.VALIDATION_FAILED, '账号已存在'))
   }
+  // 组长与实训室一一绑定
+  if (body.role === ROLES.LAB_LEADER && body.laboratoryId != null) {
+    const conflict = leaderConflict(store, body.laboratoryId)
+    if (conflict) return res.status(409).json(fail(ResultCode.BUSINESS_ERROR, conflict))
+  }
+  if (body.role === ROLES.LAB_LEADER && body.laboratoryId == null) {
+    return res.status(400).json(fail(ResultCode.VALIDATION_FAILED, '请为组长指定所属实训室'))
+  }
   const user = {
     id: nextId(store.users),
     username,
@@ -238,6 +327,7 @@ router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
     : z.string().min(6, '密码至少 6 位').parse(body.password ?? INITIAL_PASSWORD)
   installPassword(user, password)
   store.users.push(user)
+  if (user.role === ROLES.LAB_LEADER) syncLabLeader(store, user.laboratoryId, user.id)
   logOperation(store, req, {
     operationType: 'CREATE_USER', targetType: 'USER', targetId: user.id,
     description: `新建${roleLabel(user.role)}账号 ${user.username}（${user.realName}）`
@@ -269,7 +359,23 @@ router.put('/:id', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => 
     if (!isManagedAccount(user.role)) user.mustChangePassword = false
     if (isManagedAccount(user.role) && bcrypt.compareSync(INITIAL_PASSWORD, user.passwordHash)) user.mustChangePassword = true
   }
+  if (user.role === ROLES.LAB_LEADER) {
+    if (user.laboratoryId == null) {
+      return res.status(400).json(fail(ResultCode.VALIDATION_FAILED, '请为组长指定所属实训室'))
+    }
+    const conflict = leaderConflict(store, user.laboratoryId, user.id)
+    if (conflict) return res.status(409).json(fail(ResultCode.BUSINESS_ERROR, conflict))
+  }
+  // 停用后旧会话立即失效
+  if (body.status === 'INACTIVE' && before.status !== 'INACTIVE') bumpCredentials(user)
   store.users[idx] = user
+  if (before.laboratoryId !== user.laboratoryId || before.status !== user.status) {
+    if (before.laboratoryId != null && before.laboratoryId !== user.laboratoryId) {
+      syncLabLeader(store, before.laboratoryId, null)
+    }
+    if (user.laboratoryId != null) syncLabLeader(store, user.laboratoryId, user.id)
+    if (user.status === 'INACTIVE') releaseAccount(store, user)
+  }
   logOperation(store, req, {
     operationType: 'UPDATE_USER', targetType: 'USER', targetId: before.id,
     description: `修改账号 ${before.username} 资料（${before.realName}）`
@@ -309,9 +415,45 @@ router.delete('/:id', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) 
     return res.status(400).json(fail(ResultCode.BUSINESS_ERROR, '学院总负责人账号不允许停用'))
   }
   user.status = 'INACTIVE'
+  user.deletedAt = new Date().toISOString()
+  bumpCredentials(user)
+  // 交接：解除实训室组长绑定，导师档案停用；历史业务记录（面试/录取/日志）全部保留
+  releaseAccount(store, user)
+  // 账号与实训室脱钩，避免已删除账号继续出现在本室成员/组长列表
+  user.laboratoryId = null
   logOperation(store, req, {
     operationType: 'DISABLE_USER', targetType: 'USER', targetId: user.id,
-    description: `停用账号 ${user.username}（${user.realName}）`
+    description: `停用账号 ${user.username}（${user.realName}）${user.role === ROLES.LAB_LEADER ? '，已解除实训室组长绑定' : ''}`
+  })
+  persistStore(store)
+  res.json(ok(toView(user)))
+})
+
+// 启用 / 停用账号（学院管理员）
+router.put('/:id/status', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
+  const { status } = z.object({ status: STATUS_ENUM }).parse(req.body || {})
+  const store = getStore()
+  const user = store.users.find((u) => u.id === Number(req.params.id))
+  if (!user) return res.status(404).json(fail(ResultCode.NOT_FOUND, '用户不存在'))
+  if (user.role === ROLES.COLLEGE_ADMIN && status === 'INACTIVE') {
+    return res.status(400).json(fail(ResultCode.BUSINESS_ERROR, '学院总负责人账号不允许停用'))
+  }
+  if (user.role === ROLES.LAB_LEADER && user.laboratoryId != null && status === 'ACTIVE') {
+    const conflict = leaderConflict(store, user.laboratoryId, user.id)
+    if (conflict) return res.status(409).json(fail(ResultCode.BUSINESS_ERROR, conflict))
+  }
+  if (status === 'INACTIVE' && user.status !== 'INACTIVE') {
+    bumpCredentials(user)
+    user.status = 'INACTIVE'
+    releaseAccount(store, user)
+  } else if (status === 'ACTIVE') {
+    user.status = 'ACTIVE'
+    delete user.deletedAt
+    if (user.role === ROLES.LAB_LEADER && user.laboratoryId != null) syncLabLeader(store, user.laboratoryId, user.id)
+  }
+  logOperation(store, req, {
+    operationType: status === 'ACTIVE' ? 'ENABLE_USER' : 'DISABLE_USER', targetType: 'USER', targetId: user.id,
+    description: `${status === 'ACTIVE' ? '启用' : '停用'}账号 ${user.username}（${user.realName}）`
   })
   persistStore(store)
   res.json(ok(toView(user)))

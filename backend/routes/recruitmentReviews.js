@@ -5,6 +5,7 @@ const { BusinessError } = require('../middleware/error')
 const { requireAuth, requireRole, ROLES, canAccessLab } = require('../middleware/auth')
 const { getStore, commitStore, nextId } = require('../data/seed')
 const { currentBatch, personalScope, scopedChoice, stageOpen } = require('../utils/applicationScope')
+const { batchWritableError, stageOf } = require('../utils/recruitment')
 const { mentorCapacityError, occupiedAdmissionStudents, occupiesInvitation } = require('../utils/mentorCapacity')
 const { logOperation } = require('../utils/audit')
 const { resumeView } = require('./resumes')
@@ -27,6 +28,9 @@ function context(req) {
   const store = structuredClone(getStore())
   const batch = currentBatch(store)
   if (!batch) reject('没有选拔批次')
+  // 批次已停止/结束时不再接受新的名单提交与审核
+  const stopError = batchWritableError(batch)
+  if (stopError) reject(stopError)
   store.recruitmentReviews ||= []
   return { store, batch, rows: store.recruitmentReviews, user: req.user }
 }
@@ -271,8 +275,8 @@ router.post('/lab/:id/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), ha
 router.post('/internal', requireAuth, requireRole(ROLES.LAB_LEADER), handler(async req => {
   const ctx = context(req)
   const labId = Number(ctx.user.laboratoryId)
-  const stage = ctx.store.recruitmentStages.find(item => item.batchId === ctx.batch.id && item.stageNumber === 6)
-  if (!labId || stage?.stageStatus !== 'COMPLETED') reject('内部调剂结束后才能提交最终情况')
+  const stageStatus = stageOf(ctx.store, ctx.batch.id, 6)?.stageStatus
+  if (!labId || stageStatus !== 'COMPLETED') reject('内部调剂结束后才能提交最终情况')
   const adjustments = ctx.store.adjustments.filter(item => item.batchId === ctx.batch.id &&
     item.targetLaboratoryId === labId && item.adjustmentType === 'INTERNAL')
   const expiredAt = new Date().toISOString()

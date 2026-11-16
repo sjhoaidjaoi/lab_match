@@ -65,7 +65,7 @@ router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) =>
   const store = getStore()
   const list = store.laboratories.map((l) => {
     const leader = store.users.find((u) => u.id === l.leaderId)
-    const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+    const activeBatch = currentBatch(store)
     const applicationCount = activeBatch
       ? store.studentPreferences.filter((p) => p.batchId === activeBatch.id && p.laboratoryId === l.id && p.status === 'SUBMITTED').length
       : 0

@@ -66,9 +66,25 @@ app.use(notFound)
 app.use(handleError)
 
 // ============ 启动 ============
+// 阶段状态定时同步：不依赖管理员开着页面，服务端每 30 秒按时钟推进一次
+const { getStore, persistStore: persist } = require('./data/seed')
+const { syncStageStatuses } = require('./utils/recruitment')
+let stageTimer = null
+function tickStageStatuses() {
+  try {
+    const store = getStore()
+    if (syncStageStatuses(store) > 0) persist(store)
+  } catch (err) {
+    console.error('[lab-match] 阶段状态同步失败：', err.message)
+  }
+}
+
 // 首次启动自动种子 Mock 数据
 seedMockData()
   .then(() => {
+    tickStageStatuses()
+    stageTimer = setInterval(tickStageStatuses, 30 * 1000)
+    if (stageTimer.unref) stageTimer.unref()
     app.listen(PORT, () => {
       console.log(`[lab-match] backend listening on http://localhost:${PORT}`)
       console.log(`[lab-match] 数据存储: ${process.env.DB_DRIVER === 'mysql' ? 'MySQL' : 'JSON 文件'}`)

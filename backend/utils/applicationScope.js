@@ -1,7 +1,12 @@
 const { ROLES } = require('../middleware/auth')
+const {
+  currentBatch: resolveCurrentBatch,
+  stageOpen: isStageOpen,
+  stageOf
+} = require('./recruitment')
 
 function currentBatch(store) {
-  return store.recruitmentBatches.find(batch => batch.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  return resolveCurrentBatch(store)
 }
 
 function personalScope(user) {
@@ -23,18 +28,18 @@ function scopedChoice(store, user, batchId, studentId, laboratoryId) {
     choice.studentId === studentId && choice.laboratoryId === laboratoryId && ownsChoice(store, user, choice))
 }
 
+// 阶段是否开放：统一走时间窗实时判定（不再依赖数据库里的 stageStatus 快照）
 function stageOpen(store, batchId, number) {
-  const stage = store.recruitmentStages.find(item => item.batchId === batchId && item.stageNumber === number)
-  const now = Date.now()
-  return stage?.stageStatus === 'IN_PROGRESS' &&
-    (!stage.startTime || Date.parse(stage.startTime) <= now) &&
-    (!stage.endTime || Date.parse(stage.endTime) >= now)
+  return isStageOpen(store, batchId, number)
 }
 
 function firstRoundEnded(store, batchId) {
-  return store.recruitmentStages.some(stage => stage.batchId === batchId &&
-    ((stage.stageNumber === 5 && stage.stageStatus === 'COMPLETED') ||
-      (stage.stageNumber >= 6 && ['IN_PROGRESS', 'COMPLETED'].includes(stage.stageStatus))))
+  const stage5 = stageOf(store, batchId, 5)
+  if (stage5?.stageStatus === 'COMPLETED') return true
+  return [6, 7, 8].some((no) => {
+    const status = stageOf(store, batchId, no)?.stageStatus
+    return status === 'IN_PROGRESS' || status === 'COMPLETED'
+  })
 }
 
 module.exports = { currentBatch, ownsChoice, personalScope, scopedChoice, stageOpen, firstRoundEnded }

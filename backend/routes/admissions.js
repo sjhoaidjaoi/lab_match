@@ -13,12 +13,13 @@ const { getStore, persistStore, commitStore, nextId, ADMISSION_TYPE } = require(
 const { requireAuth, requireRole, ROLES, guardLab, isLabLeader } = require('../middleware/auth')
 const { logOperation } = require('../utils/audit')
 const { firstRoundEnded, scopedChoice, stageOpen } = require('../utils/applicationScope')
+const { currentBatch, batchWritableError, stageOf } = require('../utils/recruitment')
 const { invitationExpired, mentorCapacityError, occupiedAdmissionStudents } = require('../utils/mentorCapacity')
 
 const TEACHER_INVITATION = 'TEACHER_INVITATION'
 
 function activeBatchOf(store) {
-  return store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  return currentBatch(store)
 }
 
 // 已占用名额：已确认的拟录取 + 已录取的最终名单（同一学生不重复计数）
@@ -80,6 +81,8 @@ router.post('/teacher-invitations', requireAuth, requireRole(ROLES.LAB_TEACHER),
     const store = structuredClone(getStore())
     const batch = activeBatchOf(store)
     const { lab, mentor } = teacherRoom(store, req.user)
+    const stopError = batchWritableError(batch)
+    if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
     const choice = lab && batch && scopedChoice(store, req.user, batch.id, studentId, lab.id)
     if (!choice || choice.labTeacherId !== mentor?.id) return res.status(403).json({ message: '只能邀请明确选择本人的学生' })
     if (lab.status !== 'ACTIVE' || mentor.status === 'INACTIVE' || !isFirstRoundOpen(store, batch.id)) {
@@ -183,6 +186,8 @@ router.post('/:id/confirm', requireAuth, requireRole(ROLES.STUDENT), async (req,
     const confirmed = z.boolean().parse(req.body?.confirmed)
     const store = structuredClone(getStore())
     const batch = activeBatchOf(store)
+    const stopError = batchWritableError(batch)
+    if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
     const idx = store.admissionIntentions.findIndex((a) => a.id === Number(req.params.id) && a.studentId === req.user.uid)
     if (idx < 0) return res.status(404).json({ code: 'NOT_FOUND', message: '未找到此意向', data: null })
     const item = store.admissionIntentions[idx]
@@ -299,6 +304,8 @@ router.post('/expire', requireAuth, requireRole(ROLES.LAB_LEADER), (req, res) =>
   if (!lab || !isLabLeader(req, lab)) return res.status(403).json({ message: '只能处理本人负责实训室的录取' })
   const activeBatch = activeBatchOf(store)
   if (!activeBatch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
+  const stopError = batchWritableError(activeBatch)
+  if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   let count = 0
   store.admissionIntentions
     .filter((a) => a.batchId === activeBatch.id && a.status === 'PENDING' &&

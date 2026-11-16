@@ -9,32 +9,126 @@ const router = express.Router()
 const { ok } = require('../utils/result')
 const { getStore, ADMISSION_TYPE, ADJUSTMENT_TYPE } = require('../data/seed')
 const { requireAuth, requireRole, ROLES, guardLab } = require('../middleware/auth')
+const {
+  currentBatch: resolveCurrentBatch,
+  batchStages: resolveBatchStages,
+  resolveCurrentStage,
+  stageOf,
+  isBatchStopped
+} = require('../utils/recruitment')
 
 function activeBatch(store) {
-  return store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0] || null
+  return resolveCurrentBatch(store)
 }
 
 function batchStages(store, batchId) {
-  return store.recruitmentStages
-    .filter((s) => s.batchId === batchId)
-    .sort((a, b) => a.stageNumber - b.stageNumber)
+  return resolveBatchStages(store, batchId)
 }
 
 function currentStage(stages) {
-  const now = new Date()
-  const withRuntime = stages.map((s) => {
-    const start = new Date(s.startTime)
-    const end = new Date(s.endTime)
-    let stageStatus = s.stageStatus
-    if (now < start) stageStatus = 'NOT_STARTED'
-    else if (now > end) stageStatus = 'COMPLETED'
-    else stageStatus = 'IN_PROGRESS'
-    return { ...s, stageStatus }
-  })
-  const current = withRuntime.find((s) => s.stageStatus === 'IN_PROGRESS')
-    || withRuntime.find((s) => s.stageStatus === 'NOT_STARTED')
-    || withRuntime[withRuntime.length - 1]
-  return { stages: withRuntime, current: current || null }
+  const current = resolveCurrentStage(stages)
+  return { stages, current }
+}
+
+// 学院端待办：只统计"确实需要学院负责人处理"的事项
+function collegeTodos(store, batch) {
+  if (!batch) return []
+  const todos = []
+  const adjustments = store.adjustments.filter((a) => a.batchId === batch.id)
+  const pendingCross = adjustments.filter(
+    (a) => a.status === 'PENDING' && [ADJUSTMENT_TYPE.CROSS_LAB, ADJUSTMENT_TYPE.MANUAL_PLACEMENT].includes(a.adjustmentType)
+  ).length
+  if (pendingCross > 0) {
+    todos.push({
+      key: 'CROSS_ADJUSTMENT',
+      title: '待审核跨实训室调剂',
+      count: pendingCross,
+      desc: '有学生申请跨实训室调剂或沟通安置，需学院统筹确认',
+      path: '/college/allocation/cross',
+      level: 'warning'
+    })
+  }
+
+  const admitted = store.finalAdmissions.filter((f) => f.batchId === batch.id && f.finalStatus !== 'REJECTED')
+  const review = store.finalReview && store.finalReview.batchId === batch.id ? store.finalReview : null
+  const reviewApproved = review?.status === 'APPROVED'
+  if (admitted.length > 0 && !reviewApproved) {
+    todos.push({
+      key: 'FINAL_REVIEW',
+      title: '待审核最终录取名单',
+      count: admitted.length,
+      desc: review?.status === 'REJECTED' ? '最终名单已被驳回，请调整后重新提交审核' : '最终名单已生成，需学院审核通过后才能公示',
+      path: '/college/final-list',
+      level: review?.status === 'REJECTED' ? 'danger' : 'warning'
+    })
+  }
+
+  const pendingObjections = (store.publicationObjections || []).filter(
+    (o) => o.batchId === batch.id && o.status === 'PENDING'
+  ).length
+  if (pendingObjections > 0) {
+    todos.push({
+      key: 'OBJECTION',
+      title: '待处理公示异议',
+      count: pendingObjections,
+      desc: '公示期间学生提出异议，需学院核实并答复',
+      path: '/college/publicity',
+      level: 'danger'
+    })
+  }
+
+  if (reviewApproved) {
+    const pub = store.publication && store.publication.batchId === batch.id ? store.publication : null
+    if (!pub) {
+      todos.push({
+        key: 'PUBLICITY',
+        title: '待发布录取结果公示',
+        count: 1,
+        desc: '最终名单已审核通过，请设置公示时间并发布',
+        path: '/college/publicity',
+        level: 'info'
+      })
+    } else if (pub.endAt && Date.parse(pub.endAt) <= Date.now() && admitted.some((f) => f.finalStatus === 'ADMITTED')) {
+      todos.push({
+        key: 'ENROLL',
+        title: '待确认正式入组',
+        count: admitted.filter((f) => f.finalStatus === 'ADMITTED').length,
+        desc: '公示已结束，可批量确认正式入组',
+        path: '/college/final-list',
+        level: 'success'
+      })
+    }
+  }
+
+  // 第七阶段开始后仍有学生未落实去向
+  const stage7 = stageOf(store, batch.id, 7)?.stageStatus
+  if (stage7 === 'IN_PROGRESS' || stage7 === 'COMPLETED') {
+    const placed = new Set()
+    store.finalAdmissions
+      .filter((f) => f.batchId === batch.id && f.finalStatus !== 'REJECTED')
+      .forEach((f) => placed.add(f.studentId))
+    adjustments.filter((a) => a.status === 'CONFIRMED').forEach((a) => placed.add(a.studentId))
+    store.admissionIntentions
+      .filter((a) => a.batchId === batch.id && a.status === 'CONFIRMED')
+      .forEach((a) => placed.add(a.studentId))
+    const submitted = new Set(
+      store.studentPreferences
+        .filter((p) => p.batchId === batch.id && p.status === 'SUBMITTED')
+        .map((p) => p.studentId)
+    )
+    const unplaced = [...submitted].filter((id) => !placed.has(id)).length
+    if (unplaced > 0) {
+      todos.push({
+        key: 'UNPLACED',
+        title: '待沟通安置学生',
+        count: unplaced,
+        desc: '已填报志愿但尚未落实实训室，需学院统筹安置',
+        path: '/college/allocation/placement',
+        level: 'info'
+      })
+    }
+  }
+  return todos
 }
 
 // 各实训室容量与录取情况
@@ -64,10 +158,17 @@ function capacityRows(store, batchId) {
 router.get('/college', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()
   const batch = activeBatch(store)
+  // 全院三指标：有效学生 / 有效实训室教师 / 有效实训室（组长与学院管理员不计入教师数）
+  const overview = {
+    students: store.users.filter((u) => u.role === ROLES.STUDENT && u.status === 'ACTIVE').length,
+    teachers: store.users.filter((u) => u.role === ROLES.LAB_TEACHER && u.status === 'ACTIVE').length,
+    laboratories: store.laboratories.filter((l) => !l.status || l.status === 'ACTIVE').length
+  }
   if (!batch) {
     return res.json(ok({
-      batch: null, currentStage: null, students: { total: 0, submitted: 0, unsubmitted: 0 },
-      perLab: [], totals: { quota: 0, admitted: 0, remaining: 0 },
+      batch: null, currentStage: null, overview, todos: [],
+      stages: [], perLab: [], totals: { quota: 0, admitted: 0, remaining: 0 },
+      students: { total: overview.students, submitted: 0, unsubmitted: overview.students },
       adjustments: { INTERNAL: 0, CROSS_LAB: 0, MANUAL_PLACEMENT: 0, confirmed: 0 },
       lists: { intended: 0, confirmed: 0, rejected: 0, alternate: 0 }
     }))
@@ -114,7 +215,14 @@ router.get('/college', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res
   const totalAdmitted = perLab.reduce((sum, l) => sum + l.admitted, 0)
 
   res.json(ok({
-    batch: { id: batch.id, batchName: batch.batchName, academicYear: batch.academicYear, status: batch.status, description: batch.description },
+    batch: {
+      id: batch.id, batchName: batch.batchName, academicYear: batch.academicYear,
+      status: batch.status, description: batch.description,
+      stoppedAt: batch.stoppedAt ?? null, stopReason: batch.stopReason ?? null,
+      writable: !isBatchStopped(batch)
+    },
+    overview,
+    todos: collegeTodos(store, batch),
     stages,
     currentStage: current ? {
       id: current.id, stageNumber: current.stageNumber, stageName: current.stageName,

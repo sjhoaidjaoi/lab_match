@@ -9,7 +9,8 @@
     "seed": "node scripts/seed.js",
     "db:init": "node scripts/db.js init",
     "db:check": "node scripts/db.js check",
-    "test": "node tests/api.smoke.js"
+    "test": "node tests/api.smoke.js",
+    "test:flow": "node tests/recruitment-flow.js"
   },
   "keywords": ["lab", "match", "selection", "express"],
   "author": "Lab Match Team",

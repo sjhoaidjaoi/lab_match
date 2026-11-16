@@ -13,12 +13,24 @@ const { getStore, persistStore, nextId } = require('../data/seed')
 const { requireAuth, requireRole, ROLES, guardLab } = require('../middleware/auth')
 const { logOperation } = require('../utils/audit')
 const { scopedChoice, currentBatch } = require('../utils/applicationScope')
+const { batchWritableError } = require('../utils/recruitment')
+
+// 批次已停止/结束/暂停时拒绝新的业务写入
+function assertWritable(res, batch) {
+  const error = batchWritableError(batch)
+  if (error) {
+    res.status(409).json({ code: 'BUSINESS_ERROR', message: error, data: null })
+    return false
+  }
+  return true
+}
 
 // 合并生成最终名单（学院管理员）
 router.post('/merge', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = currentBatch(store)
   if (!activeBatch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
+  if (!assertWritable(res, activeBatch)) return
   if ((store.recruitmentReviews || []).some(row => row.batchId === activeBatch.id && row.kind !== 'TEACHER' && row.status === 'SUBMITTED')) {
     return res.status(409).json({ message: '请先处理实训室待审核名单及内部调剂汇总' })
   }
@@ -82,7 +94,7 @@ router.post('/merge', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) 
 // 查看最终名单（学院全院 / 教师组长本室）
 router.get('/list', requireAuth, requireRole(ROLES.COLLEGE_ADMIN, ROLES.LAB_TEACHER, ROLES.LAB_LEADER), (req, res) => {
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = currentBatch(store)
   const isAdmin = req.user.roles.includes(ROLES.COLLEGE_ADMIN)
   const labs = isAdmin
     ? store.laboratories
@@ -103,7 +115,7 @@ router.get('/list', requireAuth, requireRole(ROLES.COLLEGE_ADMIN, ROLES.LAB_TEAC
 // 学生查看本人最终录取结果
 router.get('/my', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {
   const store = getStore()
-  const batch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const batch = currentBatch(store)
   if (!batch) return res.json(ok(null))
   if (!store.publication || store.publication.batchId !== batch.id ||
       store.publication.status !== 'PUBLISHED' || !(Date.parse(store.publication.startAt) <= Date.now())) {
@@ -155,7 +167,7 @@ function finalChecks(store, batch) {
 // 检查最终名单
 router.get('/check', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()
-  const batch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const batch = currentBatch(store)
   if (!batch) return res.json(ok(null))
   res.json(ok(finalChecks(store, batch)))
 })
@@ -167,8 +179,9 @@ router.post('/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res)
     comment: z.string().optional().default('')
   }).parse(req.body || {})
   const store = getStore()
-  const batch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const batch = currentBatch(store)
   if (!batch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
+  if (!assertWritable(res, batch)) return
   const checks = finalChecks(store, batch)
   if (body.status === 'APPROVED' && !checks.canReview) {
     const reasons = []
@@ -192,8 +205,9 @@ router.post('/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res)
 // 批量确认正式入组（公示结束后）
 router.post('/enroll-all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   const store = getStore()
-  const batch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const batch = currentBatch(store)
   if (!batch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
+  if (!assertWritable(res, batch)) return
   const review = store.finalReview && store.finalReview.batchId === batch.id ? store.finalReview : null
   if (!review || review.status !== 'APPROVED') {
     return res.status(400).json({ code: 'BUSINESS_ERROR', message: '请先审核通过最终录取名单', data: null })
@@ -232,6 +246,7 @@ router.post('/objections/student', requireAuth, requireRole(ROLES.STUDENT), (req
   }).parse(req.body || {})
   const store = getStore()
   const pub = store.publication
+  if (!assertWritable(res, currentBatch(store))) return
   if (!pub) {
     return res.status(400).json({ code: 'BUSINESS_ERROR', message: '当前没有进行中的公示，无法提交异议', data: null })
   }
@@ -328,8 +343,8 @@ router.post('/publicity', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, r
     endAt: z.string().datetime()
   }).parse(req.body || {})
   const store = getStore()
-  const batch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
-  if (!batch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
+  const batch = currentBatch(store)
+  if (!assertWritable(res, batch)) return
   const review = store.finalReview && store.finalReview.batchId === batch.id ? store.finalReview : null
   if (!review || review.status !== 'APPROVED') {
     return res.status(400).json({ code: 'BUSINESS_ERROR', message: '最终名单尚未审核通过，不能发布公示', data: null })
@@ -349,7 +364,7 @@ router.post('/publicity', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, r
 router.get('/publication', (req, res) => {
   const store = getStore()
   if (req.query.visible === 'true') {
-    const batch = store.recruitmentBatches.find(b => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+    const batch = currentBatch(store)
     const publication = store.publication
     return res.json(ok(publication && batch && publication.batchId === batch.id &&
       publication.status === 'PUBLISHED' && Date.parse(publication.startAt) <= Date.now() ? publication : null))
