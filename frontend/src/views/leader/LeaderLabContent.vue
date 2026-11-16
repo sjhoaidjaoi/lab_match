@@ -2,7 +2,9 @@
   <el-form :model="form" label-position="top" :disabled="busy" @submit.prevent="save">
     <el-card shadow="never">
       <template #header>集中宣讲</template>
-      <el-form-item label="宣讲介绍"><el-input v-model="form.briefingText" type="textarea" :rows="5" maxlength="5000" /></el-form-item>
+      <el-form-item label="宣讲介绍（由学院统一维护）">
+        <el-input :model-value="form.briefingText" type="textarea" :rows="5" readonly />
+      </el-form-item>
       <el-form-item label="介绍视频"><el-input v-model="form.briefingVideoUrl" placeholder="https://… 或上传 MP4" /></el-form-item>
       <el-form-item label="播放方式">
         <el-select v-model="form.briefingVideoType"><el-option v-for="(label, type) in videoTypes" :key="type" :label="label" :value="type" /></el-select>
@@ -91,7 +93,7 @@ async function save() {
   busy.value = true
   try {
     await http.put(`/laboratories/${props.lab.id}`, {
-      briefingText: form.briefingText.trim(),
+      // 基础介绍字段由学院统一维护，组长仅维护宣讲视频与云游媒体
       panoramicResource: panorama || null,
       briefingVideoUrl: briefing || null, briefingVideoType: form.briefingVideoType,
       tourVideoUrl: tour || null, tourVideoType: form.tourVideoType

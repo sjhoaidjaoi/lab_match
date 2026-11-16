@@ -11,8 +11,10 @@ const { ok } = require('../utils/result')
 const { getStore, persistStore, nextId } = require('../data/seed')
 const { requireAuth, requireRole, ROLES, guardLab } = require('../middleware/auth')
 const { currentBatch, scopedChoice, stageOpen } = require('../utils/applicationScope')
-const { findBatch, batchWritableError } = require('../utils/recruitment')
+const { findBatch, batchWritableError, stageOf } = require('../utils/recruitment')
 const { logOperation } = require('../utils/audit')
+const { BusinessError } = require('../middleware/error')
+const { requireConfig, canPanel, newOnlineRoom, publicInterview, roomStatus } = require('../services/interviewVideo')
 
 const ScheduleSchema = z.object({
   studentId: z.number().int(),
@@ -22,7 +24,9 @@ const ScheduleSchema = z.object({
   interviewForm: z.string().trim().max(50).optional(),
   instructions: z.string().trim().max(500).optional(),
   durationMinutes: z.number().int().min(5).max(180).default(30),
-  interviewStatus: z.enum(['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional().default('SCHEDULED')
+  interviewStatus: z.enum(['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional().default('SCHEDULED'),
+  mode: z.enum(['STANDARD', 'LIVEKIT']).default('STANDARD'),
+  panelIds: z.array(z.number().int().positive()).max(12).default([])
 })
 
 const ScoreSchema = z.object({
@@ -52,7 +56,9 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), (req, res)
     return res.status(403).json({ message: '无权安排该学生的面试' })
   }
   if (!stageOpen(store, activeBatch.id, 4)) return res.status(409).json({ message: '面试阶段未开放' })
-  if (body.interviewStatus === 'SCHEDULED' && !body.location && !body.interviewForm) {
+  const { mode, panelIds, ...details } = body
+  const online = mode === 'LIVEKIT'
+  if (body.interviewStatus === 'SCHEDULED' && !online && !body.location && !body.interviewForm) {
     return res.status(400).json({ message: '请填写面试地点或线上会议方式' })
   }
 
@@ -62,12 +68,43 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), (req, res)
   )
   const start = Date.parse(body.interviewTime)
   const end = start + body.durationMinutes * 60000
+  if (existing?.onlineRoomName && existing.interviewerId !== req.user.uid) {
+    throw new BusinessError('只有主持人能管理这场线上面试', 'ROLE_FORBIDDEN', 403)
+  }
+  if (existing?.onlineStartedAt) throw new BusinessError('已经开始的线上面试请在会议内结束', 'BUSINESS_ERROR', 409)
+  if (existing?.interviewStatus === 'CANCELLED' && body.interviewStatus === 'CANCELLED') {
+    return res.json(ok(publicInterview(store, existing)))
+  }
   if (existing?.interviewStatus === 'COMPLETED') return res.status(409).json({ message: '已完成的面试不能重新安排' })
   if (body.interviewStatus === 'CANCELLED' && !existing?.interviewTime) return res.status(409).json({ message: '还没有可取消的面试安排' })
-  if (existing && Object.entries(body).every(([key, value]) => existing[key] === value)) return res.json(ok(existing))
+  if (existing?.onlineRoomName && existing.interviewStatus !== 'CANCELLED' && body.interviewStatus !== 'CANCELLED' && !online) {
+    throw new BusinessError('请先取消线上安排，再切换面试形式', 'BUSINESS_ERROR', 409)
+  }
+  const panel = [...new Set(panelIds)].filter(id => id !== req.user.uid)
+  if (online) {
+    if (body.interviewStatus !== 'SCHEDULED') throw new BusinessError('请选择有效的线上面试安排')
+    requireConfig()
+    if (!canPanel(store.users.find(user => user.id === req.user.uid), lab.id) ||
+        panel.some(id => !canPanel(store.users.find(user => user.id === id), lab.id))) {
+      throw new BusinessError('共同面试官必须是本实训室的在用教师账号', 'ROLE_FORBIDDEN', 403)
+    }
+    const stage = stageOf(store, activeBatch.id, 4)
+    if (start <= Date.now() || (stage?.startTime && start < Date.parse(stage.startTime)) ||
+        (stage?.endTime && end > Date.parse(stage.endTime))) {
+      throw new BusinessError('请在面试阶段内选择尚未开始的完整时段', 'BUSINESS_ERROR', 409)
+    }
+    details.location = ''
+    details.interviewForm = '平台线上面试'
+  }
+  const oldPanel = store.interviewParticipants.filter(item => item.interviewId === existing?.id && item.participantRole === 'PANEL')
+  if (existing && Object.entries(details).every(([key, value]) => existing[key] === value) &&
+      online === Boolean(existing.onlineRoomName) && oldPanel.length === panel.length &&
+      oldPanel.every(item => panel.includes(item.userId))) return res.json(ok(publicInterview(store, existing)))
+  const staffIds = new Set([req.user.uid, ...panel])
   if (body.interviewStatus !== 'CANCELLED' && store.interviews.some(item => item !== existing &&
     item.batchId === activeBatch.id && ['SCHEDULED', 'IN_PROGRESS'].includes(item.interviewStatus) &&
-    (item.interviewerId === req.user.uid || item.studentId === body.studentId) &&
+    (staffIds.has(item.interviewerId) || item.studentId === body.studentId ||
+      store.interviewParticipants.some(p => p.interviewId === item.id && staffIds.has(p.userId))) &&
     Date.parse(item.interviewTime) < end &&
     Date.parse(item.interviewTime) + (item.durationMinutes || 30) * 60000 > start)) {
     return res.status(409).json({ message: '面试时段存在冲突，请选择其他时间' })
@@ -81,19 +118,37 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), (req, res)
     evaluation: '', recommendation: 'PENDING',
     createdAt: new Date().toISOString()
   }
-  Object.assign(interview, body, { interviewerId: req.user.uid })
+  Object.assign(interview, details, { interviewerId: req.user.uid })
   if (!existing) store.interviews.push(interview)
+  if (body.interviewStatus !== 'CANCELLED') {
+    store.interviewParticipants = store.interviewParticipants.filter(item => item.interviewId !== interview.id)
+  }
+  if (online) {
+    Object.assign(interview, newOnlineRoom(applied.id))
+    const invitees = [[req.user.uid, 'HOST'], [body.studentId, 'CANDIDATE'], ...panel.map(id => [id, 'PANEL'])]
+    for (const [userId, participantRole] of invitees) {
+      store.interviewParticipants.push({ id: nextId(store.interviewParticipants), interviewId: interview.id,
+        userId, participantRole, createdAt: new Date().toISOString() })
+    }
+    for (const userId of panel) {
+      store.notices.push({ id: nextId(store.notices), targetUserId: userId, title: `${lab.name} · 共同面试邀请`,
+        content: '请在教师端面试管理中查看线上面试时间。', read: false, createdBy: req.user.uid, createdAt: new Date().toISOString() })
+    }
+  } else if (body.interviewStatus !== 'CANCELLED' && interview.onlineRoomName) {
+    Object.assign(interview, { onlineRoomName: null, onlinePreferenceId: null })
+  }
   interview.noticeId = nextId(store.notices)
   store.notices.push({
     id: interview.noticeId, targetUserId: body.studentId, targetRole: 'STUDENT',
-    title: `${lab.name} · ${body.interviewStatus === 'CANCELLED' ? '面试已取消' : '面试安排已更新'}`,
-    content: body.instructions || '请前往面试安排查看详情。',
+    title: `${lab.name} · ${body.interviewStatus === 'CANCELLED' ? '面试已取消' : online ? '线上面试邀请' : '面试安排已更新'}`,
+    content: online ? '请前往「我的面试」查看预约时间，并提前测试摄像头和麦克风。' :
+      body.instructions || '请前往面试安排查看详情。',
     read: false, createdBy: req.user.uid, createdAt: new Date().toISOString()
   })
   logOperation(store, req, { operationType: 'SCHEDULE_INTERVIEW', targetType: 'INTERVIEW', targetId: interview.id,
     description: body.interviewStatus === 'CANCELLED' ? '取消面试并通知学生' : '保存面试安排并通知学生' })
   persistStore(store)
-  res.json(ok(interview))
+  res.json(ok(publicInterview(store, interview)))
 })
 
 // 教师评分
@@ -105,6 +160,9 @@ router.post('/:id/score', requireAuth, requireRole(ROLES.LAB_TEACHER), (req, res
   const record = store.interviews[idx]
   if (!guardLab(req, res, record.laboratoryId)) return
   if (!scopedChoice(store, req.user, record.batchId, record.studentId, record.laboratoryId)) return res.status(403).json({ message: '无权评分该学生' })
+  if (record.onlineRoomName && (record.interviewerId !== req.user.uid || roomStatus(store, record) !== 'ENDED')) {
+    return res.status(409).json({ message: '线上面试结束后由主持人评分' })
+  }
   const stopError = batchWritableError(findBatch(store, record.batchId))
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   if (record.batchId !== currentBatch(store)?.id || !stageOpen(store, record.batchId, 4)) return res.status(409).json({ message: '本批次面试评分已关闭' })
@@ -133,7 +191,7 @@ router.post('/:id/score', requireAuth, requireRole(ROLES.LAB_TEACHER), (req, res
   logOperation(store, req, { operationType: 'SCORE_INTERVIEW', targetType: 'INTERVIEW', targetId: record.id,
     description: '保存面试评分与评价' })
   persistStore(store)
-  res.json(ok(store.interviews[idx]))
+  res.json(ok(publicInterview(store, store.interviews[idx])))
 })
 
 // 实训室面试列表
@@ -151,7 +209,7 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.COLL
       const stu = store.users.find((u) => u.id === i.studentId)
       const interviewer = store.users.find((u) => u.id === i.interviewerId)
       return {
-        ...i,
+        ...publicInterview(store, i),
         studentName: stu?.realName || '', studentNumber: stu?.studentNumber || '',
         interviewerName: interviewer?.realName || '',
         noticeStatus: !i.noticeId ? 'NOT_SENT' : store.notices.find(notice => notice.id === i.noticeId)?.read ? 'READ' : 'SENT'
@@ -163,7 +221,7 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.COLL
 // 学生查看自己的面试
 router.get('/my', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = currentBatch(store)
   if (!activeBatch) return res.json(ok([]))
   const list = store.interviews
     .filter((i) => i.studentId === req.user.uid && i.batchId === activeBatch.id)
@@ -172,7 +230,11 @@ router.get('/my', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {
       const interviewer = store.users.find(user => user.id === i.interviewerId)
       const choice = store.studentPreferences.find(p => p.batchId === i.batchId && p.studentId === i.studentId && p.laboratoryId === i.laboratoryId)
       const teacher = store.labTeachers.find(t => t.id === choice?.labTeacherId)
-      return { ...i, laboratoryName: lab?.name || `实训室#${i.laboratoryId}`, interviewerName: interviewer?.realName, labTeacherName: teacher?.name }
+      const { online } = publicInterview(store, i)
+      return { id: i.id, batchId: i.batchId, laboratoryId: i.laboratoryId, interviewerId: i.interviewerId,
+        interviewTime: i.interviewTime, interviewStatus: i.interviewStatus, location: i.location,
+        interviewForm: i.interviewForm, instructions: i.instructions, durationMinutes: i.durationMinutes,
+        online, laboratoryName: lab?.name || `实训室#${i.laboratoryId}`, interviewerName: interviewer?.realName, labTeacherName: teacher?.name }
     })
   res.json(ok(list))
 })
@@ -180,7 +242,7 @@ router.get('/my', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {
 // 学院端：全部面试明细（含学生、实训室、面试官名称）
 router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = currentBatch(store)
   if (!activeBatch) return res.json(ok([]))
   const list = store.interviews
     .filter((i) => i.batchId === activeBatch.id)
@@ -189,7 +251,7 @@ router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) =>
       const interviewer = store.users.find((u) => u.id === i.interviewerId)
       const lab = store.laboratories.find((l) => l.id === i.laboratoryId)
       return {
-        ...i,
+        ...publicInterview(store, i),
         studentName: stu?.realName || '',
         studentNumber: stu?.studentNumber || '',
         interviewerName: interviewer?.realName || '',
@@ -202,7 +264,8 @@ router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) =>
 // 学院端：全部面试进度
 router.get('/overview', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = currentBatch(store)
+  if (!activeBatch) return res.json(ok({ total: 0, perLab: [] }))
   const all = store.interviews.filter((i) => i.batchId === activeBatch.id)
   const perLab = store.laboratories.map((lab) => {
     const labList = all.filter((i) => i.laboratoryId === lab.id)

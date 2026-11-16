@@ -7,20 +7,33 @@
     "start": "node app.js",
     "dev": "node --watch app.js",
     "seed": "node scripts/seed.js",
+    "init:college": "node scripts/init-college-data.js",
+    "accounts:report": "node scripts/inspect-accounts.js",
     "db:init": "node scripts/db.js init",
     "db:check": "node scripts/db.js check",
     "test": "node tests/api.smoke.js",
-    "test:flow": "node tests/recruitment-flow.js"
+    "test:flow": "node tests/recruitment-flow.js",
+    "test:profile": "node tests/lab-profile.js",
+    "test:video": "node tests/interview-video.js",
+    "test:recording": "node tests/interview-recording.js"
   },
-  "keywords": ["lab", "match", "selection", "express"],
+  "keywords": [
+    "lab",
+    "match",
+    "selection",
+    "express"
+  ],
   "author": "Lab Match Team",
   "license": "MIT",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1169.0",
+    "@aws-sdk/s3-request-presigner": "^3.1169.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "livekit-server-sdk": "^2.20.0",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.11.0",
     "zod": "^3.23.8"

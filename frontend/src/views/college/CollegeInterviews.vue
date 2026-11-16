@@ -63,6 +63,12 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="线上会议" width="120">
+          <template #default="{ row }">
+            <router-link v-if="row.online" :to="`/meeting/${row.id}`">查看会议 →</router-link>
+            <span v-else>—</span>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
   </div>

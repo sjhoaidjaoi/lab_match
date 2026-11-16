@@ -22,6 +22,7 @@ export const menus: Record<string, MenuItem[]> = {
     ['lab-info', '本实训室信息', 'OfficeBuilding'],
     ['applications', '报名学生', 'User'],
     ['interviews', '面试管理', 'Calendar'],
+    ['interview-archives', '面试录像与档案', 'VideoCamera'],
     ['confirmation-status', '确认进度', 'CircleCheck'],
     ['lab-members', '小组成员', 'UserFilled'],
     ['help', '帮助说明', 'QuestionFilled']
@@ -30,11 +31,14 @@ export const menus: Record<string, MenuItem[]> = {
     ['dashboard', '工作台', 'HomeFilled'],
     ['lab-info', '实训室相关信息', 'OfficeBuilding'],
     ['lab-selection', '实训室学生汇总', 'DataAnalysis'],
+    ['online-interviews', '线上面试', 'VideoCamera'],
+    ['interview-archives', '面试录像与档案', 'Files'],
     ['internal-allocation', '内部调剂', 'Connection']
   ]),
   // 学院总负责人端（新文档 4.5 节 18 个模块，按业务分组展示）
   COLLEGE_ADMIN: [
     { path: '/college/dashboard', title: '全院总览', icon: 'HomeFilled' },
+    { path: '/college/lab-materials', title: '实训室资料管理', icon: 'Files' },
     group('基础配置', 'Setting', [
       ['batches', '选拔批次管理', 'Calendar'],
       ['stages', '阶段时间管理', 'Clock'],
@@ -46,6 +50,7 @@ export const menus: Record<string, MenuItem[]> = {
       ['openday', '开放日管理', 'Picture'],
       ['preferences', '志愿填报管理', 'EditPen'],
       ['interviews', '面试进度管理', 'Calendar'],
+      ['interview-archives', '面试录像与档案', 'VideoCamera'],
       ['recruitment-reviews', '实训室名单审核', 'DocumentChecked'],
       ['admissions', '拟录取名单管理', 'DocumentChecked'],
       ['confirmation', '录取确认管理', 'CircleCheck']

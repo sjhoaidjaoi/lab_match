@@ -3,7 +3,7 @@
     <header class="page-header lab-header">
       <div>
         <h1 class="page-title">实训室相关信息</h1>
-        <p class="page-desc">查看本室现有资料，在下方修改信息。</p>
+        <p class="page-desc">基础资料、教师团队与招生名额由学院统一维护；本页可查看，并维护本室宣传资料。</p>
       </div>
     </header>
 
@@ -11,66 +11,91 @@
     <el-alert v-else-if="failed" title="实训室信息加载失败" type="error" :closable="false">
       <el-button text @click="load">重试</el-button>
     </el-alert>
+
     <template v-else-if="lab">
-      <el-alert v-if="!canEdit" title="当前账号未获本实训室的资料管理权限，请联系学院管理员"
-        type="warning" :closable="false" show-icon />
-      <el-card shadow="never" class="lab-overview">
-        <template #header>当前实训室信息</template>
-        <dl class="lab-summary">
-          <div><dt>名称</dt><dd>{{ lab.name }}</dd></div>
-          <div><dt>负责人</dt><dd>{{ lab.leaderName || '待学院指定' }}</dd></div>
-          <div><dt>项目方向</dt><dd>{{ lab.projectDirection || '—' }}</dd></div>
-          <div><dt>技术栈</dt><dd>{{ lab.technologyStack || '—' }}</dd></div>
-          <div><dt>计划招生</dt><dd>{{ lab.recruitmentQuota }} 人</dd></div>
-          <div><dt>状态</dt><dd>{{ lab.status === 'ACTIVE' ? '启用' : '已停用' }}</dd></div>
-          <div><dt>本室教师</dt><dd>{{ staffNames.join('、') || '暂无教师账号' }}</dd></div>
-          <div><dt>已展示的导师</dt><dd>{{ lab.teachers?.map(item => item.name).join('、') || '暂无已展示的导师' }}</dd></div>
-          <div><dt>宣讲与开放日</dt><dd>宣讲视频 {{ lab.briefingVideoUrl || lab.videos?.length ? '已配置' : '未配置' }} · 云游 {{ lab.tourVideoUrl || lab.panoramicResource || lab.panoramas?.length ? '已配置' : '未配置' }}</dd></div>
-          <div class="wide"><dt>实训室简介</dt><dd>{{ lab.description || '—' }}</dd></div>
-          <div v-if="lab.briefingText" class="wide"><dt>宣讲介绍</dt><dd>{{ lab.briefingText }}</dd></div>
-        </dl>
-      </el-card>
-      <h2 class="edit-title">修改信息</h2>
-      <el-tabs v-if="canEdit" v-model="tab">
-        <el-tab-pane label="基本信息与招生名额" name="profile">
-        <el-card shadow="never">
-          <template #header>基本资料</template>
-          <el-form :model="form" label-position="top" :disabled="saving || !canEdit" @submit.prevent="save">
-            <el-form-item label="实训室名称" required>
-              <el-input v-model="form.name" maxlength="128" required />
-            </el-form-item>
-            <div class="lab-fields">
-              <el-form-item label="项目方向">
-                <el-input v-model="form.projectDirection" maxlength="255" />
-              </el-form-item>
-              <el-form-item label="技术栈">
-                <el-input v-model="form.technologyStack" maxlength="255" />
-              </el-form-item>
-            </div>
-            <div class="lab-fields">
-              <el-form-item label="计划招生名额">
-                <el-input-number v-model="form.recruitmentQuota" :min="0" :max="4294967295" :step="1" step-strict />
-              </el-form-item>
-              <el-form-item label="实训室状态">
-                <el-radio-group v-model="form.status">
-                  <el-radio value="ACTIVE">启用</el-radio>
-                  <el-radio value="INACTIVE">停用</el-radio>
-                </el-radio-group>
-              </el-form-item>
-            </div>
-            <el-form-item label="实训室简介">
-              <el-input v-model="form.description" type="textarea" :rows="6" maxlength="5000" show-word-limit />
-            </el-form-item>
-            <el-button type="primary" native-type="submit" :loading="saving" :disabled="!dirty">保存资料</el-button>
-            <el-button :disabled="!dirty" @click="resetForm">撤销未保存修改</el-button>
-          </el-form>
+      <el-alert
+        type="info"
+        :closable="false"
+        show-icon
+        title="资料维护权限说明"
+        description="实训室编号、名称、位置、介绍、教师名单与招生名额由学院统一维护，组长端为只读；如需修改请联系学院管理员。宣传资料（PPT / 视频 / 图片 / 文档）由本室自行上传管理。"
+      />
+
+      <div class="overview-grid">
+        <el-card shadow="never" class="overview-card">
+          <template #header>基本信息</template>
+          <dl class="lab-summary">
+            <div><dt>实训室编号</dt><dd>{{ lab.labCode || '待完善' }}</dd></div>
+            <div><dt>实训室名称</dt><dd>{{ lab.name || '待完善' }}</dd></div>
+            <div><dt>所属学院</dt><dd>{{ lab.college || '待完善' }}</dd></div>
+            <div><dt>实训室位置</dt><dd>{{ lab.location || '待完善' }}</dd></div>
+            <div><dt>实训室组长</dt><dd>{{ lab.leaderName || '待学院指定' }}</dd></div>
+            <div><dt>联系方式</dt><dd>{{ lab.contact || '待完善' }}</dd></div>
+            <div class="wide"><dt>主要研究方向</dt><dd>{{ lab.researchDirection || '待完善' }}</dd></div>
+            <div class="wide"><dt>实训室简介</dt><dd class="multiline">{{ lab.description || '待完善' }}</dd></div>
+            <div v-if="lab.detail" class="wide"><dt>详细介绍</dt><dd class="multiline">{{ lab.detail }}</dd></div>
+            <div v-if="lab.features" class="wide"><dt>实训室特色</dt><dd class="multiline">{{ lab.features }}</dd></div>
+          </dl>
         </el-card>
+
+        <el-card shadow="never" class="overview-card quota-card">
+          <template #header>本学年名额（{{ lab.academicYear }}）</template>
+          <div class="quota-grid">
+            <div><span>招生总名额</span><b>{{ lab.quota.totalQuota }}</b></div>
+            <div><span>已分配教师</span><b>{{ lab.quota.allocatedQuota }}</b></div>
+            <div><span>未分配</span><b>{{ lab.quota.unallocatedQuota }}</b></div>
+            <div><span>已录取</span><b>{{ lab.quota.enrolled }}</b></div>
+          </div>
+          <p class="quota-hint">名额由学院统一设置，组长端仅可查看。</p>
+        </el-card>
+      </div>
+
+      <el-tabs v-model="tab" class="info-tabs" @tab-change="onTabChange">
+        <el-tab-pane label="教师信息" name="teachers">
+          <el-card shadow="never">
+            <el-table :data="lab.teachers" stripe empty-text="学院尚未录入本室教师">
+              <el-table-column label="姓名" min-width="120">
+                <template #default="{ row }">
+                  <div class="teacher-name">
+                    <el-avatar :size="26" :src="row.photoUrl || undefined">{{ row.name.slice(0, 1) }}</el-avatar>
+                    <span>{{ row.name }}</span>
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="身份" width="104">
+                <template #default="{ row }">
+                  <el-tag :type="row.identity === 'LEADER' ? 'success' : 'info'" effect="plain" size="small">
+                    {{ row.identity === 'LEADER' ? '实训室组长' : '普通教师' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="职称 / 学位" min-width="130">
+                <template #default="{ row }">{{ [row.title, row.degree].filter(Boolean).join(' / ') || '—' }}</template>
+              </el-table-column>
+              <el-table-column prop="direction" label="研究方向" min-width="150" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.direction || '—' }}</template>
+              </el-table-column>
+              <el-table-column prop="email" label="联系邮箱" min-width="170">
+                <template #default="{ row }">{{ row.email || '—' }}</template>
+              </el-table-column>
+              <el-table-column label="本学年名额" width="110" align="center">
+                <template #default="{ row }">{{ row.quota }}</template>
+              </el-table-column>
+              <el-table-column label="简介" min-width="200" show-overflow-tooltip>
+                <template #default="{ row }">{{ row.intro || '—' }}</template>
+              </el-table-column>
+            </el-table>
+          </el-card>
         </el-tab-pane>
-        <el-tab-pane label="教师与导师" name="staff" lazy>
-          <LeaderLabTeachers :lab-id="lab.id" :quota="lab.recruitmentQuota" @updated="refreshOverview" />
+
+        <el-tab-pane label="宣传资料" name="files" lazy>
+          <el-card shadow="never">
+            <LabPromotionFiles :lab-id="lab.id" editable @changed="load" />
+          </el-card>
         </el-tab-pane>
+
         <el-tab-pane label="宣讲与开放日" name="media" lazy>
-          <LeaderLabContent :lab="lab" @updated="refreshOverview" />
+          <LeaderLabContent :lab="mediaLab" @updated="load" />
         </el-tab-pane>
       </el-tabs>
     </template>
@@ -78,73 +103,40 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { labApi, type LabProfile } from '@/api/lab'
-import { studentApi, type LabDetail } from '@/api/student'
+import { labProfileApi, type LabProfileDetail } from '@/api/labProfiles'
 import { useAuthStore } from '@/stores/auth'
+import type { LabDetail } from '@/api/student'
+import LabPromotionFiles from '@/components/lab/LabPromotionFiles.vue'
 import LeaderLabContent from './LeaderLabContent.vue'
-import LeaderLabTeachers from './LeaderLabTeachers.vue'
 
 const auth = useAuthStore()
 const route = useRoute()
 const labId = computed(() => auth.user?.laboratoryId ?? null)
-const lab = ref<LabDetail>()
+
+const lab = ref<LabProfileDetail>()
 const loading = ref(false)
 const failed = ref(false)
-const saving = ref(false)
-const form = reactive<LabProfile>({ name: '', projectDirection: '', technologyStack: '', description: '', recruitmentQuota: 0, status: 'ACTIVE' })
-const tab = ref('profile')
-const staffNames = ref<string[]>([])
-const fields = ['name', 'projectDirection', 'technologyStack', 'description'] as const
-const canEdit = computed(() => !!lab.value && (lab.value.leaderId == null || lab.value.leaderId === auth.user?.id))
-const changes = computed(() => {
-  const patch: Partial<LabProfile> = {}
-  if (!lab.value) return patch
-  for (const field of fields) {
-    const value = form[field].trim()
-    if (value !== (lab.value[field] ?? '')) patch[field] = value
-  }
-  if (form.recruitmentQuota !== lab.value.recruitmentQuota) patch.recruitmentQuota = form.recruitmentQuota
-  if (form.status !== lab.value.status) patch.status = form.status
-  return patch
-})
-const dirty = computed(() => Object.keys(changes.value).length > 0)
+const tab = ref('teachers')
 
-function resetForm() {
-  for (const field of fields) form[field] = lab.value?.[field] ?? ''
-  form.recruitmentQuota = lab.value?.recruitmentQuota ?? 0
-  form.status = lab.value?.status ?? 'ACTIVE'
-}
-
-async function readOverview() {
-  const id = labId.value
-  if (!id) return
-  const detail = await studentApi.labDetail(id)
-  const members = detail.leaderId == null || detail.leaderId === auth.user?.id ? await labApi.staff(id) : []
-  if (id !== labId.value) return
-  lab.value = detail
-  staffNames.value = members.filter(item => item.status === 'ACTIVE').map(item => item.realName)
-}
-
-function refreshOverview() {
-  void readOverview().catch(() => undefined)
-}
+/** 宣讲与开放日仍由组长维护媒体地址，这里只暴露该模块需要的字段 */
+const mediaLab = computed<LabDetail>(() => ({
+  ...(lab.value as unknown as LabDetail),
+  id: lab.value?.id ?? 0,
+  briefingText: (lab.value as unknown as { briefingText?: string })?.briefingText || ''
+}))
 
 async function load() {
   const id = labId.value
   lab.value = undefined
   failed.value = false
-  if (!id) {
-    loading.value = false
-    return
-  }
+  if (!id) { loading.value = false; return }
   loading.value = true
   try {
-    await readOverview()
+    const detail = await labProfileApi.detail(id)
     if (id !== labId.value) return
-    resetForm()
+    lab.value = detail
   } catch {
     if (id === labId.value) failed.value = true
   } finally {
@@ -152,49 +144,34 @@ async function load() {
   }
 }
 
-async function save() {
-  const id = labId.value
-  if (!id || lab.value?.id !== id || !canEdit.value || saving.value || !dirty.value) return
-  if (!form.name.trim()) {
-    ElMessage.warning('请填写实训室名称')
-    return
-  }
-  if (!Number.isSafeInteger(form.recruitmentQuota) || form.recruitmentQuota < 0) {
-    ElMessage.warning('请填写非负整数招生名额')
-    return
-  }
-
-  saving.value = true
-  try {
-    const saved = await labApi.updateProfile(id, changes.value)
-    if (lab.value?.id !== id) return
-    lab.value = { ...lab.value, ...saved }
-    resetForm()
-    ElMessage.success('实训室资料已保存')
-  } catch {
-    // 请求层展示服务端错误并保留当前编辑内容。
-  } finally {
-    saving.value = false
-  }
+function onTabChange(name: string | number) {
+  if (name === 'files' || name === 'media') void load()
 }
 
 watch(labId, load, { immediate: true })
-watch(() => route.query.tab, value => {
-  tab.value = value === 'media' || value === 'staff' ? value : 'profile'
+watch(() => route.query.tab, (value) => {
+  if (value === 'media' || value === 'files' || value === 'teachers') tab.value = value
 }, { immediate: true })
 </script>
 
 <style scoped>
 .lab-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
-.el-alert + .lab-overview { margin-top: 14px; }
+.el-alert + .overview-grid { margin-top: 14px; }
+.overview-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
 .lab-summary { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 20px; }
-.lab-summary dt { color: var(--workspace-muted); font-size: 13px; }
-.lab-summary dd { margin: 4px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.lab-summary dt { color: var(--lm-text-secondary); font-size: 13px; }
+.lab-summary dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .lab-summary .wide { grid-column: 1 / -1; }
-.edit-title { margin: 22px 0 10px; font-size: 19px; }
-.lab-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-@media (max-width: 760px) {
+.lab-summary .multiline { white-space: pre-wrap; line-height: 1.7; }
+.quota-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.quota-grid div { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--lm-bg); }
+.quota-grid span { font-size: 12px; color: var(--lm-text-secondary); }
+.quota-grid b { font-size: 22px; color: var(--lm-text); font-variant-numeric: tabular-nums; }
+.quota-hint { margin: 12px 0 0; font-size: 12px; color: var(--lm-text-secondary); }
+.info-tabs { margin-top: 16px; }
+.teacher-name { display: flex; align-items: center; gap: 8px; }
+@media (max-width: 960px) {
+  .overview-grid { grid-template-columns: minmax(0, 1fr); }
   .lab-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .lab-fields { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

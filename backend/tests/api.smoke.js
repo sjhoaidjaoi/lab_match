@@ -158,7 +158,6 @@ async function main() {
     const labContent = await request('PUT', '/laboratories/1', {
       token: leader,
       body: {
-        briefingText: '组长发布的实训室简介',
         briefingVideoUrl: 'https://example.com/briefing.mp4',
         briefingVideoType: 'MP4',
         tourVideoUrl: 'https://example.com/tour.mp4',
@@ -167,7 +166,6 @@ async function main() {
     })
     const publicLab = await request('GET', '/laboratories/1', { token: student })
     check('学生可分别读取本室宣讲和开放日资源', labContent.status === 200 &&
-      publicLab.body?.data?.briefingText === '组长发布的实训室简介' &&
       publicLab.body?.data?.briefingVideoUrl?.endsWith('/briefing.mp4') &&
       publicLab.body?.data?.tourVideoUrl?.endsWith('/tour.mp4'))
     const foreignLab = await request('PUT', '/laboratories/2', {
@@ -175,36 +173,31 @@ async function main() {
     })
     check('组长不能发布其他实训室的云游视频', foreignLab.status === 403)
 
+    // 实训室资料统一管理：基础资料与招生名额由学院维护，组长只读
     const labProfile = await request('PUT', '/laboratories/1', {
-      token: leader,
-      body: { description: '组长维护的基本简介', projectDirection: '软件工程', technologyStack: 'Vue / Express',
+      token: admin,
+      body: { description: '学院维护的基本简介', projectDirection: '软件工程', technologyStack: 'Vue / Express',
         recruitmentQuota: 7 }
     })
     const updatedProfile = await request('GET', '/laboratories/1', { token: student })
-    check('组长可维护本室基本资料，学生可读取该资料',
-      labProfile.status === 200 && updatedProfile.body?.data?.description === '组长维护的基本简介' &&
+    check('学院可维护本室基本资料，学生可读取该资料',
+      labProfile.status === 200 && updatedProfile.body?.data?.description === '学院维护的基本简介' &&
       updatedProfile.body?.data?.projectDirection === '软件工程' && updatedProfile.body?.data?.technologyStack === 'Vue / Express')
-    check('组长可改招生名额并保留宣讲资料及组长绑定',
+    check('学院可调整招生名额并保留宣讲资料及组长绑定',
       updatedProfile.body?.data?.recruitmentQuota === 7 &&
       updatedProfile.body?.data?.leaderId === publicLab.body?.data?.leaderId &&
-      updatedProfile.body?.data?.status === publicLab.body?.data?.status &&
-      updatedProfile.body?.data?.briefingText === publicLab.body?.data?.briefingText &&
+      updatedProfile.body?.data?.briefingVideoUrl === publicLab.body?.data?.briefingVideoUrl &&
       updatedProfile.body?.data?.tourVideoUrl === publicLab.body?.data?.tourVideoUrl)
-    check('组长不得降低名额至低于已占用人数，也不能改组长归属',
-      (await request('PUT', '/laboratories/1', { token: leader, body: { recruitmentQuota: 0 } })).status === 409 &&
+    check('组长不能修改基础资料与招生名额',
+      (await request('PUT', '/laboratories/1', { token: leader, body: { description: '组长越权修改' } })).status === 403 &&
+      (await request('PUT', '/laboratories/1', { token: leader, body: { recruitmentQuota: 12 } })).status === 403)
+    check('组长不能改组长归属',
       (await request('PUT', '/laboratories/1', { token: leader, body: { leaderId: null } })).status === 403)
-    await request('PUT', '/laboratories/1', { token: leader, body: { recruitmentQuota: publicLab.body.data.recruitmentQuota } })
-    check('学院只读各室业务资料，不能修改名额、教师或全景资源',
-      (await request('PUT', '/laboratories/1', { token: admin, body: { recruitmentQuota: 8 } })).status === 403 &&
-      (await request('PUT', `/users/${newTeacher.body.data.id}`, { token: admin, body: { realName: '越权' } })).status === 403 &&
+    check('学院不能修改全景资源归属',
       (await request('PUT', '/media/admin/panoramas/1', { token: admin, body: { name: '越权' } })).status === 403)
     const teacherEdit = await request('PUT', '/laboratories/1', { token: teacher, body: { name: '改名' } })
     check('普通教师不能编辑实训室基本资料', teacherEdit.status === 403)
     check('普通教师不能发布宣讲文档', (await request('POST', '/media/labs/1/materials', { token: teacher })).status === 403)
-    await request('PUT', '/laboratories/1', { token: admin, body: { leaderId: null } })
-    const boundLeaderEdit = await request('PUT', '/laboratories/1', { token: leader, body: { description: '已绑定组长维护的简介' } })
-    await request('PUT', '/laboratories/1', { token: admin, body: { leaderId: publicLab.body?.data?.leaderId } })
-    check('已绑定本室的组长在未填写负责人时仍可编辑基本资料', boundLeaderEdit.status === 200)
 
     // 打开阶段三时间窗
     const stages = await request('GET', '/batches/1/stages', { token: admin })
@@ -413,10 +406,10 @@ async function main() {
       declineReserved.body?.data?.occupied === declineBefore.body?.data?.occupied + 1 &&
       declineAfter.body?.data?.occupied === declineBefore.body?.data?.occupied &&
       declineAfter.body?.data?.invitations.some(item => item.id === invitationToDecline.body.data.id && item.status === 'REJECTED'))
-    await request('PUT', '/laboratories/1/teachers/1', { token: leader, body: { recruitmentQuota: 0 } })
+    await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: 0 } })
     check('导师名额不足时不能发出入组邀请',
       (await request('POST', inviteRoute, { ...asTeacher, body: { studentId: ownStudentId } })).status === 409)
-    await request('PUT', '/laboratories/1/teachers/1', { token: leader, body: { recruitmentQuota: null } })
+    await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: null } })
     const invited = await request('POST', inviteRoute, { ...asTeacher, body: { studentId: ownStudentId } })
     const sentAgain = await request('POST', inviteRoute, { ...asTeacher, body: { studentId: ownStudentId } })
     const received = await request('GET', '/admissions/my', { token: ownStudent })
@@ -451,9 +444,9 @@ async function main() {
     const reviewPath = '/recruitment-reviews/lab/' + labReview.body?.data?.id + '/review'
     check('学院不能提前发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 409)
     await openStage(5)
-    await request('PUT', '/laboratories/1/teachers/2', { token: leader, body: { recruitmentQuota: 0 } })
+    await request('PUT', '/laboratories/1/teachers/2', { token: admin, body: { recruitmentQuota: 0 } })
     check('导师零名额时不能发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 409)
-    await request('PUT', '/laboratories/1/teachers/2', { token: leader, body: { recruitmentQuota: null } })
+    await request('PUT', '/laboratories/1/teachers/2', { token: admin, body: { recruitmentQuota: null } })
     check('学院在阶段五发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 200)
     check('已接受的教师邀请随本室名单报送时不会生成重复录取',
       (await request('GET', '/admissions/my', { token: ownStudent })).body?.data?.length === 1)
@@ -485,12 +478,12 @@ async function main() {
     check('已确认录取学生进入调剂池被拒绝', alreadyPlaced.status === 400, JSON.stringify(alreadyPlaced.body))
 
     if (eligible) {
-      await request('PUT', '/laboratories/1/teachers/1', { token: leader, body: { recruitmentQuota: 0 } })
+      await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: 0 } })
       const full = await request('POST', '/adjustments/internal', {
         token: leader, body: { studentId: eligible.studentId, targetLaboratoryId: 1, targetLabTeacherId: 1, reason: '导师名额校验' }
       })
       check('内部调剂不能占用已满导师名额', full.status === 400 && full.body?.message?.includes('导师招生名额'))
-      await request('PUT', '/laboratories/1/teachers/1', { token: leader, body: { recruitmentQuota: null } })
+      await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: null } })
       const [first, second] = await Promise.all([
         request('POST', '/adjustments/internal', {
           token: leader, body: { studentId: eligible.studentId, targetLaboratoryId: 1, targetLabTeacherId: 1, sourceLaboratoryId: 1, reason: '并发测试A' }
@@ -584,7 +577,7 @@ async function main() {
     )
 
     const mentorCreate = await request('POST', '/laboratories/1/teachers', {
-      token: leader, body: { name: '测试导师', title: '讲师', direction: '测试方向', intro: '冒烟测试', userId: newTeacher.body.data.id }
+      token: admin, body: { name: '测试导师', title: '讲师', direction: '测试方向', intro: '冒烟测试', userId: newTeacher.body.data.id }
     })
     check('新增实训室导师成功', mentorCreate.status === 200, JSON.stringify(mentorCreate.body))
     const mentorId = mentorCreate.body?.data?.id
@@ -595,15 +588,15 @@ async function main() {
         labDetail.body.data.teachers.some((t) => t.id === mentorId)
     )
     const mentorUpdate = await request('PUT', `/laboratories/1/teachers/${mentorId}`, {
-      token: leader, body: { title: '副教授' }
+      token: admin, body: { title: '副教授' }
     })
     check('修改实训室导师成功', mentorUpdate.status === 200 && mentorUpdate.body?.data?.title === '副教授')
-    const mentorDelete = await request('DELETE', `/laboratories/1/teachers/${mentorId}`, { token: leader })
+    const mentorDelete = await request('DELETE', `/laboratories/1/teachers/${mentorId}`, { token: admin })
     check('删除实训室导师成功', mentorDelete.status === 200)
     const mentorForbidden = await request('POST', '/laboratories/2/teachers', {
       token: leader, body: { name: '越权导师' }
     })
-    check('组长不能维护其他实训室导师团队', mentorForbidden.status === 403)
+    check('组长不能维护导师团队（由学院统一维护）', mentorForbidden.status === 403)
 
     const document = new FormData()
     document.append('file', new Blob(['%PDF-1.4\n%%EOF'], { type: 'application/pdf' }), 'briefing.pdf')

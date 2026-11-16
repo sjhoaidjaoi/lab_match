@@ -28,6 +28,12 @@ const COLLECTION_TABLES = {
   recruitmentStages: 'recruitment_stages',
   studentPreferences: 'student_preferences',
   interviews: 'interviews',
+  interviewParticipants: 'interview_participants',
+  interviewMessages: 'interview_messages',
+  interviewAttendance: 'interview_attendance',
+  interviewWebhookEvents: 'interview_webhook_events',
+  interviewRecordings: 'interview_recordings',
+  interviewRecordingConsents: 'interview_recording_consents',
   admissionIntentions: 'admission_intentions',
   adjustments: 'adjustments',
   finalAdmissions: 'final_admissions',
@@ -39,6 +45,9 @@ const COLLECTION_TABLES = {
   openDaySchedules: 'open_day_schedules',
   publicationObjections: 'publication_objections',
   labTeachers: 'lab_teachers',
+  labYearlyPlans: 'lab_yearly_plans',
+  teacherYearlyQuotas: 'teacher_yearly_quotas',
+  labPromotionFiles: 'lab_promotion_files',
   applicationResumes: 'application_resumes',
   recruitmentReviews: 'recruitment_reviews',
   publication: 'publication',
@@ -242,7 +251,7 @@ async function initDatabase() {
       'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?', [database]
     )
     const schemaFile = path.join(__dirname, '../../database/schema.sql')
-    const prerequisiteMigrations = ['migration_v2.sql', 'migration_v3.sql', 'migration_v6.sql']
+    const prerequisiteMigrations = ['migration_v2.sql', 'migration_v3.sql', 'migration_v6.sql', 'migration_v7.sql', 'migration_v8.sql', 'migration_v9.sql', 'migration_v10.sql']
     const studentMigration = fs.readFileSync(path.join(__dirname, '../../database/migration_v4.sql'), 'utf8')
     const reviewMigration = fs.readFileSync(path.join(__dirname, '../../database/migration_v5.sql'), 'utf8')
     const created = !dbRows.length

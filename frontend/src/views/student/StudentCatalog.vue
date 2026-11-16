@@ -7,14 +7,36 @@
     <template v-else-if="lab">
       <header class="student-welcome">
         <p>{{ openDay ? '实训室开放日' : '集中宣讲' }}</p>
-        <h1>{{ lab.name }}</h1>
-        <p v-if="lab.projectDirection">{{ lab.projectDirection }}</p>
+        <h1>{{ lab.displayName || lab.name }}</h1>
+        <p v-if="lab.researchDirection || lab.projectDirection">{{ lab.researchDirection || lab.projectDirection }}</p>
+        <p v-if="lab.college || lab.location" class="lab-meta-line">
+          <template v-if="lab.college">{{ lab.college }}</template>
+          <template v-if="lab.college && lab.location"> · </template>
+          <template v-if="lab.location">{{ lab.location }}</template>
+        </p>
       </header>
       <el-card v-if="!openDay" shadow="never">
         <h2>实训室简介</h2>
-        <p class="lab-introduction">{{ lab.description || lab.briefingText || '组长尚未发布简介。' }}</p>
+        <p class="lab-introduction">{{ lab.description || lab.briefingText || '学院尚未发布简介。' }}</p>
         <p v-if="lab.technologyStack">技术栈 · {{ lab.technologyStack }}</p>
-        <p>计划招生 {{ lab.recruitmentQuota }} 人</p>
+        <p>本学年计划招生 {{ lab.recruitmentQuota }} 人</p>
+        <template v-if="lab.detail">
+          <h2>详细介绍</h2>
+          <p class="lab-introduction">{{ lab.detail }}</p>
+        </template>
+        <template v-if="lab.features">
+          <h2>实训室特色</h2>
+          <p class="lab-introduction">{{ lab.features }}</p>
+        </template>
+        <template v-if="lab.achievements">
+          <h2>主要研究成果</h2>
+          <p class="lab-introduction">{{ lab.achievements }}</p>
+        </template>
+        <template v-if="lab.equipment">
+          <h2>设备及资源</h2>
+          <p class="lab-introduction">{{ lab.equipment }}</p>
+        </template>
+        <p v-if="lab.contact" class="lab-contact">联系方式 · {{ lab.contact }}</p>
         <template v-if="lab.description && lab.briefingText && lab.briefingText.trim() !== lab.description.trim()">
           <h2>宣讲介绍</h2>
           <p class="lab-introduction">{{ lab.briefingText }}</p>

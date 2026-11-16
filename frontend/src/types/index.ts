@@ -71,6 +71,19 @@ export interface BatchInfo {
 export interface LabView {
   id: number
   name: string
+  /** 名称为空时由后端给出的展示名（如「202 实训室」） */
+  displayName?: string
+  labCode?: string
+  college?: string
+  location?: string
+  researchDirection?: string
+  detail?: string
+  features?: string
+  achievements?: string
+  equipment?: string
+  contact?: string
+  remark?: string
+  academicYear?: string
   description?: string
   projectDirection?: string
   technologyStack?: string

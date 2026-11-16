@@ -1,4 +1,5 @@
 import { http } from './request'
+import type { MeetingStatus } from './interviewVideo'
 import type {
   AnnouncementItem, LabView, NoticeItem, OpenDaySchedule, PanoramaItem,
   PreferenceItem, PublicationInfo, StageInfo, VideoItem
@@ -45,6 +46,7 @@ export interface LabDetail extends LabView {
 }
 
 export interface StudentInterview {
+  online?: { status: MeetingStatus }
   durationMinutes?: number
   id: number
   batchId?: number

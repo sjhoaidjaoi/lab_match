@@ -86,6 +86,12 @@ function emptyStore() {
     recruitmentStages: [],
     studentPreferences: [],
     interviews: [],
+    interviewParticipants: [],
+    interviewMessages: [],
+    interviewAttendance: [],
+    interviewWebhookEvents: [],
+    interviewRecordings: [],
+    interviewRecordingConsents: [],
     admissionIntentions: [],
     adjustments: [],
     finalAdmissions: [],
@@ -98,7 +104,11 @@ function emptyStore() {
     finalReview: null,
     publicationObjections: [],
     openDaySchedules: [],
-    labTeachers: []
+    labTeachers: [],
+    // 实训室资料统一管理新增实体
+    labYearlyPlans: [],
+    teacherYearlyQuotas: [],
+    labPromotionFiles: []
   }
 }
 
@@ -377,9 +387,37 @@ async function seedMockData() {
 // 旧数据迁移：为缺少新字段的记录补默认值（返回是否有变更）
 function migrateStore(store) {
   let changed = false
+  if (!store.interviewParticipants) { store.interviewParticipants = []; changed = true }
+  for (const key of ['interviewMessages', 'interviewAttendance', 'interviewWebhookEvents', 'interviewRecordings', 'interviewRecordingConsents']) {
+    if (!store[key]) { store[key] = []; changed = true }
+  }
   if (!store.openDaySchedules) { store.openDaySchedules = []; changed = true }
   if (!store.publicationObjections) { store.publicationObjections = []; changed = true }
   if (!store.labTeachers) { store.labTeachers = []; changed = true }
+  // 实训室资料统一管理：新增集合与字段（非破坏性，仅补默认值）
+  for (const key of ['labYearlyPlans', 'teacherYearlyQuotas', 'labPromotionFiles']) {
+    if (!store[key]) { store[key] = []; changed = true }
+  }
+  ;(store.laboratories || []).forEach((l) => {
+    // 旧数据以大写编号命名（如「505」），自动补成实训室编号
+    if (l.labCode === undefined) {
+      const name = String(l.name || '').trim()
+      l.labCode = /^\d{3}$/.test(name) ? name : ''
+      changed = true
+    }
+    for (const field of ['college', 'location', 'detail', 'researchDirection', 'features', 'achievements', 'equipment', 'contact', 'remark']) {
+      if (l[field] === undefined) { l[field] = ''; changed = true }
+    }
+  })
+  ;(store.labTeachers || []).forEach((t) => {
+    for (const field of ['employeeNo', 'gender', 'degree', 'project', 'email', 'office', 'photoUrl', 'remark']) {
+      if (t[field] === undefined) { t[field] = ''; changed = true }
+    }
+    if (t.identity === undefined) {
+      t.identity = (store.laboratories || []).some((l) => l.leaderId != null && l.leaderId === t.userId) ? 'LEADER' : 'TEACHER'
+      changed = true
+    }
+  })
   // 实训室宣讲内容：旧数据用简介兜底
   ;(store.laboratories || []).forEach((l) => {
     if (l.briefingText === undefined) {

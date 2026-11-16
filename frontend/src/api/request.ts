@@ -2,6 +2,12 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import type { Result } from '@/types'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    silent?: boolean
+  }
+}
+
 const TOKEN_KEY = 'lm_token'
 const ROLE_KEY = 'lm_role'
 const USER_KEY = 'lm_user'
@@ -33,7 +39,7 @@ service.interceptors.response.use(
       return body.data as unknown as typeof response
     }
     const message = body?.message || '请求失败'
-    if (response.config.url !== '/auth/login' && response.config.url !== '/auth/logout') ElMessage.error(message)
+    if (!response.config.silent && response.config.url !== '/auth/login' && response.config.url !== '/auth/logout') ElMessage.error(message)
     return Promise.reject(new Error(message))
   },
   (error) => {
@@ -57,7 +63,7 @@ service.interceptors.response.use(
     const message = serverMessage || (loginRequest && (!status || status >= 500)
       ? '暂时无法连接登录服务，请稍后重试'
       : error.message || '网络异常，请稍后重试')
-    if (!loginRequest && (error.config?.url !== '/auth/password' || status === 401)) ElMessage.error(message)
+    if (!error.config?.silent && !loginRequest && (error.config?.url !== '/auth/password' || status === 401)) ElMessage.error(message)
     if (status === 401) {
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(ROLE_KEY)
@@ -67,7 +73,7 @@ service.interceptors.response.use(
         window.location.href = '/login'
       }
     }
-    const inlineMessage = loginRequest || error.config?.url === '/auth/password'
+    const inlineMessage = error.config?.silent || loginRequest || error.config?.url === '/auth/password'
     return Promise.reject(inlineMessage ? new Error(message) : error)
   }
 )

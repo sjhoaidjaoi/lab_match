@@ -1,6 +1,7 @@
 import { http } from './request'
 import type { LabTeacher } from './student'
 import type { UserAccount } from '@/types'
+import type { MeetingStatus } from './interviewVideo'
 
 /** 实训室教师 / 组长端共用接口 */
 export interface LabStats {
@@ -36,10 +37,12 @@ export interface PreferenceRow {
 }
 
 export interface InterviewRow {
+  online?: { status: MeetingStatus }
   location?: string
   interviewForm?: string
   instructions?: string
   durationMinutes?: number
+  scoredAt?: string | null
   noticeStatus?: 'NOT_SENT' | 'SENT' | 'READ'
   id: number
   studentId: number
@@ -49,7 +52,7 @@ export interface InterviewRow {
   interviewerId: number | null
   interviewerName: string
   interviewTime: string | null
-  interviewStatus: 'SCHEDULED' | 'COMPLETED' | 'CANCELLED'
+  interviewStatus: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
   attitudeScore: number | null
   logicScore: number | null
   programmingScore: number | null
@@ -180,7 +183,7 @@ export const labApi = {
   removeMentor: (id: number, mentorId: number) => http.delete(`/laboratories/${id}/teachers/${mentorId}`),
   preferences: (labId: number) => http.get<PreferenceRow[]>(`/preferences/lab/${labId}`),
   interviews: (labId: number) => http.get<InterviewRow[]>(`/interviews/lab/${labId}`),
-  scheduleInterview: (payload: { studentId: number; laboratoryId: number; interviewTime: string; interviewStatus: string; location?: string; interviewForm?: string; instructions?: string; durationMinutes?: number }) =>
+  scheduleInterview: (payload: { studentId: number; laboratoryId: number; interviewTime: string; interviewStatus: string; location?: string; interviewForm?: string; instructions?: string; durationMinutes?: number; mode?: 'LIVEKIT' | 'STANDARD'; panelIds?: number[] }) =>
     http.post<InterviewRow>('/interviews/schedule', payload),
   scoreInterview: (id: number, payload: ScorePayload) => http.post<InterviewRow>(`/interviews/${id}/score`, payload),
   admissions: (labId: number) => http.get<AdmissionRow[]>(`/admissions/lab/${labId}`),

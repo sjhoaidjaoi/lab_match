@@ -11,6 +11,7 @@ const { ok } = require('../utils/result')
 const { getStore, persistStore, nextId } = require('../data/seed')
 const { requireAuth, requireRole, ROLES, isLabLeader } = require('../middleware/auth')
 const { currentBatch } = require('../utils/applicationScope')
+const L = require('../utils/labProfile')
 const { logOperation } = require('../utils/audit')
 
 const videoAddress = z.string().trim().max(2048).refine(value => {
@@ -42,12 +43,19 @@ const LabSchema = z.object({
 
 router.get('/', (req, res) => {
   const store = getStore()
+  const year = L.currentAcademicYear(store)
   const list = store.laboratories.filter((l) => l.status !== 'INACTIVE').map((l) => {
     const leader = store.users.find((u) => u.id === l.leaderId)
     return {
-      id: l.id, name: l.name, description: l.description,
+      id: l.id, name: l.name, displayName: L.displayName(l),
+      labCode: l.labCode || '', college: l.college || '', location: l.location || '',
+      researchDirection: l.researchDirection || '',
+      description: l.description,
+      detail: l.detail || '', features: l.features || '', achievements: l.achievements || '',
+      equipment: l.equipment || '', contact: l.contact || '', remark: l.remark || '',
       projectDirection: l.projectDirection, technologyStack: l.technologyStack,
-      recruitmentQuota: l.recruitmentQuota,
+      // 招生名额以「当前学年的学院统一计划」为准，避免各端口径不一致
+      recruitmentQuota: L.totalQuotaOf(store, l, year),
       leaderName: leader ? leader.realName : null,
       leaderId: l.leaderId,
       briefingText: l.briefingText || '',
@@ -92,7 +100,27 @@ router.get('/:id', (req, res) => {
     .map(t => ({ ...t, acceptsPreferences: store.users.some(user => user.id === t.userId && user.laboratoryId === l.id &&
       user.status === 'ACTIVE' && [ROLES.LAB_TEACHER, ROLES.LAB_LEADER].includes(user.role)) }))
   const { briefingMaterials, ...detail } = l
-  res.json(ok({ ...detail, leaderName: leader?.realName || null, teachers, videos, panoramas }))
+  const year = L.currentAcademicYear(store)
+  res.json(ok({
+    ...detail,
+    displayName: L.displayName(l),
+    labCode: l.labCode || '',
+    college: l.college || '',
+    location: l.location || '',
+    researchDirection: l.researchDirection || '',
+    detail: l.detail || '',
+    features: l.features || '',
+    achievements: l.achievements || '',
+    equipment: l.equipment || '',
+    contact: l.contact || '',
+    remark: l.remark || '',
+    academicYear: year,
+    recruitmentQuota: L.totalQuotaOf(store, l, year),
+    leaderName: leader?.realName || null,
+    teachers,
+    videos,
+    panoramas
+  }))
 })
 
 router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
@@ -123,16 +151,10 @@ router.put('/:id', requireAuth, (req, res) => {
 
   const body = LabSchema.partial().parse(req.body || {})
   if (role === ROLES.COLLEGE_ADMIN) {
-    if (Object.keys(body).some(key => key !== 'leaderId')) {
-      return res.status(403).json({ message: '实训室资料与名额由本室组长维护' })
-    }
+    // 学院管理员：可维护全部基础资料并指定组长
     if (body.leaderId != null && !store.users.some(user => user.id === body.leaderId &&
       user.role === ROLES.LAB_LEADER && user.laboratoryId === lab.id && user.status === 'ACTIVE')) {
       return res.status(400).json({ message: '请选择已绑定本室的有效组长账号' })
-    }
-  } else {
-    if (body.leaderId !== undefined && body.leaderId !== lab.leaderId) {
-      return res.status(403).json({ message: '组长账号由学院统筹绑定' })
     }
     if (body.recruitmentQuota !== undefined) {
       const planned = store.labTeachers.filter(item => item.laboratoryId === lab.id && item.status !== 'INACTIVE')
@@ -147,6 +169,20 @@ router.put('/:id', requireAuth, (req, res) => {
       if (body.recruitmentQuota < Math.max(planned, occupied)) {
         return res.status(409).json({ message: `计划名额不能少于已分配导师名额（${planned}）或已占用名额（${occupied}）` })
       }
+    }
+  } else {
+    // 组长：只能维护本室宣讲 / 云游媒体地址；基础资料、教师名单、招生名额由学院统一维护
+    const LEADER_MEDIA_FIELDS = [
+      'briefingVideoUrl', 'briefingVideoType', 'tourVideoUrl', 'tourVideoType',
+      'introductionVideo', 'panoramicResource'
+    ]
+    const illegal = Object.keys(body).filter(key => !LEADER_MEDIA_FIELDS.includes(key))
+    if (illegal.length) {
+      return res.status(403).json({
+        code: 'ROLE_FORBIDDEN',
+        message: '实训室基础资料、教师信息与招生名额由学院统一维护，组长仅可管理本室宣传资料',
+        data: null
+      })
     }
   }
   store.laboratories[idx] = { ...lab, ...body }
@@ -204,8 +240,8 @@ router.post('/:id/teachers', requireAuth, (req, res) => {
   const store = getStore()
   const lab = store.laboratories.find((l) => l.id === Number(req.params.id))
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
-  if (!isLabLeader(req, lab)) {
-    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '只能维护本人负责实训室的导师团队', data: null })
+  if (!req.user.roles.includes(ROLES.COLLEGE_ADMIN)) {
+    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '教师名单与教师资料由学院统一维护', data: null })
   }
   const body = TeacherSchema.parse(req.body || {})
   if (!store.labTeachers) store.labTeachers = []
@@ -230,8 +266,8 @@ router.put('/:id/teachers/:teacherId', requireAuth, (req, res) => {
   const store = getStore()
   const lab = store.laboratories.find((l) => l.id === Number(req.params.id))
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
-  if (!isLabLeader(req, lab)) {
-    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '只能维护本人负责实训室的导师团队', data: null })
+  if (!req.user.roles.includes(ROLES.COLLEGE_ADMIN)) {
+    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '教师名单与教师资料由学院统一维护', data: null })
   }
   const idx = (store.labTeachers || []).findIndex(
     (t) => t.id === Number(req.params.teacherId) && t.laboratoryId === lab.id
@@ -257,8 +293,8 @@ router.delete('/:id/teachers/:teacherId', requireAuth, (req, res) => {
   const store = getStore()
   const lab = store.laboratories.find((l) => l.id === Number(req.params.id))
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
-  if (!isLabLeader(req, lab)) {
-    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '只能维护本人负责实训室的导师团队', data: null })
+  if (!req.user.roles.includes(ROLES.COLLEGE_ADMIN)) {
+    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '教师名单与教师资料由学院统一维护', data: null })
   }
   const before = (store.labTeachers || []).length
   if (store.studentPreferences.some(choice => choice.labTeacherId === Number(req.params.teacherId) && choice.laboratoryId === lab.id)) {
