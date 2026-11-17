@@ -34,6 +34,11 @@ const COLLECTION_TABLES = {
   interviewWebhookEvents: 'interview_webhook_events',
   interviewRecordings: 'interview_recordings',
   interviewRecordingConsents: 'interview_recording_consents',
+  interviewAiJobs: 'interview_ai_jobs',
+  interviewAiConsents: 'interview_ai_consents',
+  interviewAiVersions: 'interview_ai_versions',
+  interviewScorePolicies: 'interview_score_policies',
+  interviewEvaluations: 'interview_evaluations',
   admissionIntentions: 'admission_intentions',
   adjustments: 'adjustments',
   finalAdmissions: 'final_admissions',
@@ -251,7 +256,7 @@ async function initDatabase() {
       'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?', [database]
     )
     const schemaFile = path.join(__dirname, '../../database/schema.sql')
-    const prerequisiteMigrations = ['migration_v2.sql', 'migration_v3.sql', 'migration_v6.sql', 'migration_v7.sql', 'migration_v8.sql', 'migration_v9.sql', 'migration_v10.sql']
+    const prerequisiteMigrations = ['migration_v2.sql', 'migration_v3.sql', 'migration_v6.sql', 'migration_v7.sql', 'migration_v8.sql', 'migration_v9.sql', 'migration_v10.sql', 'migration_v11.sql', 'migration_v12.sql']
     const studentMigration = fs.readFileSync(path.join(__dirname, '../../database/migration_v4.sql'), 'utf8')
     const reviewMigration = fs.readFileSync(path.join(__dirname, '../../database/migration_v5.sql'), 'utf8')
     const created = !dbRows.length
@@ -262,6 +267,7 @@ async function initDatabase() {
     }
     // 已存在数据库：只执行增量迁移（schema.sql 中的 DROP 不得执行）
     await rootConn.query(`USE \`${database}\``)
+    const [attemptIndexes] = await rootConn.query("SHOW INDEX FROM interviews WHERE Key_name = 'uk_interview_attempt'")
     const migrationSql = prerequisiteMigrations.map(file => fs.readFileSync(path.join(__dirname, '../../database', file), 'utf8')).join('\n')
     // 逐条执行，已存在的列/表/索引错误忽略，保证脚本可重复执行
     const statements = migrationSql.replace(/^\s*--[^\r\n]*/gm, '')
@@ -269,6 +275,7 @@ async function initDatabase() {
       .map((s) => s.trim())
       .filter((s) => s && !/^USE\s/i.test(s))
     for (const statement of statements) {
+      if (attemptIndexes.length && /ADD UNIQUE KEY uk_interview_batch_student_lab\b/.test(statement)) continue
       try {
         await rootConn.query(statement)
       } catch (err) {

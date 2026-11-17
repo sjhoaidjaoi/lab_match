@@ -17,6 +17,20 @@
     </header>
 
     <el-alert v-if="problem" type="error" :title="problem" show-icon :closable="false" />
+    <section v-if="workspace?.aiConsent" class="recording-notice" aria-label="AI 数据处理授权">
+      <details :open="workspace.aiConsent.decision === null">
+        <summary>AI 数据处理告知 · {{ workspace.aiConsent.version }}</summary>
+        <p>{{ workspace.aiConsent.notice }}</p>
+        <p>转写服务处理会议音频，DeepSeek 处理转写文本。你的选择独立于录制和入会。</p>
+        <div class="device-controls">
+          <el-button v-if="workspace.aiConsent.decision !== true" type="primary" @click="consentToAi(true)">同意本场 AI 处理</el-button>
+          <el-button v-if="workspace.aiConsent.decision !== false" @click="consentToAi(false)">
+            {{ workspace.aiConsent.decision ? '撤回 AI 授权' : '不同意 AI 处理' }}
+          </el-button>
+          <span v-if="workspace.aiConsent.decision !== null" class="hint">{{ workspace.aiConsent.decision ? '已同意' : '已拒绝或撤回' }}</span>
+        </div>
+      </details>
+    </section>
     <section v-if="meeting && recording && !closed" class="recording-notice" aria-label="录制授权">
       <template v-if="recording.policy && consentOpen">
         <details :open="recording.decision !== 'ACCEPTED'">
@@ -385,6 +399,10 @@ const stopRecording = () => runAction(() => interviewVideoApi.stopRecording(room
 function recordConsent(accept: boolean) {
   const version = recording.value?.policy?.version
   if (version) return runAction(() => interviewVideoApi.recordingConsent(roomId.value, accept, version))
+}
+function consentToAi(accepted: boolean) {
+  const key = workspace.value?.aiConsent?.key
+  if (key) return runAction(() => interviewVideoApi.aiConsent(roomId.value, key, accepted))
 }
 const decide = (identity: string, approve: boolean) => runAction(() => interviewVideoApi.decide(roomId.value, identity, approve))
 const lock = () => runAction(() => interviewVideoApi.lock(roomId.value, !workspace.value?.locked))

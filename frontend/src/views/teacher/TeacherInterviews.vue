@@ -20,9 +20,14 @@
         <div v-for="item in panelMeetings" :key="item.id" class="panel-row">
           <span>{{ item.studentName }} · {{ formatTime(item.interviewTime) }} · {{ meetingStatusLabels[item.status] }}</span>
           <router-link :to="`/meeting/${item.id}`">查看会议 →</router-link>
+          <el-button v-if="item.status === 'ENDED'" type="primary" link @click="openScore(item)">我的评价</el-button>
         </div>
       </section>
-      <el-table v-loading="loading" :data="list" stripe empty-text="暂无面试记录">
+      <div class="panel-row"><el-input v-model="keyword" clearable placeholder="搜索学生姓名或学号" />
+        <el-select v-model="filter" clearable placeholder="按面试状态筛选">
+          <el-option v-for="(label, value) in appointments" :key="value" :label="label" :value="value" />
+        </el-select></div>
+      <el-table v-loading="loading" :data="filtered.slice((page - 1) * 15, page * 15)" stripe empty-text="暂无面试记录">
         <el-table-column prop="studentNumber" label="学号" width="120" />
         <el-table-column prop="studentName" label="姓名" width="100" />
         <el-table-column label="面试官" width="110">
@@ -35,7 +40,8 @@
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTag(row.interviewStatus)" effect="light">
-              {{ row.online ? meetingStatusLabels[row.online.status as MeetingStatus] : (INTERVIEW_STATUS_LABELS[row.interviewStatus] || row.interviewStatus) }}
+              {{ appointments[row.appointmentStatus] || INTERVIEW_STATUS_LABELS[row.interviewStatus] || row.interviewStatus }}
+              <span v-if="row.exceptionCode"> · 异常</span>
             </el-tag>
           </template>
         </el-table-column>
@@ -61,24 +67,28 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="228" align="center" fixed="right">
+        <el-table-column label="操作" width="270" align="center" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.online" size="small" text type="primary" tag="router-link" :to="`/meeting/${row.id}`">
               {{ ['ENDED', 'CANCELLED', 'CLOSED'].includes(row.online.status) ? '会议详情' : '进入会议' }}
             </el-button>
-            <el-button v-if="!row.online || row.online.status === 'ENDED'" size="small" text type="primary" @click="openScore(row)">
-              {{ (row.online ? row.scoredAt : row.interviewStatus === 'COMPLETED') ? '修改评分' : '评分' }}
+            <el-button v-if="row.interviewTime && !row.exceptionCode && (!row.online || row.online.status === 'ENDED')" size="small" text type="primary" @click="openScore(row)">
+              {{ row.scoredAt ? '评价历史' : '面试评价' }}
             </el-button>
-            <el-button v-if="row.interviewTime && (row.online ? ['UPCOMING', 'WAITING'].includes(row.online.status) : !['COMPLETED', 'CANCELLED'].includes(row.interviewStatus))" size="small" text @click="cancelSchedule(row)">取消面试</el-button>
+            <el-button v-if="row.interviewTime && !row.exceptionCode && (row.online ? ['UPCOMING', 'WAITING'].includes(row.online.status) : row.interviewStatus === 'SCHEDULED')" size="small" text @click="scheduleRow(row)">改期</el-button>
+            <el-button v-if="row.interviewTime && (row.online ? ['UPCOMING', 'WAITING'].includes(row.online.status) : row.interviewStatus === 'SCHEDULED')" size="small" text @click="cancelSchedule(row)">取消面试</el-button>
+            <el-button v-if="row.canMarkException && !row.exceptionCode" size="small" text @click="markException(row)">登记异常</el-button>
+            <el-button v-if="row.exceptionCode" size="small" text type="primary" @click="scheduleRow(row)">补面试</el-button>
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination v-if="filtered.length > 15" v-model:current-page="page" :page-size="15" :total="filtered.length" layout="prev,pager,next" />
     </el-card>
 
     <el-dialog v-model="scheduleVisible" title="安排面试" width="min(520px, calc(100vw - 32px))">
       <el-form :model="scheduleForm" label-width="90px">
         <el-form-item label="学生">
-          <el-select v-model="scheduleForm.studentId" filterable placeholder="请选择报名学生" style="width: 100%">
+          <el-select v-model="scheduleForm.studentId" :disabled="!!lockedStudent" filterable placeholder="请选择报名学生" style="width: 100%">
             <el-option
               v-for="p in preferences"
               :key="p.studentId"
@@ -117,9 +127,19 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="scoreVisible" :title="`面试评分 - ${currentStudent}`" width="560px">
-      <el-form :model="scoreForm" label-width="100px">
-        <el-form-item v-for="dim in scoreDims" :key="dim.key" :label="dim.label">
+    <el-dialog v-model="exceptionVisible" title="登记面试异常" width="min(480px, calc(100vw - 32px))">
+      <el-select v-model="exceptionCode" aria-label="异常类型">
+        <el-option label="学生未参加" value="STUDENT_ABSENT" /><el-option label="面试官未参加" value="TEACHER_ABSENT" />
+        <el-option label="网络或设备故障" value="NETWORK" /><el-option label="其他异常" value="OTHER" />
+      </el-select>
+      <el-input v-model="exceptionReason" type="textarea" :rows="3" maxlength="400" placeholder="简要记录事实及后续安排" />
+      <template #footer><el-button type="primary" :disabled="!exceptionReason.trim()" @click="saveException">确认登记</el-button></template>
+    </el-dialog>
+    <el-dialog v-model="scoreVisible" :title="`我的面试评价 · ${currentStudent}`" width="min(560px, calc(100vw - 32px))">
+      <p v-if="currentOnline"><router-link :to="{ path: '/teacher/interview-archives', query: { interviewId: currentId } }">查看录像、逐字稿和纪要</router-link></p>
+      <p v-if="!editable">当前场次仅可查阅评价。</p>
+      <el-form :model="scoreForm" :disabled="!editable" label-width="116px">
+        <el-form-item v-for="dim in scoreDims" :key="dim.key" :label="`${dim.label} ${policy?.weights[dim.key] ?? 20}%`">
           <el-input-number
             v-model="scoreForm[dim.key]"
             :min="0"
@@ -143,30 +163,36 @@
           </el-select>
         </el-form-item>
       </el-form>
+      <el-collapse v-if="history.length">
+        <el-collapse-item title="我的历史评价">
+          <p v-for="item in history" :key="item.version">
+            {{ item.version ? '#' + item.version : '历史记录' }} · {{ item.state === 'DRAFT' ? '草稿' : '已提交' }} ·
+            {{ item.total ?? '未计算总分' }} · {{ formatTime(item.createdAt) }}<br>{{ item.evaluation }}
+          </p>
+        </el-collapse-item>
+      </el-collapse>
       <template #footer>
         <el-button @click="scoreVisible = false">取消</el-button>
-        <el-button type="primary" :loading="scoring" @click="submitScore">提交评分</el-button>
+        <el-button :disabled="!editable" :loading="scoring" @click="submitScore('DRAFT')">保存草稿</el-button>
+        <el-button type="primary" :disabled="!editable" :loading="scoring" @click="submitScore('SUBMITTED')">提交正式评价</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { labApi, type InterviewRow, type PreferenceRow, type ScorePayload } from '@/api/lab'
-import { interviewVideoApi, meetingStatusLabels, type MeetingStatus, type MeetingSummary } from '@/api/interviewVideo'
+import { interviewVideoApi, meetingStatusLabels, type MeetingSummary } from '@/api/interviewVideo'
+import { appointments, interviewSelection, scoreDimensions as scoreDims, type Evaluation, type ScorePolicy } from '@/api/interviewSelection'
 import { useAuthStore } from '@/stores/auth'
 import { INTERVIEW_STATUS_LABELS, RECOMMENDATION_LABELS, formatTime, statusTag } from '../college/shared'
 
-type DimensionKey =
-  | 'attitudeScore'
-  | 'logicScore'
-  | 'programmingScore'
-  | 'timeCommitmentScore'
-  | 'comprehensiveScore'
-
 const auth = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 const labId = computed(() => auth.user?.laboratoryId ?? null)
 
 const list = ref<InterviewRow[]>([])
@@ -174,9 +200,17 @@ const preferences = ref<PreferenceRow[]>([])
 const panelOptions = ref<{ id: number; name: string }[]>([])
 const panelMeetings = ref<MeetingSummary[]>([])
 const loading = ref(false)
+const keyword = ref('')
+const filter = ref('')
+const page = ref(1)
+const filtered = computed(() => list.value.filter(item => (!filter.value || item.appointmentStatus === filter.value) &&
+  (item.studentName.includes(keyword.value.trim()) || item.studentNumber.includes(keyword.value.trim()))))
+watch([keyword, filter], () => { page.value = 1 })
 
 const scheduleVisible = ref(false)
 const scheduling = ref(false)
+const lockedStudent = ref(false)
+const retryOf = ref<number>()
 const scheduleDetails = reactive({
   location: '', interviewForm: '', instructions: '', durationMinutes: 30,
   mode: 'STANDARD' as 'STANDARD' | 'LIVEKIT', panelIds: [] as number[]
@@ -186,18 +220,18 @@ const scheduleForm = reactive<{ studentId: number | null; interviewTime: Date | 
   interviewTime: null
 })
 
-const scoreDims: Array<{ key: DimensionKey; label: string }> = [
-  { key: 'attitudeScore', label: '学习态度' },
-  { key: 'logicScore', label: '逻辑思维' },
-  { key: 'programmingScore', label: '编程基础' },
-  { key: 'timeCommitmentScore', label: '时间投入' },
-  { key: 'comprehensiveScore', label: '综合表现' }
-]
-
 const scoreVisible = ref(false)
 const scoring = ref(false)
-const currentRow = ref<InterviewRow | null>(null)
-const currentStudent = computed(() => currentRow.value?.studentName || '')
+const currentId = ref<number>()
+const currentStudent = ref('')
+const currentOnline = ref(false)
+const history = ref<Evaluation[]>([])
+const policy = ref<ScorePolicy>()
+const editable = ref(false)
+const exceptionVisible = ref(false)
+const exceptionId = ref<number>()
+const exceptionCode = ref('NETWORK')
+const exceptionReason = ref('')
 const scoreForm = reactive<{
   attitudeScore: number | undefined
   logicScore: number | undefined
@@ -217,11 +251,23 @@ const scoreForm = reactive<{
 })
 
 function openSchedule() {
+  lockedStudent.value = false
+  retryOf.value = undefined
   scheduleForm.studentId = null
   scheduleForm.interviewTime = null
   Object.assign(scheduleDetails, { location: '', interviewForm: '', instructions: '', durationMinutes: 30,
     mode: 'STANDARD', panelIds: [] })
   scheduleVisible.value = true
+}
+function scheduleRow(row: InterviewRow) {
+  openSchedule()
+  lockedStudent.value = true
+  scheduleForm.studentId = row.studentId
+  retryOf.value = row.exceptionCode ? row.id : undefined
+  scheduleForm.interviewTime = !retryOf.value && row.interviewTime ? new Date(row.interviewTime) : null
+  Object.assign(scheduleDetails, { mode: row.online || retryOf.value ? 'LIVEKIT' : 'STANDARD', location: row.location || '',
+    interviewForm: row.interviewForm || '', instructions: row.instructions || '', durationMinutes: row.durationMinutes || 30,
+    panelIds: row.panelIds || [] })
 }
 
 async function submitSchedule() {
@@ -239,6 +285,8 @@ async function submitSchedule() {
     await labApi.scheduleInterview({
       ...scheduleDetails,
       studentId: scheduleForm.studentId,
+      preferenceId: preferences.value.find(item => item.studentId === scheduleForm.studentId)?.id,
+      retryOf: retryOf.value,
       laboratoryId: labId.value,
       interviewTime: new Date(scheduleForm.interviewTime).toISOString(),
       interviewStatus: 'SCHEDULED'
@@ -256,6 +304,8 @@ async function submitSchedule() {
 
 async function cancelSchedule(row: InterviewRow) {
   if (!labId.value || !row.interviewTime || scheduling.value) return
+  try { await ElMessageBox.confirm('确认取消这场面试并通知学生？', '取消面试') }
+  catch { return }
   scheduling.value = true
   try {
     await labApi.scheduleInterview({ studentId: row.studentId, laboratoryId: labId.value,
@@ -266,38 +316,39 @@ async function cancelSchedule(row: InterviewRow) {
   finally { scheduling.value = false }
 }
 
-function openScore(row: InterviewRow) {
-  currentRow.value = row
-  scoreForm.attitudeScore = row.attitudeScore ?? undefined
-  scoreForm.logicScore = row.logicScore ?? undefined
-  scoreForm.programmingScore = row.programmingScore ?? undefined
-  scoreForm.timeCommitmentScore = row.timeCommitmentScore ?? undefined
-  scoreForm.comprehensiveScore = row.comprehensiveScore ?? undefined
-  scoreForm.evaluation = row.evaluation || ''
-  scoreForm.recommendation = row.recommendation || 'PENDING'
-  scoreVisible.value = true
+async function openScore(row: { id: number }) {
+  currentId.value = row.id
+  try {
+    const data = await interviewSelection.own(row.id)
+    if (currentId.value !== row.id) return
+    currentStudent.value = data.studentName
+    currentOnline.value = data.online
+    history.value = data.history
+    policy.value = data.policy
+    editable.value = data.editable
+    const recent = data.history[0]
+    for (const dim of scoreDims) scoreForm[dim.key] = recent?.scores[dim.key] ?? undefined
+    scoreForm.evaluation = recent?.evaluation || ''
+    scoreForm.recommendation = recent?.recommendation || 'PENDING'
+    scoreVisible.value = true
+  } catch { /* 请求层显示原因 */ }
 }
 
-async function submitScore() {
-  if (!currentRow.value) return
+async function submitScore(state: 'DRAFT' | 'SUBMITTED') {
+  if (!currentId.value || !editable.value) return
   const values = scoreDims.map((d) => scoreForm[d.key])
-  if (values.some((v) => typeof v !== 'number')) {
+  if (state === 'SUBMITTED' && values.some((v) => typeof v !== 'number')) {
     ElMessage.warning('请完成五个考核维度的评分')
     return
   }
-  const payload: ScorePayload = {
-    attitudeScore: scoreForm.attitudeScore as number,
-    logicScore: scoreForm.logicScore as number,
-    programmingScore: scoreForm.programmingScore as number,
-    timeCommitmentScore: scoreForm.timeCommitmentScore as number,
-    comprehensiveScore: scoreForm.comprehensiveScore as number,
-    evaluation: scoreForm.evaluation,
-    recommendation: scoreForm.recommendation
+  if (state === 'SUBMITTED') {
+    try { await ElMessageBox.confirm('正式评价将计入本场汇总，并保留提交历史。', '提交正式评价') }
+    catch { return }
   }
   scoring.value = true
   try {
-    await labApi.scoreInterview(currentRow.value.id, payload)
-    ElMessage.success('评分已提交')
+    await labApi.scoreInterview(currentId.value, { ...scoreForm, state })
+    ElMessage.success(state === 'DRAFT' ? '评价草稿已保存' : '正式评价已提交')
     scoreVisible.value = false
     await load()
   } catch (err) {
@@ -306,6 +357,22 @@ async function submitScore() {
   } finally {
     scoring.value = false
   }
+}
+
+function markException(row: InterviewRow) {
+  exceptionId.value = row.id
+  exceptionReason.value = ''
+  exceptionCode.value = 'NETWORK'
+  exceptionVisible.value = true
+}
+async function saveException() {
+  if (!exceptionId.value || !exceptionReason.value.trim()) return
+  try {
+    await interviewSelection.exception(exceptionId.value, exceptionCode.value, exceptionReason.value)
+    exceptionVisible.value = false
+    ElMessage.success('异常已登记，可安排补面试')
+    await load()
+  } catch { /* 请求层显示原因 */ }
 }
 
 async function load() {
@@ -324,7 +391,19 @@ async function load() {
   if (results[1].status === 'fulfilled') panelOptions.value = results[1].value
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  const preference = preferences.value.find(item => item.id === Number(route.query.preferenceId))
+  if (preference) {
+    openSchedule()
+    lockedStudent.value = true
+    scheduleForm.studentId = preference.studentId
+    scheduleDetails.mode = 'LIVEKIT'
+    void router.replace({ query: {} })
+  }
+  const selected = list.value.find(item => item.id === Number(route.query.interviewId))
+  if (selected) keyword.value = selected.studentNumber
+})
 </script>
 
 <style scoped>
@@ -332,4 +411,5 @@ onMounted(load)
 .panel-meetings { padding: 16px; margin-bottom: 16px; border: 1px solid #ebd8cc; border-radius: 12px; background: #fff7ef; }
 .panel-meetings h3 { margin: 0 0 8px; }
 .panel-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0; }
+.panel-row :deep(.el-input), .panel-row :deep(.el-select) { max-width: 260px; }
 </style>

@@ -347,7 +347,7 @@ async function main() {
         const forbidden = await request('POST', '/interviews/' + record.id + '/score', { token: leader, role: 'LAB_TEACHER', body: score })
         check('同室未选导师不可评分', forbidden.status === 403)
       }
-      const scheduleBody = { studentId: 17, laboratoryId: labId, interviewTime: new Date(Date.now() + labId * 3600000).toISOString(), location: '实训室', instructions: '请准备项目介绍' }
+      const scheduleBody = { studentId: 17, laboratoryId: labId, interviewTime: new Date(Date.now() - (4 - labId) * 3600000).toISOString(), location: '实训室', instructions: '请准备项目介绍' }
       if (labId === 1) {
         check('组长不能向选择其他导师的本室学生安排面试或发通知',
           (await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: scheduleBody })).status === 403 &&
@@ -371,7 +371,7 @@ async function main() {
       (await request('POST', '/admissions/teacher-invitations', { ...asTeacher, body: { studentId: ownStudentId } })).status === 409 &&
       (await request('POST', '/admissions/teacher-invitations', { ...asTeacher, body: { studentId: 17 } })).status === 403)
     const leaderInterview = await request('POST', '/interviews/schedule', { ...asTeacher, body: {
-      studentId: ownStudentId, laboratoryId: 1, interviewTime: new Date(Date.now() + 6 * 3600000).toISOString(), location: '本室'
+      studentId: ownStudentId, laboratoryId: 1, interviewTime: new Date(Date.now() - 3600000).toISOString(), location: '本室'
     } })
     check('组长可以安排并评分明确选择本人的学生',
       leaderInterview.status === 200 && (await request('POST', `/interviews/${leaderInterview.body.data.id}/score`, {
@@ -510,6 +510,9 @@ async function main() {
     })).body?.data?.status === 'APPROVED')
 
     console.log('\n== 5. 最终名单与公示 ==')
+    // 阶段顺序校验要求第 8 阶段开始时间不早于第 7 阶段，先推进第 7 阶段时间窗
+    await openStage(7)
+    await openStage(8)
     const merge = await request('POST', '/final/merge', { token: admin })
     check('生成最终名单成功', merge.status === 200, JSON.stringify(merge.body))
     const unpublished = await request('GET', '/final/my', { token: student })

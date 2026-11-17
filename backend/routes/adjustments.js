@@ -11,10 +11,11 @@ const express = require('express')
 const router = express.Router()
 const { z } = require('zod')
 const { ok } = require('../utils/result')
-const { getStore, persistStore, nextId, ADJUSTMENT_TYPE } = require('../data/seed')
+const { getStore, commitStore, nextId, ADJUSTMENT_TYPE } = require('../data/seed')
+const { asyncMutation } = require('./interviewWorkspace')
 const { requireAuth, requireRole, ROLES, guardLab } = require('../middleware/auth')
 const { logOperation } = require('../utils/audit')
-const { mentorCapacityError, occupiesInvitation } = require('../utils/mentorCapacity')
+const { mentorCapacityError, occupiesInvitation, labCapacity } = require('../utils/mentorCapacity')
 const { scopedChoice, stageOpen } = require('../utils/applicationScope')
 const { currentBatch, batchWritableError, stageOf } = require('../utils/recruitment')
 
@@ -102,8 +103,9 @@ function validateAdjustment(store, batch, body, ignoreAdjustmentId) {
   }
 
   const occupied = occupiedStudents(store, batch.id, target.id, ignoreAdjustmentId)
-  if (occupied.size >= target.recruitmentQuota) {
-    return `「${target.name}」名额已满（${occupied.size}/${target.recruitmentQuota}），不允许突破招生名额`
+  const quota = labCapacity(store, batch.id, target)
+  if (occupied.size >= quota) {
+    return `「${target.name}」名额已满（${occupied.size}/${quota}），不允许突破招生名额`
   }
   return null
 }
@@ -126,9 +128,9 @@ function adjustmentWindow(store, batch, stageNumber) {
 }
 
 // 实训室内部调剂（第六阶段）：组长只能处理本实训室内部调剂
-router.post('/internal', requireAuth, requireRole(ROLES.LAB_LEADER), (req, res) => {
+router.post('/internal', requireAuth, requireRole(ROLES.LAB_LEADER), asyncMutation(async (req, res) => {
   const body = AdjustmentSchema.parse(req.body || {})
-  const store = getStore()
+  const store = structuredClone(getStore())
   const batch = activeBatchOf(store)
   if (!batch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
   const stopError = batchWritableError(batch)
@@ -168,14 +170,14 @@ router.post('/internal', requireAuth, requireRole(ROLES.LAB_LEADER), (req, res) 
     operationType: 'CREATE_INTERNAL_ADJUSTMENT', targetType: 'ADJUSTMENT', targetId: item.id,
     description: `提交内部调剂：学生#${item.studentId} → 实训室#${item.targetLaboratoryId}`
   })
-  persistStore(store)
+  await commitStore(store)
   res.json(ok(item))
-})
+}))
 
 // 学院跨实训室调剂（第七阶段）
-router.post('/cross', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
+router.post('/cross', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyncMutation(async (req, res) => {
   const body = AdjustmentSchema.parse(req.body || {})
-  const store = getStore()
+  const store = structuredClone(getStore())
   const batch = activeBatchOf(store)
   const stopError = batchWritableError(batch)
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
@@ -197,14 +199,14 @@ router.post('/cross', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) 
     operationType: 'CREATE_CROSS_ADJUSTMENT', targetType: 'ADJUSTMENT', targetId: item.id,
     description: `创建跨实训室调剂：学生#${item.studentId} → 实训室#${item.targetLaboratoryId}`
   })
-  persistStore(store)
+  await commitStore(store)
   res.json(ok(item))
-})
+}))
 
 // 批量创建跨实训室调剂方案
-router.post('/cross-batch', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
+router.post('/cross-batch', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyncMutation(async (req, res) => {
   const body = z.object({ items: z.array(AdjustmentSchema).min(1, '请选择至少一名学生') }).parse(req.body || {})
-  const store = getStore()
+  const store = structuredClone(getStore())
   const batch = activeBatchOf(store)
   const stopError = batchWritableError(batch)
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
@@ -234,14 +236,14 @@ router.post('/cross-batch', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req,
     operationType: 'CREATE_CROSS_BATCH', targetType: 'ADJUSTMENT', targetId: null,
     description: `批量创建跨实训室调剂方案：成功 ${created.length} 条，失败 ${failed.length} 条`
   })
-  persistStore(store)
+  await commitStore(store)
   res.json(ok({ created: created.length, failed }))
-})
+}))
 
 // 学院沟通安置（第七阶段第三优先级）
-router.post('/placement', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
+router.post('/placement', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyncMutation(async (req, res) => {
   const body = AdjustmentSchema.parse(req.body || {})
-  const store = getStore()
+  const store = structuredClone(getStore())
   const batch = activeBatchOf(store)
   const stopError = batchWritableError(batch)
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
@@ -263,9 +265,9 @@ router.post('/placement', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, r
     operationType: 'MANUAL_PLACEMENT', targetType: 'ADJUSTMENT', targetId: item.id,
     description: `沟通安置：学生#${item.studentId} → 实训室#${item.targetLaboratoryId}，原因：${item.reason || '未填写'}`
   })
-  persistStore(store)
+  await commitStore(store)
   res.json(ok(item))
-})
+}))
 
 // 学院端：调剂明细列表
 router.get('/list', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
@@ -292,10 +294,10 @@ router.get('/list', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) =
 })
 
 // 学院端：审核调剂结果
-router.put('/:id/status', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
+router.put('/:id/status', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyncMutation(async (req, res) => {
   const status = z.enum(['PENDING', 'CONFIRMED', 'REJECTED']).parse(req.body?.status)
   const reason = z.string().optional().parse(req.body?.reason)
-  const store = getStore()
+  const store = structuredClone(getStore())
   const item = store.adjustments.find((a) => a.id === Number(req.params.id))
   if (!item) return res.status(404).json({ code: 'NOT_FOUND', message: '调剂记录不存在', data: null })
   const batchStopError = batchWritableError(store.recruitmentBatches.find((b) => b.id === item.batchId))
@@ -314,14 +316,14 @@ router.put('/:id/status', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, r
     operationType: 'REVIEW_ADJUSTMENT', targetType: 'ADJUSTMENT', targetId: item.id,
     description: `审核调剂记录#${item.id}，结果：${status}`
   })
-  persistStore(store)
+  await commitStore(store)
   res.json(ok(item))
-})
+}))
 
 // 学生确认
-router.post('/:id/confirm', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {
+router.post('/:id/confirm', requireAuth, requireRole(ROLES.STUDENT), asyncMutation(async (req, res) => {
   const confirmed = z.boolean().parse(req.body?.confirmed)
-  const store = getStore()
+  const store = structuredClone(getStore())
   const idx = store.adjustments.findIndex((a) => a.id === Number(req.params.id) && a.studentId === req.user.uid)
   if (idx < 0) return res.status(404).json({ code: 'NOT_FOUND', message: '未找到此调剂通知', data: null })
   const item = store.adjustments[idx]
@@ -345,9 +347,9 @@ router.post('/:id/confirm', requireAuth, requireRole(ROLES.STUDENT), (req, res) 
     operationType: 'CONFIRM_ADJUSTMENT', targetType: 'ADJUSTMENT', targetId: item.id,
     description: confirmed ? '学生确认调剂结果' : '学生拒绝调剂结果'
   })
-  persistStore(store)
+  await commitStore(store)
   res.json(ok(item))
-})
+}))
 
 // 学生查看
 router.get('/my', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {

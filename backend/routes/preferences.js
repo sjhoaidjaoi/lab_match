@@ -14,6 +14,7 @@ const { requireAuth, requireRole, ROLES, guardLab } = require('../middleware/aut
 const { ownsChoice } = require('../utils/applicationScope')
 const { currentBatch, stageOf, batchWritableError } = require('../utils/recruitment')
 const { router: resumes, resumeFile, resumeView } = require('./resumes')
+const { latestInterviews, appointmentStatus } = require('../services/interviewSelection')
 const fs = require('fs')
 
 router.use('/resumes', resumes)
@@ -93,8 +94,9 @@ router.post('/submit', requireAuth, requireRole(ROLES.STUDENT), async (req, res,
     const submittedAt = new Date().toISOString()
     resume.submittedAt = submittedAt
     body.choices.forEach(({ laboratoryId: labId, labTeacherId }) => {
+      const preferenceId = nextId(store.studentPreferences)
       store.studentPreferences.push({
-        id: nextId(store.studentPreferences),
+        id: preferenceId,
         batchId: activeBatch.id, studentId: req.user.uid, laboratoryId: labId,
         labTeacherId,
         obeyInternalAdjustment: body.obeyInternalAdjustment,
@@ -112,6 +114,7 @@ router.post('/submit', requireAuth, requireRole(ROLES.STUDENT), async (req, res,
           batchId: activeBatch.id,
           studentId: req.user.uid,
           laboratoryId: labId,
+          preferenceId, attemptNo: 1,
           interviewerId: mentor?.userId ?? null,
           interviewTime: null,
           interviewStatus: 'SCHEDULED',
@@ -159,16 +162,20 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.COLL
   if (!guardLab(req, res, labId)) return
 
   const activeBatch = activeBatchOf(store)
+  const latest = latestInterviews(store)
   const list = store.studentPreferences
     .filter((p) => p.laboratoryId === labId && p.batchId === activeBatch?.id && ownsChoice(store, req.user, p))
     .map((p) => {
       const student = store.users.find((u) => u.id === p.studentId)
       const resume = (store.applicationResumes || []).find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.submittedAt)
-      const interview = store.interviews.find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.laboratoryId === labId)
+      const interview = latest.find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.laboratoryId === labId)
       return {
         id: p.id, studentId: p.studentId, laboratoryId: labId,
         studentName: student?.realName || '', studentNumber: student?.studentNumber || '',
-        laboratoryName: lab.name, resume: resumeView(resume), interview,
+        laboratoryName: lab.name, resume: resumeView(resume),
+        interview: interview && { id: interview.id, interviewStatus: interview.interviewStatus, appointmentStatus: appointmentStatus(interview),
+          interviewTime: interview.interviewTime, evaluation: interview.evaluation, recommendation: interview.recommendation,
+          exceptionCode: interview.exceptionCode, online: Boolean(interview.onlineRoomName) },
         labTeacherId: p.labTeacherId,
         labTeacherName: store.labTeachers.find(t => t.id === p.labTeacherId && t.laboratoryId === labId)?.name,
         obeyInternalAdjustment: p.obeyInternalAdjustment,

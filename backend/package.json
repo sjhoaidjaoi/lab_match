@@ -15,7 +15,8 @@
     "test:flow": "node tests/recruitment-flow.js",
     "test:profile": "node tests/lab-profile.js",
     "test:video": "node tests/interview-video.js",
-    "test:recording": "node tests/interview-recording.js"
+    "test:recording": "node tests/interview-recording.js",
+    "test:interview-ai": "node tests/interview-ai.js"
   },
   "keywords": [
     "lab",

@@ -1,5 +1,17 @@
 const { firstRoundEnded } = require('./applicationScope')
 
+function labCapacity(store, batchId, lab) {
+  const year = store.recruitmentBatches.find(batch => batch.id === batchId)?.academicYear
+  return (store.labYearlyPlans || []).find(row => row.laboratoryId === lab.id && row.academicYear === year)?.totalQuota ??
+    lab.recruitmentQuota
+}
+
+function teacherCapacity(store, batchId, teacher) {
+  const year = store.recruitmentBatches.find(batch => batch.id === batchId)?.academicYear
+  return (store.teacherYearlyQuotas || []).find(row => row.labTeacherId === teacher.id && row.academicYear === year)?.quota ??
+    teacher.recruitmentQuota
+}
+
 function invitationExpired(store, item) {
   if (item.status !== 'PENDING') return false
   if (item.confirmationDeadline && Date.parse(item.confirmationDeadline) < Date.now()) return true
@@ -36,11 +48,12 @@ function mentorCapacityError(store, batchId, teacherId, studentId) {
   if (!teacherId) return null
   const teacher = store.labTeachers.find(item => item.id === teacherId)
   if (!teacher || teacher.status === 'INACTIVE') return '指导教师当前不可用'
-  if (teacher.recruitmentQuota == null) return null
+  const quota = teacherCapacity(store, batchId, teacher)
+  if (quota == null) return null
   const occupied = occupiedAdmissionStudents(store, batchId, { mentorId: teacherId })
   occupied.delete(studentId)
-  return occupied.size >= teacher.recruitmentQuota ? `「${teacher.name}」的导师招生名额已满` : null
+  return occupied.size >= quota ? `「${teacher.name}」的导师招生名额已满` : null
 }
 
-module.exports = { invitationExpired, mentorCapacityError, occupiedAdmissionStudents, occupiesInvitation }
+module.exports = { invitationExpired, mentorCapacityError, occupiedAdmissionStudents, occupiesInvitation, labCapacity, teacherCapacity }
 

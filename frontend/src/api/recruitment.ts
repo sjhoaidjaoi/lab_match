@@ -1,5 +1,6 @@
 import service, { http } from './request'
 import type { PreferenceRow } from './lab'
+import type { EvaluationSummary } from './interviewSelection'
 
 export interface Resume { id: string; name: string; size: number }
 export interface ReviewEntry { studentId: number; studentName?: string; type: 'INTENDED' | 'ALTERNATE'; reason: string; resume?: Resume | null }
@@ -38,6 +39,12 @@ export interface LabStudentGroup {
     studentName: string
     studentNumber?: string
     interviewStatus?: string
+    interviewId?: number
+    appointmentStatus?: string
+    direction?: string
+    online?: boolean
+    evaluated?: boolean
+    evaluationSummary?: EvaluationSummary
     recommendation?: string
     invitationStatus?: string
   }[]

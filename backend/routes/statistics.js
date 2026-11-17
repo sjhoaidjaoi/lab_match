@@ -1,4 +1,5 @@
 const { ownsChoice, scopedChoice } = require('../utils/applicationScope')
+const { latestInterviews } = require('../services/interviewSelection')
 // ============ 学院端统计（文档 6.6 学院负责人首页 + 第七/八阶段） ============
 // GET /api/statistics/college    全院数据总览
 // GET /api/statistics/capacity   各实训室名额与空缺
@@ -178,7 +179,7 @@ router.get('/college', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res
   const prefs = store.studentPreferences.filter((p) => p.batchId === batch.id && p.status === 'SUBMITTED')
   const submittedIds = new Set(prefs.map((p) => p.studentId))
 
-  const interviews = store.interviews.filter((i) => i.batchId === batch.id)
+  const interviews = latestInterviews(store).filter((i) => i.batchId === batch.id)
   const intentions = store.admissionIntentions.filter((a) => a.batchId === batch.id)
 
   const perLab = store.laboratories.map((lab) => {
@@ -286,7 +287,7 @@ router.get('/unplaced', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, re
       )
       const labNames = prefs
         .map((p) => store.laboratories.find((l) => l.id === p.laboratoryId)?.name || `实训室#${p.laboratoryId}`)
-      const interviewList = store.interviews
+      const interviewList = latestInterviews(store)
         .filter((i) => i.batchId === batch.id && i.studentId === s.id)
         .map((i) => ({
           laboratoryId: i.laboratoryId,
@@ -328,7 +329,7 @@ router.get('/candidates', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, 
       const prefs = store.studentPreferences.filter(
         (p) => p.batchId === batch.id && p.studentId === s.id && p.status === 'SUBMITTED'
       )
-      const interviews = store.interviews.filter(
+      const interviews = latestInterviews(store).filter(
         (i) => i.batchId === batch.id && i.studentId === s.id && i.interviewStatus === 'COMPLETED'
       )
       const scores = interviews.map((i) => i.comprehensiveScore).filter((v) => typeof v === 'number')
@@ -386,7 +387,7 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.COLLEGE_ADMIN, ROLES.LA
     (p) => p.batchId === batch.id && p.laboratoryId === labId && p.status === 'SUBMITTED' &&
       (req.user.activeRole !== ROLES.LAB_TEACHER || ownsChoice(store, req.user, p))
   )
-  const interviews = store.interviews.filter((i) => i.batchId === batch.id && i.laboratoryId === labId && (req.user.activeRole !== ROLES.LAB_TEACHER || scopedChoice(store, req.user, batch.id, i.studentId, labId)))
+  const interviews = latestInterviews(store).filter((i) => i.batchId === batch.id && i.laboratoryId === labId && (req.user.activeRole !== ROLES.LAB_TEACHER || scopedChoice(store, req.user, batch.id, i.studentId, labId)))
   const intentions = store.admissionIntentions.filter(
     (a) => a.batchId === batch.id && a.laboratoryId === labId && (req.user.activeRole !== ROLES.LAB_TEACHER || scopedChoice(store, req.user, batch.id, a.studentId, labId)) && a.admissionType === ADMISSION_TYPE.INTENDED
   )
@@ -431,7 +432,7 @@ router.get('/lab/:labId/candidates', requireAuth, requireRole(ROLES.COLLEGE_ADMI
     .filter((p) => p.batchId === batch.id && p.laboratoryId === labId && ownsChoice(store, req.user, p))
     .map((p) => {
       const stu = store.users.find((u) => u.id === p.studentId)
-      const interview = store.interviews.find(
+      const interview = latestInterviews(store).find(
         (i) => i.batchId === batch.id && i.studentId === p.studentId && i.laboratoryId === labId
       )
       const intention = store.admissionIntentions.find(

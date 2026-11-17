@@ -55,6 +55,7 @@ function scheduledEnd(store, interview, now = Date.now()) {
 function roomStatus(store, interview, now = Date.now()) {
   if (interview.interviewStatus === 'CANCELLED') return 'CANCELLED'
   if (interview.onlineEndedAt) return 'ENDED'
+  if (interview.exceptionCode) return 'CLOSED'
   if (scheduledEnd(store, interview, now) !== null) return 'CLOSED'
   if (now < windowFor(interview).opensAt) return 'UPCOMING'
   return interview.onlineStartedAt ? 'OPEN' : 'WAITING'

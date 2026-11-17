@@ -9,7 +9,7 @@ async function test() {
     S3_ENDPOINT: 'https://storage.example.invalid', S3_REGION: 'us-east-1', S3_BUCKET: 'isolated-test-only',
     S3_ACCESS_KEY_ID: 'fixture-access', S3_SECRET_ACCESS_KEY: 'fixture-secret',
     RECORDING_POLICY_VERSION: 'test-v1', RECORDING_NOTICE: '隔离环境授权测试', RECORDING_RETENTION_DAYS: '30',
-    RECORDING_COLLEGE_VIEW_IDS: '', RECORDING_DOWNLOAD_IDS: '', RECORDING_MANAGE_IDS: ''
+    RECORDING_COLLEGE_VIEW_IDS: '', RECORDING_DOWNLOAD_IDS: '1', RECORDING_MANAGE_IDS: '1'
   })
   const { request, login, candidate, teacher, colleague, file } = fixture
   try {
@@ -40,10 +40,10 @@ async function test() {
     assert.equal((await request('GET', base + '/archive', leader.token)).status, 200)
     assert.equal((await request('GET', '/interview-video/archives', panel.token)).data.total, 1)
     assert.equal((await request('GET', '/interview-video/archives?keyword=missing', admin.token)).data.total, 0)
-    assert.equal((await send(admin, '/recording/link', { download: true })).status, 403)
+    assert.equal((await send(admin, '/recording/link', { download: true })).status, 409)
     assert.equal((await send(admin, '/recording/link', { download: false })).status, 403)
     assert.equal((await send(host, '/recording/link', { download: false })).status, 409)
-    assert.equal((await send(admin, '/recording/retention', { action: 'delete', reason: 'fixture' })).status, 403)
+    assert.equal((await send(host, '/recording/retention', { action: 'delete', reason: 'fixture' })).status, 403)
 
     // Exercise the signed Egress event handling with an isolated state-machine fixture.
     // This never calls a live Egress project and cannot publish a playable recording.
@@ -88,7 +88,32 @@ async function test() {
     assert.equal(archived.summary.transcriptionState, 'NOT_STARTED')
     assert.equal(JSON.stringify(archived).includes(recording.objectKey), false)
     assert.equal(JSON.stringify(archived).includes('fixture-secret'), false)
-    console.log('PASS 录制授权、幂等启停、录制中途入会、档案权限、Egress 签名与乱序、防止处理中签发')
+
+    // Verify signing and retention permissions using test metadata only. The test
+    // never requests a media object and does not simulate a successful upload.
+    const verifiedFixture = JSON.parse(fs.readFileSync(file, 'utf8'))
+    Object.assign(verifiedFixture.interviewRecordings[0], {
+      state: 'COMPLETE', savedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 60000).toISOString()
+    })
+    fs.writeFileSync(file, JSON.stringify(verifiedFixture))
+    const preview = await send(leader, '/recording/link', { download: false })
+    assert.equal(preview.status, 200, preview.message)
+    const url = new URL(preview.data.url)
+    assert.equal(url.protocol, 'https:')
+    assert.equal(url.searchParams.get('X-Amz-Expires'), '300')
+    assert.ok(url.searchParams.get('X-Amz-Signature'))
+    assert.equal((await send(panel, '/recording/link', { download: true })).status, 403)
+    assert.equal((await send(admin, '/recording/link', { download: false })).status, 403)
+    const download = await send(admin, '/recording/link', { download: true })
+    assert.equal(download.status, 200, download.message)
+    assert.match(new URL(download.data.url).searchParams.get('response-content-disposition'), /^attachment;/)
+    assert.equal((await send(admin, '/recording/retention', { action: 'hold', reason: '隔离申诉验收' })).status, 200)
+    assert.equal((await send(admin, '/recording/retention', { action: 'delete', reason: '隔离删除验收' })).status, 409)
+    const audit = (await request('GET', base + '/archive', host.token)).data.logs
+    assert.equal(audit.filter(row => row.type === 'RECORDING_VIEW' && row.result === 'SUCCESS').length, 1)
+    assert.equal(audit.filter(row => row.type === 'RECORDING_DOWNLOAD' && row.result === 'SUCCESS').length, 1)
+    console.log('PASS 授权、幂等启停、档案权限、Egress 签名与乱序、短期地址审计、争议保留')
   } finally { await fixture.close() }
 }
 

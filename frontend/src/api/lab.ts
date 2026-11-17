@@ -23,7 +23,8 @@ export interface PreferenceRow {
   labTeacherId?: number
   labTeacherName?: string
   resume?: import('./recruitment').Resume | null
-  interview?: { interviewStatus: string; recommendation?: string; evaluation?: string } | null
+  interview?: { id: number; interviewStatus: string; appointmentStatus?: string; interviewTime?: string; online?: boolean;
+    exceptionCode?: string; recommendation?: string; evaluation?: string } | null
   id: number
   studentId: number
   studentName: string
@@ -37,6 +38,12 @@ export interface PreferenceRow {
 }
 
 export interface InterviewRow {
+  appointmentStatus?: string
+  preferenceId?: number
+  attemptNo?: number
+  exceptionCode?: string
+  canMarkException?: boolean
+  panelIds?: number[]
   online?: { status: MeetingStatus }
   location?: string
   interviewForm?: string
@@ -183,9 +190,9 @@ export const labApi = {
   removeMentor: (id: number, mentorId: number) => http.delete(`/laboratories/${id}/teachers/${mentorId}`),
   preferences: (labId: number) => http.get<PreferenceRow[]>(`/preferences/lab/${labId}`),
   interviews: (labId: number) => http.get<InterviewRow[]>(`/interviews/lab/${labId}`),
-  scheduleInterview: (payload: { studentId: number; laboratoryId: number; interviewTime: string; interviewStatus: string; location?: string; interviewForm?: string; instructions?: string; durationMinutes?: number; mode?: 'LIVEKIT' | 'STANDARD'; panelIds?: number[] }) =>
+  scheduleInterview: (payload: { studentId: number; preferenceId?: number; retryOf?: number; laboratoryId: number; interviewTime: string; interviewStatus: string; location?: string; interviewForm?: string; instructions?: string; durationMinutes?: number; mode?: 'LIVEKIT' | 'STANDARD'; panelIds?: number[] }) =>
     http.post<InterviewRow>('/interviews/schedule', payload),
-  scoreInterview: (id: number, payload: ScorePayload) => http.post<InterviewRow>(`/interviews/${id}/score`, payload),
+  scoreInterview: (id: number, payload: Partial<ScorePayload> & { state?: 'DRAFT' | 'SUBMITTED' }) => http.post(`/interviews/${id}/score`, payload),
   admissions: (labId: number) => http.get<AdmissionRow[]>(`/admissions/lab/${labId}`),
   teacherInvitations: () => http.get<TeacherInvitationProgress>('/admissions/teacher-invitations'),
   sendTeacherInvitation: (studentId: number) => http.post<AdmissionRow>('/admissions/teacher-invitations', { studentId }),

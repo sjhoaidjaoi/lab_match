@@ -6,9 +6,10 @@ const { requireAuth, requireRole, ROLES, canAccessLab } = require('../middleware
 const { getStore, commitStore, nextId } = require('../data/seed')
 const { currentBatch, personalScope, scopedChoice, stageOpen } = require('../utils/applicationScope')
 const { batchWritableError, stageOf } = require('../utils/recruitment')
-const { mentorCapacityError, occupiedAdmissionStudents, occupiesInvitation } = require('../utils/mentorCapacity')
+const { mentorCapacityError, occupiedAdmissionStudents, occupiesInvitation, labCapacity } = require('../utils/mentorCapacity')
 const { logOperation } = require('../utils/audit')
 const { resumeView } = require('./resumes')
+const selection = require('../services/interviewSelection')
 
 const staff = requireRole(ROLES.LAB_TEACHER, ROLES.LAB_LEADER, ROLES.COLLEGE_ADMIN)
 const entry = z.object({
@@ -37,7 +38,9 @@ function context(req) {
 
 function handler(fn) {
   return async (req, res, next) => {
-    try { res.json(ok(await fn(req))) } catch (error) { next(error) }
+    const pending = Promise.resolve().then(() => fn(req))
+    res.locals.mutationPending = pending
+    try { res.json(ok(await pending)) } catch (error) { next(error) }
   }
 }
 
@@ -54,9 +57,9 @@ function selectEntries(ctx, raw, labId, requireReason = true) {
   return items.map(item => {
     const choice = scopedChoice(ctx.store, ctx.user, ctx.batch.id, item.studentId, labId)
     if (!choice) reject('名单包含无权处理的学生', 403)
-    const interview = ctx.store.interviews.find(record => record.batchId === ctx.batch.id &&
-      record.laboratoryId === labId && record.studentId === item.studentId && record.interviewStatus === 'COMPLETED')
-    if (!interview) reject('请先完成名单中每位学生的面试评价')
+    const interview = selection.latestInterviews(ctx.store).find(record => record.batchId === ctx.batch.id &&
+      record.laboratoryId === labId && record.studentId === item.studentId)
+    if (!selection.mentorEvaluated(ctx.store, interview)) reject('请先完成名单中每位学生的导师正式面试评价')
     return { ...item, labTeacherId: choice.labTeacherId }
   })
 }
@@ -93,8 +96,8 @@ router.get('/', requireAuth, staff, handler(req => {
 function labCandidates(store, batchId, user, labId) {
   const choices = store.studentPreferences.filter(choice => choice.batchId === batchId &&
     choice.laboratoryId === labId && choice.status === 'SUBMITTED')
-  const interviews = new Map(store.interviews.filter(interview => interview.batchId === batchId &&
-    interview.laboratoryId === labId && interview.interviewStatus === 'COMPLETED')
+  const interviews = new Map(selection.latestInterviews(store).filter(interview => interview.batchId === batchId &&
+    interview.laboratoryId === labId && selection.mentorEvaluated(store, interview))
     .map(interview => [interview.studentId, interview]))
   const submitted = new Map()
   const invitations = new Map(store.admissionIntentions.filter(item => item.batchId === batchId &&
@@ -152,7 +155,7 @@ router.get('/lab-students', requireAuth, requireRole(ROLES.LAB_LEADER), handler(
   if (!labId) return []
   const choices = store.studentPreferences.filter(item => item.batchId === batch?.id &&
     item.laboratoryId === labId && item.status === 'SUBMITTED')
-  const localInterviews = new Map(store.interviews.filter(item => item.batchId === batch?.id && item.laboratoryId === labId)
+  const localInterviews = new Map(selection.latestInterviews(store).filter(item => item.batchId === batch?.id && item.laboratoryId === labId)
     .map(item => [item.studentId, item]))
   const localInvitations = new Map(store.admissionIntentions.filter(item => item.batchId === batch?.id &&
     item.laboratoryId === labId && item.admissionType === 'INTENDED').map(item => [item.studentId, item]))
@@ -169,7 +172,10 @@ router.get('/lab-students', requireAuth, requireRole(ROLES.LAB_LEADER), handler(
         const invitation = localInvitations.get(student.id)
         const status = invitation?.status === 'PENDING' && !occupiesInvitation(store, invitation) ? 'EXPIRED' : invitation?.status
         return [{ studentId: student.id, studentName: student.realName, studentNumber: student.studentNumber,
-          interviewStatus: interview?.interviewStatus, recommendation: interview?.recommendation, invitationStatus: status }]
+          interviewStatus: interview?.interviewStatus, appointmentStatus: selection.appointmentStatus(interview),
+          interviewId: interview?.id, direction: mentor.direction, online: Boolean(interview?.onlineRoomName),
+          evaluated: selection.mentorEvaluated(store, interview), evaluationSummary: interview && selection.evaluationSummary(store, interview),
+          recommendation: interview?.recommendation, invitationStatus: status }]
       }).sort((a, b) => surnameOrder.compare(a.studentName, b.studentName))
     }))
   for (const teacher of store.users) {
@@ -257,7 +263,7 @@ router.post('/lab/:id/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), ha
     if (item.type === 'INTENDED') {
       const error = mentorCapacityError(ctx.store, ctx.batch.id, item.labTeacherId, item.studentId)
       if (error) reject(error)
-      if (occupiedAdmissionStudents(ctx.store, ctx.batch.id, { laboratoryId: lab.id }).size >= lab.recruitmentQuota) reject('实训室拟录取名额不足')
+      if (occupiedAdmissionStudents(ctx.store, ctx.batch.id, { laboratoryId: lab.id }).size >= labCapacity(ctx.store, ctx.batch.id, lab)) reject('实训室拟录取名额不足')
     }
     const now = new Date().toISOString()
     ctx.store.admissionIntentions.push({ id: nextId(ctx.store.admissionIntentions), batchId: ctx.batch.id,

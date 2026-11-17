@@ -190,6 +190,8 @@ export interface AnnouncementItem {
 
 export interface NoticeItem {
   id: number
+  destination?: string
+  interviewId?: number | null
   targetRole?: string | null
   targetUserId?: number | null
   title: string
@@ -439,6 +441,8 @@ export interface PreferenceDetail extends PreferenceItem {
 
 export interface InterviewDetail extends InterviewItem {
   laboratoryName: string
+  appointmentStatus?: string
+  evaluationSummary?: import('@/api/interviewSelection').EvaluationSummary
 }
 
 export interface AdmissionDetail extends AdmissionItem {

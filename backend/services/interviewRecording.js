@@ -1,7 +1,7 @@
 const { createHash, randomUUID } = require('node:crypto')
 const {
   EgressClient, EgressStatus, StartEgressRequest, TemplateSource, Output, FileOutput,
-  EncodedFileType, StorageConfig, S3Upload, RoomServiceClient
+  EncodedFileType, StorageConfig, S3Upload, RoomServiceClient, ParticipantInfo_State
 } = require('livekit-server-sdk')
 const { S3Client, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3')
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
@@ -252,7 +252,8 @@ async function reconcile(enqueue, cloud, snapshot, interview, item) {
     const allowed = new Set([...requiredUsers(snapshot, interview)].map(id => video.identityFor(interview, id)))
     const host = video.identityFor(interview, interview.interviewerId)
     const student = video.identityFor(interview, interview.studentId)
-    if (!live.some(person => person.identity === host) || !live.some(person => person.identity === student) ||
+    const connected = identity => live.some(person => person.identity === identity && person.state === ParticipantInfo_State.ACTIVE)
+    if (!connected(host) || !connected(student) ||
         live.some(person => !allowed.has(person.identity))) return
     const claimed = await update((store, meeting, row) => {
       if (row.state !== 'WAITING' || video.roomStatus(store, meeting) !== 'OPEN' ||

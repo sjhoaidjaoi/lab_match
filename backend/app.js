@@ -20,6 +20,7 @@ function enqueueMutation(operation) {
   mutationQueue = run.catch(() => {})
   return run
 }
+app.locals.enqueueMutation = enqueueMutation
 app.post('/api/livekit/webhook',
   express.raw({ type: ['application/webhook+json', 'application/json'], limit: '256kb' }),
   require('./services/interviewWebhook').handleInterviewWebhook(enqueueMutation))
@@ -84,6 +85,7 @@ const { getStore, persistStore: persist } = require('./data/seed')
 const { syncStageStatuses } = require('./utils/recruitment')
 const { sweepVideoRooms } = require('./services/interviewVideoCleanup')
 const { sweepRecordings } = require('./services/interviewRecording')
+const { sweepAi } = require('./services/interviewAi')
 let stageTimer = null
 function tickStageStatuses() {
   try {
@@ -111,6 +113,8 @@ seedMockData()
       catch { console.warn('[lab-match] 录像状态检查失败，将重试') }
     }, 3500)
     recordingTimer.unref()
+    const aiTimer = setInterval(() => sweepAi(enqueueMutation), 4000)
+    aiTimer.unref()
     app.listen(PORT, () => {
       console.log(`[lab-match] backend listening on http://localhost:${PORT}`)
       console.log(`[lab-match] 数据存储: ${process.env.DB_DRIVER === 'mysql' ? 'MySQL' : 'JSON 文件'}`)

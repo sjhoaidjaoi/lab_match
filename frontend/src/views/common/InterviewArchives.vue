@@ -38,6 +38,9 @@
           <p>{{ archive.studentNumber }} · {{ archive.batchName }} · {{ meetingStatusLabels[archive.status] }}</p>
           <p>预约 {{ formatDateTime(archive.interviewTime) }} · 面试官 {{ archive.examiners.join('、') }}</p>
           <p>实际开始 {{ formatDateTime(archive.startsAt) }} · 结束 {{ formatDateTime(archive.endsAt) }}</p>
+          <p v-if="archive.startsAt && archive.endsAt">实际时长 {{ duration(Math.max(0, Math.floor((Date.parse(archive.endsAt) - Date.parse(archive.startsAt)) / 1000))) }}</p>
+          <p v-if="archive.application">报名导师 {{ archive.application.mentorName || '—' }} · {{ archive.application.direction || '未填写方向' }}</p>
+          <p v-if="archive.application?.introduction">{{ archive.application.introduction }}</p>
           <el-button link type="primary" @click="refreshDetail">刷新档案</el-button>
         </header>
         <el-tabs v-model="tab">
@@ -93,7 +96,10 @@
             </dl>
             <p class="evaluation">{{ archive.score.evaluation || '暂无教师评价' }}</p>
           </el-tab-pane>
-          <el-tab-pane name="summary" label="AI 会议总结"><el-empty description="尚未生成" /></el-tab-pane>
+          <el-tab-pane name="summary" label="AI 会议纪要" lazy>
+            <InterviewAiPanel :key="archive.id" :id="archive.id"
+              :can-play="archive.access.play && archive.recording.state === 'COMPLETE'" @seek="seekRecording" />
+          </el-tab-pane>
         </el-tabs>
       </div>
       <el-skeleton v-else-if="!detailError" animated :rows="5" />
@@ -103,10 +109,12 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { formatDateTime } from '@/api/student'
 import { interviewVideoApi, meetingStatusLabels, recordingLabels, type ArchiveRow, type InterviewArchive } from '@/api/interviewVideo'
 import MeetingChat from './MeetingChat.vue'
+import InterviewAiPanel from './InterviewAiPanel.vue'
 
 const rows = ref<ArchiveRow[]>([])
 const total = ref(0)
@@ -118,6 +126,7 @@ const loading = ref(false)
 const listError = ref('')
 const detailError = ref('')
 const archive = ref<InterviewArchive>()
+const route = useRoute()
 const drawer = ref(false)
 const tab = ref('recording')
 const mediaUrl = ref('')
@@ -191,6 +200,12 @@ function restorePosition() {
   if (player.value && position > 0 && position < player.value.duration) player.value.currentTime = position
 }
 function mediaFailed() { mediaLoading.value = false; mediaError.value = true }
+function seekRecording(seconds: number) {
+  tab.value = 'recording'
+  position = seconds
+  if (player.value && player.value.readyState >= 1 && !mediaError.value) player.value.currentTime = seconds
+  else void play()
+}
 async function play() {
   const id = selected
   playLoading.value = true
@@ -232,7 +247,11 @@ async function retain(action: 'hold' | 'release' | 'delete') {
     await Promise.all([refreshDetail(), load()])
   } catch (error) { detailError.value = errorText(error) }
 }
-onMounted(load)
+onMounted(() => {
+  void load()
+  const id = Number(route.query.interviewId)
+  if (Number.isSafeInteger(id) && id > 0) open(id)
+})
 </script>
 
 <style scoped>

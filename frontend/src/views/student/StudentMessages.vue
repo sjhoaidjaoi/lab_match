@@ -12,6 +12,8 @@
       <p>发布时间 · {{ formatDateTime(notice.createdAt) }}</p>
       <div class="student-actions">
         <el-tag :type="notice.read ? 'info' : 'warning'">{{ notice.read ? '已读' : '未读' }}</el-tag>
+        <router-link v-if="notice.destination === 'STUDENT_INTERVIEW'" :to="{ path: '/student/interview', query: { interviewId: notice.interviewId } }">查看面试安排 →</router-link>
+        <router-link v-if="notice.destination === 'STUDENT_RESULT'" to="/student/result">查看最终结果 →</router-link>
         <el-button v-if="!notice.read" text :loading="markingId === notice.id" @click="markRead(notice)">标为已读</el-button>
       </div>
     </el-card>

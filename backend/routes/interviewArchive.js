@@ -4,7 +4,10 @@ const { ROLES } = require('../middleware/auth')
 const { ok } = require('../utils/result')
 const { participantRole, roomStatus, liveKitConfig } = require('../services/interviewVideo')
 const { asyncMutation, membership } = require('./interviewWorkspace')
+const { logOperation } = require('../utils/audit')
+const { linkedChoice } = require('../services/interviewSelection')
 const recording = require('../services/interviewRecording')
+const ai = require('../services/interviewAi')
 
 const now = () => new Date().toISOString()
 
@@ -63,7 +66,7 @@ function mountArchive(router, access, fail) {
     return { store, interview, item: recording.recordingFor(store, interview), allowed }
   }
 
-  router.get('/:id/archive', (req, res) => {
+  router.get('/:id/archive', asyncMutation(async (req, res) => {
     const { store, interview, allowed, item } = archive(req)
     const after = z.coerce.number().int().nonnegative().safe().parse(req.query.after ?? 0)
     const connected = new Map()
@@ -80,17 +83,35 @@ function mountArchive(router, access, fail) {
               'JOIN_FAILURE', 'MEDIA_FAILURE', 'SERVER_SHUTDOWN'].includes(row.disconnectReason) : null }
       })
     const chat = store.interviewMessages.filter(row => row.interviewId === interview.id && row.id > after).sort((a, b) => a.id - b.id)
-    const logs = store.operationLogs.filter(log => log.targetType === 'INTERVIEW' && log.targetId === interview.id)
+    const logs = store.operationLogs.filter(log => log.targetType === 'INTERVIEW' && log.targetId === interview.id && log.operationType !== 'READ_INTERVIEW_ARCHIVE')
       .map(log => ({ id: log.id, operator: store.users.find(user => user.id === log.operatorId)?.realName,
         occurredAt: log.createdAt, type: log.operationType, text: log.operationDescription, result: log.detail?.result || 'SUCCESS' }))
     const { attitudeScore, logicScore, programmingScore, timeCommitmentScore, comprehensiveScore, evaluation, recommendation } = interview
-    res.json(ok({ ...archiveRow(store, interview, req.user, allowed), sessions, logs,
+    const choice = linkedChoice(store, interview)
+    const mentor = choice && store.labTeachers.find(row => row.id === choice.labTeacherId && row.laboratoryId === interview.laboratoryId)
+    const job = ai.findJob(store, interview)
+    const role = participantRole(store, req.user, interview)
+    const canSeeAi = ['HOST', 'PANEL'].includes(role) || (job?.approvedId &&
+      (req.user.activeRole === ROLES.LAB_LEADER || listed('INTERVIEW_AI_COLLEGE_VIEW_IDS', req.user.uid)))
+    const aiJob = canSeeAi && ai.retained(item) && job?.status !== 'DELETED' ? job : null
+    const detail = { ...archiveRow(store, interview, req.user, allowed), sessions, logs,
+      application: choice ? { mentorName: mentor?.name, direction: choice.direction || mentor?.direction, introduction: choice.introduction } : null,
       messages: chat.slice(0, 100).map(row => ({ id: row.id, senderId: row.senderId,
         senderName: store.users.find(user => user.id === row.senderId)?.realName, content: row.content, createdAt: row.createdAt })),
-      hasMore: chat.length > 100, score: { attitudeScore, logicScore, programmingScore, timeCommitmentScore,
-        comprehensiveScore, evaluation, recommendation },
-      summary: { transcriptionState: item?.transcriptionState || 'NOT_STARTED', taskId: item?.summaryTaskId ?? null } }))
-  })
+      hasMore: chat.length > 100, score: role !== 'PANEL' ? { attitudeScore, logicScore, programmingScore, timeCommitmentScore,
+        comprehensiveScore, evaluation, recommendation } : {},
+      summary: { transcriptionState: aiJob?.transcriptId ? 'COMPLETE' :
+        aiJob?.status || item?.transcriptionState || 'NOT_STARTED', taskId: aiJob ? String(aiJob.id) : null,
+      approvedVersionId: aiJob?.approvedId || null } }
+    await req.app.locals.enqueueMutation(async () => {
+      archive(req)
+      const current = structuredClone(getStore())
+      logOperation(current, req, { operationType: 'READ_INTERVIEW_ARCHIVE', targetType: 'INTERVIEW',
+        targetId: interview.id, description: '查阅面试档案', detail: { result: 'SUCCESS' } })
+      await commitStore(current)
+    })
+    res.json(ok(detail))
+  }))
 
   router.post('/:id/recording/enable', asyncMutation(async (req, res) => {
     const { store, interview, role } = access(req, true)
@@ -154,7 +175,7 @@ function mountArchive(router, access, fail) {
     const { store, item, allowed } = archive(req, true)
     const download = z.boolean().default(false).parse(req.body?.download)
     if (download ? !allowed.download : !allowed.play) fail('账号未获录像访问授权', 'ROLE_FORBIDDEN', 403)
-    if (!item || item.state !== 'COMPLETE' || (!item.holdAt && Date.parse(item.expiresAt) <= Date.now())) fail('录像尚不可用或已过期')
+    if (!item || item.state !== 'COMPLETE' || (!item.holdAt && !(Date.parse(item.expiresAt) > Date.now()))) fail('录像尚不可用或已过期')
     const op = download ? 'RECORDING_DOWNLOAD' : 'RECORDING_VIEW'
     let link
     try { link = await recording.signAccess(item, download) }

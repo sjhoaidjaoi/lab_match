@@ -6,6 +6,7 @@ const { resumeFile, resumeView } = require('./resumes')
 const { existsSync } = require('node:fs')
 const video = require('../services/interviewVideo')
 const recording = require('../services/interviewRecording')
+const ai = require('../services/interviewAi')
 
 function asyncMutation(handler) {
   return (req, res, next) => {
@@ -77,7 +78,8 @@ function mountWorkspace(router, access, fail) {
       removalReason: member?.removalReason ?? null, muteRequestedAt: member?.muteRequestedAt ?? null,
       waiting, participants: roster(store, interview), canReadChat: Boolean(member?.grantedAt && !member.removedAt),
       messages: all.slice(0, 100).map(item => presenter(store, item)), hasMore: all.length > 100,
-      recording: recording.recordingView(store, interview, req.user.uid, role === 'HOST') }))
+      recording: recording.recordingView(store, interview, req.user.uid, role === 'HOST'),
+      aiConsent: ai.noticeView(store, interview, req.user.uid) }))
   })
 
   router.post('/:id/waiting', asyncMutation(async (req, res) => {

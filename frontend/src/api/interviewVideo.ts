@@ -43,6 +43,7 @@ export interface MeetingState {
   messages: MeetingMessage[]
   hasMore: boolean
   recording: RecordingView
+  aiConsent?: { notice: string; version: string; key: string; decision: boolean | null; ready: boolean } | null
 }
 export const recordingLabels = {
   NONE: '未录制', WAITING: '等待录制授权', STARTING: '录制启动中', RECORDING: '正在录制',
@@ -69,6 +70,7 @@ export interface ArchiveRow {
   access: { play: boolean; download: boolean; manage: boolean }
 }
 export interface InterviewArchive extends ArchiveRow {
+  application?: { mentorName?: string; direction?: string; introduction?: string } | null
   messages: MeetingMessage[]
   hasMore: boolean
   sessions: { id: number; name: string; role: MeetingRole; joinedAt?: string; leftAt?: string; onlineSeconds?: number;
@@ -94,6 +96,7 @@ const base = '/interview-video'
 const quiet = { silent: true }
 
 export const interviewVideoApi = {
+  aiConsent: (id: string, key: string, accepted: boolean) => http.post(`${base}/${id}/ai/consent`, { key, accepted }, quiet),
   list: () => http.get<MeetingSummary[]>(base),
   panel: () => http.get<{ id: number; name: string }[]>(`${base}/panel`),
   details: (id: string) => http.get<MeetingDetails>(`${base}/${id}`, undefined, quiet),

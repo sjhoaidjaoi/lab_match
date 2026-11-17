@@ -79,6 +79,7 @@ npm run dev
 
 线上面试需要配置 LiveKit Cloud。参见[线上面试配置、迁移及验收](docs/ONLINE_INTERVIEWS.md)。
 录制、私有存储和档案的设置见[面试录制与档案](docs/INTERVIEW_RECORDINGS.md)。
+中文转写、DeepSeek 纪要和审核的设置见[面试 AI 纪要](docs/INTERVIEW_AI.md)。
 
 生产构建：
 
@@ -114,7 +115,7 @@ cd backend
 # MYSQL_PASSWORD=你的密码
 # MYSQL_DATABASE=lab_match
 
-npm run db:init    # 新建库表或执行 v2–v9 增量迁移（可重复执行）
+npm run db:init    # 新建库表或执行至 v11 的增量迁移（可重复执行）
 npm run db:check   # 检查连接与各表数据量
 npm start          # /api/health 的 data.storage 应返回 mysql
 ```

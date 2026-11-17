@@ -9,6 +9,7 @@ const { ok } = require('../utils/result')
 const video = require('../services/interviewVideo')
 const { mountWorkspace, membership, roster, asyncMutation } = require('./interviewWorkspace')
 const { mountArchive } = require('./interviewArchive')
+const { mountInterviewAi } = require('./interviewAi')
 const recording = require('../services/interviewRecording')
 
 const router = express.Router()
@@ -49,6 +50,7 @@ function access(req, write = false) {
 
 mountWorkspace(router, access, fail)
 mountArchive(router, access, fail)
+mountInterviewAi(router, access, fail)
 
 router.get('/panel', requireRole(ROLES.LAB_TEACHER), (req, res) => {
   const store = getStore()

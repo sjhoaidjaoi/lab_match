@@ -6,6 +6,7 @@
 // GET    /api/admissions/overview          学院端汇总
 
 const express = require('express')
+const { latestInterviews, mentorEvaluated } = require('../services/interviewSelection')
 const router = express.Router()
 const { z } = require('zod')
 const { ok } = require('../utils/result')
@@ -14,7 +15,7 @@ const { requireAuth, requireRole, ROLES, guardLab, isLabLeader } = require('../m
 const { logOperation } = require('../utils/audit')
 const { firstRoundEnded, scopedChoice, stageOpen } = require('../utils/applicationScope')
 const { currentBatch, batchWritableError, stageOf } = require('../utils/recruitment')
-const { invitationExpired, mentorCapacityError, occupiedAdmissionStudents } = require('../utils/mentorCapacity')
+const { invitationExpired, mentorCapacityError, occupiedAdmissionStudents, labCapacity, teacherCapacity } = require('../utils/mentorCapacity')
 
 const TEACHER_INVITATION = 'TEACHER_INVITATION'
 
@@ -51,8 +52,9 @@ function teacherRoom(store, user) {
 }
 
 function teacherPasses(store, batchId, user, labId) {
-  return store.interviews.filter(record => record.batchId === batchId && record.laboratoryId === labId &&
+  return latestInterviews(store).filter(record => record.batchId === batchId && record.laboratoryId === labId &&
     record.interviewStatus === 'COMPLETED' && record.recommendation === 'INTENDED' &&
+    mentorEvaluated(store, record) &&
     (record.scoredBy ?? record.interviewerId) === user.uid &&
     scopedChoice(store, user, batchId, record.studentId, labId))
 }
@@ -72,7 +74,7 @@ router.get('/teacher-invitations', requireAuth, requireRole(ROLES.LAB_TEACHER), 
       invitation.laboratoryId === lab.id && invitation.studentId === item.studentId))
     .map(item => withStudent(store, { studentId: item.studentId })) : []
   res.json(ok({ invitations: invitations.map(item => withStudent(store, visibleInvitation(store, item))),
-    candidates, open, mentorConfigured: Boolean(mentor), quota: mentor?.recruitmentQuota ?? null, occupied }))
+    candidates, open, mentorConfigured: Boolean(mentor), quota: mentor && batch ? teacherCapacity(store, batch.id, mentor) : null, occupied }))
 })
 
 router.post('/teacher-invitations', requireAuth, requireRole(ROLES.LAB_TEACHER), async (req, res, next) => {
@@ -108,7 +110,7 @@ router.post('/teacher-invitations', requireAuth, requireRole(ROLES.LAB_TEACHER),
     }
     const capacityError = mentorCapacityError(store, batch.id, mentor.id, studentId)
     if (capacityError) return res.status(409).json({ message: capacityError })
-    if (occupiedCount(store, batch.id, lab.id) >= lab.recruitmentQuota) {
+    if (occupiedCount(store, batch.id, lab.id) >= labCapacity(store, batch.id, lab)) {
       return res.status(409).json({ message: '本实训室可用名额不足' })
     }
     const deadline = [5, 4].map(number => store.recruitmentStages.find(stage =>
@@ -121,7 +123,7 @@ router.post('/teacher-invitations', requireAuth, requireRole(ROLES.LAB_TEACHER),
     store.admissionIntentions.push(item)
     store.notices.push({ id: nextId(store.notices), targetRole: 'STUDENT', targetUserId: studentId, createdBy: req.user.uid,
       title: `${lab.name} · 面试通过与入组邀请`, content: `${mentor.name}老师邀请你加入小组，请前往「拟录取确认」接受或放弃。`,
-      read: false, createdAt })
+      read: false, createdAt, batchId: batch.id, destination: 'STUDENT_ADMISSION' })
     logOperation(store, req, { operationType: 'SEND_TEACHER_INVITATION', targetType: 'ADMISSION', targetId: item.id, description: '发送面试通过与入组邀请' })
     await commitStore(store)
     res.json(ok(item))
@@ -157,7 +159,7 @@ function promoteAlternate(store, batchId, laboratoryId) {
   if (!stageOpen(store, batchId, 5)) return null
   const lab = store.laboratories.find((l) => l.id === laboratoryId)
   if (!lab) return null
-  if (occupiedCount(store, batchId, laboratoryId) >= lab.recruitmentQuota) return null
+  if (occupiedCount(store, batchId, laboratoryId) >= labCapacity(store, batchId, lab)) return null
   const alternate = store.admissionIntentions
     .filter((a) => a.batchId === batchId && a.laboratoryId === laboratoryId &&
       a.admissionType === ADMISSION_TYPE.ALTERNATE && a.status === 'PENDING' &&
@@ -340,7 +342,7 @@ router.get('/overview', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, re
       intended: list.length,
       confirmed: list.filter((a) => a.status === 'CONFIRMED').length,
       rejected: list.filter((a) => a.status === 'REJECTED').length,
-      quota: lab.recruitmentQuota
+      quota: batch ? labCapacity(store, batch.id, lab) : lab.recruitmentQuota
     }
   })
   res.json(ok({

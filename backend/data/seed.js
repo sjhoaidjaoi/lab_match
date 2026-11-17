@@ -92,6 +92,11 @@ function emptyStore() {
     interviewWebhookEvents: [],
     interviewRecordings: [],
     interviewRecordingConsents: [],
+    interviewAiJobs: [],
+    interviewAiConsents: [],
+    interviewAiVersions: [],
+    interviewScorePolicies: [],
+    interviewEvaluations: [],
     admissionIntentions: [],
     adjustments: [],
     finalAdmissions: [],
@@ -388,7 +393,8 @@ async function seedMockData() {
 function migrateStore(store) {
   let changed = false
   if (!store.interviewParticipants) { store.interviewParticipants = []; changed = true }
-  for (const key of ['interviewMessages', 'interviewAttendance', 'interviewWebhookEvents', 'interviewRecordings', 'interviewRecordingConsents']) {
+  for (const key of ['interviewMessages', 'interviewAttendance', 'interviewWebhookEvents', 'interviewRecordings', 'interviewRecordingConsents',
+    'interviewAiJobs', 'interviewAiConsents', 'interviewAiVersions', 'interviewScorePolicies', 'interviewEvaluations']) {
     if (!store[key]) { store[key] = []; changed = true }
   }
   if (!store.openDaySchedules) { store.openDaySchedules = []; changed = true }
