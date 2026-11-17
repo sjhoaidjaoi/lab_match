@@ -16,7 +16,10 @@
     "test:profile": "node tests/lab-profile.js",
     "test:video": "node tests/interview-video.js",
     "test:recording": "node tests/interview-recording.js",
-    "test:interview-ai": "node tests/interview-ai.js"
+    "test:interview-ai": "node tests/interview-ai.js",
+    "test:rate-limit": "node tests/rate-limit.js",
+    "test:stage-clock": "node tests/stage-clock.js",
+    "test:all": "node tests/run-all.js"
   },
   "keywords": [
     "lab",

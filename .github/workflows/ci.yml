@@ -1,47 +1,116 @@
-
 name: Lab Match CI
 
-# 触发条件
+# 触发条件：任意分支推送、任意目标分支的 PR、以及手动运行
 on:
-  # 任何分支收到代码推送时触发
   push:
     branches:
       - '**'
-
-  # 创建或更新指向任意分支的 Pull Request 时触发
   pull_request:
     branches:
       - '**'
-
-  # 允许管理员手动运行 CI
   workflow_dispatch:
 
-# 工作流权限
+# 最小权限：CI 只读仓库内容
 permissions:
   contents: read
 
-# 自动化任务
+concurrency:
+  # 同一分支重复推送时取消旧任务，避免排队浪费
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  ci:
-    name: Project CI
+  # ============ 后端：接口与业务流程自动化测试 ============
+  backend:
+    name: Backend tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
 
     steps:
-      # 第一步：获取仓库代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 第二步：检查项目目录
-      - name: Check project structure
-        run: |
-          echo "Checking Lab Match project..."
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
-          test -d backend || exit 1
-          test -d frontend || exit 1
-          test -d database || exit 1
+      - name: Install dependencies
+        run: npm ci
 
-          echo "Project structure check passed!"
+      # 各测试套件使用独立数据副本与独立端口，不依赖外部服务与真实密钥；
+      # 涉及 LiveKit / 对象存储 / AI 的部分均以隔离适配器运行。
+      - name: Run all test suites
+        run: npm run test:all
+        env:
+          LAB_SEED_DEMO: 'true'
 
-      # 第三步：输出检查成功信息
-      - name: CI completed
-        run: echo "Lab Match CI completed successfully!"
+  # ============ 前端：类型检查与生产构建 ============
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 包含 vue-tsc --noEmit 类型检查 + vite 生产构建
+      - name: Type check and build
+        run: npm run build
+
+  # ============ 数据库：迁移脚本静态校验 ============
+  database:
+    name: Migration check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 校验迁移编号连续性、DDL 完整性、后端表映射覆盖、ALTER 目标表存在性
+      - name: Verify migrations
+        run: node database/verify.js
+
+  # ============ 安全：仓库中不应出现真实密钥 ============
+  secrets-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 检查被追踪的环境变量文件与源码中是否存在真实密钥字面量
+      - name: Verify no leaked secrets
+        run: node scripts/verify-secrets.js

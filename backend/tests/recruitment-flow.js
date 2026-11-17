@@ -72,6 +72,7 @@ async function main() {
       DB_DRIVER: 'file',
       PORT: String(PORT),
       LAB_STORE_FILE: TEST_STORE,
+      LAB_RATE_LIMIT: 'off',
       LAB_SEED_DEMO: 'true',
       LAB_RESUME_DIR: path.join(TMP, 'resumes'),
       LAB_BRIEFING_DIR: path.join(TMP, 'briefing')

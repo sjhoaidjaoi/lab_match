@@ -89,6 +89,7 @@ async function main() {
     env: {
       ...process.env, DB_DRIVER: 'file', PORT: String(PORT),
       LAB_STORE_FILE: TEST_STORE, LAB_SEED_DEMO: 'true',
+      LAB_RATE_LIMIT: 'off',
       LAB_RESUME_DIR: path.join(TMP_DIR, 'resume'),
       LAB_BRIEFING_DIR: path.join(TMP_DIR, 'briefing'),
       LAB_PROMOTION_DIR: path.join(TMP_DIR, 'promotion')

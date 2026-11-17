@@ -27,6 +27,7 @@ async function startFixture(extraEnv = {}) {
   const child = spawn(process.execPath, ['app.js'], {
     cwd: path.join(__dirname, '..'),
     env: { ...process.env, DB_DRIVER: 'file', PORT: String(port), LAB_STORE_FILE: file,
+      LAB_RATE_LIMIT: 'off',
       LAB_SEED_DEMO: 'true', LAB_ADMIN_PASSWORD: '', LAB_RESUME_DIR: path.join(tmp, 'resumes'),
       LAB_BRIEFING_DIR: path.join(tmp, 'briefing'), LIVEKIT_URL: 'wss://interviews.example.invalid',
       LIVEKIT_API_KEY: key, LIVEKIT_API_SECRET: secret, ...extraEnv },

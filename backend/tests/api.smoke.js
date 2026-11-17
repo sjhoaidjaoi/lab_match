@@ -71,6 +71,7 @@ async function main() {
     env: {
       ...process.env, DB_DRIVER: 'file', PORT: String(PORT),
       LAB_STORE_FILE: TEST_STORE, LAB_SEED_DEMO: 'true', LAB_RESUME_DIR: RESUME_DIR,
+      LAB_RATE_LIMIT: 'off',
       LAB_BRIEFING_DIR: path.join(RESUME_DIR, 'briefing')
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -367,6 +368,25 @@ async function main() {
       check('所选导师可以评分', (await request('POST', '/interviews/' + record.id + '/score', { token: staff, body: score })).status === 200)
     }
     const asTeacher = { token: leader, role: 'LAB_TEACHER' }
+
+    // 并发一致性：同一教师对同一场面试并发重复提交相同评价，只应留下一条评分记录
+    // （写入经服务端串行队列，且内容相同的重复提交走幂等去重）
+    const scoredRecord = (await request('GET', '/interviews/lab/1', { token: teacher })).body?.data
+      ?.find(item => item.studentId === 17)
+    if (scoredRecord) {
+      const repeatBody = { attitudeScore: 88, logicScore: 85, programmingScore: 90, timeCommitmentScore: 92,
+        comprehensiveScore: 89, evaluation: '表现优秀', recommendation: 'INTENDED' }
+      const repeats = await Promise.all([1, 2, 3, 4].map(() =>
+        request('POST', '/interviews/' + scoredRecord.id + '/score', { token: teacher, body: repeatBody })))
+      const allAccepted = repeats.every(item => item.status === 200)
+      const history = (await request('GET', '/interviews/' + scoredRecord.id + '/evaluation', { token: teacher }))
+        .body?.data?.history || []
+      check('并发重复提交同一评价不产生重复评分记录',
+        allAccepted && history.length === 1, `status=${repeats.map(r => r.status).join(',')} 记录数=${history.length}`)
+    } else {
+      check('并发重复评分用例可定位面试记录', false, '未找到学生 17 的面试记录')
+    }
+
     check('面试未通过时不能发送邀请，也不能邀请选择其他导师的学生',
       (await request('POST', '/admissions/teacher-invitations', { ...asTeacher, body: { studentId: ownStudentId } })).status === 409 &&
       (await request('POST', '/admissions/teacher-invitations', { ...asTeacher, body: { studentId: 17 } })).status === 403)

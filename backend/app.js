@@ -11,7 +11,23 @@ const app = express()
 const PORT = process.env.PORT || 8080
 
 // ============ 基础中间件 ============
-app.use(cors({ origin: true, credentials: true }))
+// CORS：设置 CORS_ORIGIN（逗号分隔）后只放行白名单来源。
+// 未设置时沿用「反射来源」的开发期默认值；生产环境应显式配置白名单。
+const corsOrigins = String(process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean)
+app.use(cors(corsOrigins.length
+  ? {
+      origin(origin, callback) {
+        // 无 Origin（同源请求、服务端调用、curl）直接放行
+        if (!origin) return callback(null, true)
+        if (corsOrigins.includes(origin)) return callback(null, true)
+        return callback(null, false)
+      },
+      credentials: true
+    }
+  : { origin: true, credentials: true }))
 
 // ============ 写操作串行化（模拟事务，避免并发读改写丢失） ============
 let mutationQueue = Promise.resolve()
@@ -26,6 +42,11 @@ app.post('/api/livekit/webhook',
   require('./services/interviewWebhook').handleInterviewWebhook(enqueueMutation))
 app.use(express.json({ limit: '2mb' }))
 app.use(express.urlencoded({ extended: true }))
+
+// ============ 接口限流（先于写队列，被限流的请求不占用串行队列） ============
+const { apiThrottle } = require('./middleware/rateLimit')
+app.use('/api', apiThrottle)
+
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
   enqueueMutation(() => new Promise((release) => {

@@ -115,7 +115,7 @@ cd backend
 # MYSQL_PASSWORD=你的密码
 # MYSQL_DATABASE=lab_match
 
-npm run db:init    # 新建库表或执行至 v11 的增量迁移（可重复执行）
+npm run db:init    # 新建库表或执行至 v12 的增量迁移（可重复执行）
 npm run db:check   # 检查连接与各表数据量
 npm start          # /api/health 的 data.storage 应返回 mysql
 ```
@@ -124,13 +124,19 @@ npm start          # /api/health 的 data.storage 应返回 mysql
 
 ## 测试
 
-后端接口冒烟测试（使用独立数据副本，不修改演示数据）：
+全部后端测试套件（各自使用独立数据副本与独立端口，不修改业务数据，不依赖外部服务）：
 
 ```powershell
 cd backend
-npm test
-npm run test:flow
-npm run test:video
+npm run test:all        # 依次执行下列全部套件并汇总
+npm test                # 接口冒烟：四端业务 + 权限
+npm run test:flow       # 八阶段流转 + 批次停止 + 分级账号
+npm run test:profile    # 实训室资料管理与权限边界
+npm run test:stage-clock# 阶段按真实时钟自动开始/结束
+npm run test:rate-limit # 接口限流与登录防爆破
+npm run test:video      # 线上面试排期/等候/令牌/聊天
+npm run test:recording  # 会议录制与档案
+npm run test:interview-ai # AI 纪要（隔离适配器）
 ```
 
 前端类型检查与构建：
@@ -140,10 +146,19 @@ cd frontend
 npm run build
 ```
 
-历次回归记录见[测试报告](docs/TEST_REPORT.md)。
+数据库迁移静态校验与密钥泄漏检查：
+
+```powershell
+node database/verify.js
+node scripts/verify-secrets.js
+```
+
+历次回归记录见[测试报告](docs/TEST_REPORT.md)，最终验收结论见[最终验收报告](docs/FINAL_ACCEPTANCE_REPORT.md)。
 
 ## 文档
 
+- [部署说明](docs/DEPLOYMENT.md)
+- [最终验收报告](docs/FINAL_ACCEPTANCE_REPORT.md)
 - [需求符合度审查报告](docs/REQUIREMENTS_AUDIT.md)
 - [问题修复记录](docs/REQUIREMENTS_FIX_LOG.md)
 - [测试与回归报告](docs/TEST_REPORT.md)
