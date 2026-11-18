@@ -297,8 +297,6 @@
       </section>
     </main>
 
-    <div class="scroll-progress" :style="{ transform: `scaleX(${scrollProgress})` }" aria-hidden="true"></div>
-
     <nav class="section-rail" aria-label="页面章节导航">
       <button
         v-for="item in railSections"
@@ -328,7 +326,6 @@
           <img class="school-logo dialog-school-logo" :src="schoolLogo" width="4206" height="650" alt="河北师范大学软件学院" />
           <p class="kicker">SIGN IN</p>
           <h2>统一登录</h2>
-          <p class="dialog-sub">学生、导师、组长与学院负责人使用同一入口</p>
         </div>
       </template>
 
@@ -350,8 +347,6 @@
           {{ auth.loading ? '登录中…' : '登录' }}
         </button>
       </el-form>
-
-      <p class="tip">学生和教师使用初始密码登录时须修改密码。账号异常请联系学院管理员。</p>
     </el-dialog>
   </div>
 </template>
@@ -517,7 +512,6 @@ const rules: FormRules = {
 const loginVisible = ref(false)
 const scrolled = ref(false)
 const activeSection = ref('top')
-const scrollProgress = ref(0)
 
 const railSections = [
   { id: 'top', label: 'HOME' },
@@ -646,8 +640,6 @@ function updateScrollState() {
   const scrollTop = el.scrollTop
   scrolled.value = scrollTop > 12
 
-  const maxScroll = el.scrollHeight - el.clientHeight
-  scrollProgress.value = maxScroll > 0 ? Math.min(scrollTop / maxScroll, 1) : 0
   // 章节高亮：取最后一个已越过视口上沿 40% 的区块
   const containerTop = el.getBoundingClientRect().top
   const line = scrollTop + el.clientHeight * 0.4
@@ -2241,6 +2233,7 @@ onBeforeUnmount(() => {
 
 /* ---------- FAQ ---------- */
 .faq-screen {
+  --faq-reserve: calc(14px * 1.9 + 24px); /* 一条答案的高度：行高 + 下内边距 */
   display: grid;
   grid-template-columns: minmax(220px, 0.6fr) minmax(380px, 1.4fr);
   gap: clamp(36px, 5vw, 96px);
@@ -2248,8 +2241,17 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
+/* FAQ 是满屏停靠的一屏，内容按中线居中。点击问题时列表会变高，居中算法就会让它
+   上下同时撑开（上沿往上跑、下沿往下跑），看起来像整个框在「变形」。
+   这里常驻一条答案高度的留白，展开时用 :has 收掉它 —— 列表总高度不变，
+   外框上下沿都不动，只有下面的条目整体下移，正好填进原来的留白。 */
 .faq-list {
+  padding-bottom: var(--faq-reserve);
   border-top: 1px solid var(--line);
+}
+
+.faq-list:has(.faq-item[open]) {
+  padding-bottom: 0;
 }
 
 .faq-item {
@@ -2419,19 +2421,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.06em;
 }
 
-/* ---------- 滚动指引 ---------- */
-.scroll-progress {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  z-index: 60;
-  pointer-events: none;
-  transform-origin: 0 50%;
-  background: linear-gradient(90deg, #ffb26b, #ea580c 55%, #2f6fed);
-}
-
+/* ---------- 章节导轨 ---------- */
 .section-rail {
   position: fixed;
   right: 22px;
@@ -2566,23 +2556,10 @@ onBeforeUnmount(() => {
   color: #14161a;
 }
 
-.dialog-sub {
-  margin: 0;
-  font-size: 12.5px;
-  color: #8a8781;
-}
-
 .dialog-submit {
   width: 100%;
   justify-content: center;
   margin-top: 4px;
-}
-
-.tip {
-  margin: 18px 0 0;
-  font-size: 11.5px;
-  color: #a5a19a;
-  line-height: 1.7;
 }
 
 /* 弹窗外壳（teleport 到 body，需全局选择器） */
@@ -2856,6 +2833,10 @@ onBeforeUnmount(() => {
     margin-bottom: 10px;
   }
 
+  .faq-screen {
+    --faq-reserve: calc(12.5px * 1.75 + 14px); /* 矮屏下答案行高同步变小，留白跟着收 */
+  }
+
   .faq-item p {
     padding-bottom: 14px;
     font-size: 12.5px;
@@ -3023,7 +3004,6 @@ onBeforeUnmount(() => {
 
 .dialog-head .kicker { color: #a75437; }
 .dialog-head h2 { font-size: 26px; }
-.dialog-sub { color: #6f625d; }
 .dialog-submit { background: linear-gradient(110deg, #a4402a, #a53660); }
 .login-error {
   margin: 0 0 12px;
@@ -3038,6 +3018,21 @@ onBeforeUnmount(() => {
 :global(.login-dialog .el-input__wrapper) { border-radius: 9px; }
 :global(.login-dialog .el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.5) inset, 0 0 0 4px rgba(234, 88, 12, 0.14);
+}
+
+/* 浏览器自动填充（以及「记住的账号密码」）会把输入框涂成 #e8f0fe 的亮蓝色，
+   和这套米白+橙的玻璃完全不搭，而且覆盖了聚焦态的橙色描边。
+   Chrome 只认内阴影这一种改法：把内阴影铺满整块，等于重新上一次底色；
+   再加一条超长 transition 压掉它的淡入，否则会先闪一下蓝再变回来。 */
+:global(.login-dialog .el-input__inner:-webkit-autofill),
+:global(.login-dialog .el-input__inner:-webkit-autofill:hover),
+:global(.login-dialog .el-input__inner:-webkit-autofill:focus) {
+  -webkit-text-fill-color: #14161a !important;
+  caret-color: #14161a;
+  border-radius: inherit;
+  -webkit-box-shadow: 0 0 0 1000px #fbf3ec inset !important;
+  box-shadow: 0 0 0 1000px #fbf3ec inset !important;
+  transition: background-color 100000s ease-in-out 0s;
 }
 
 @media (max-width: 860px) {
