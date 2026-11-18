@@ -21,7 +21,7 @@
           <template #default="{row}">{{ formatDateTime(row.interviewTime) }}</template>
         </el-table-column>
         <el-table-column label="面试官" min-width="120"><template #default="{row}">{{ row.examiners.join('、') }}</template></el-table-column>
-        <el-table-column label="录像" min-width="155">
+        <el-table-column label="录像" min-width="190">
           <template #default="{row}">{{ label(row) }}<span v-if="row.recording.durationSeconds != null"> · {{ duration(row.recording.durationSeconds) }}</span></template>
         </el-table-column>
         <el-table-column label="操作" width="110">
@@ -142,7 +142,11 @@ const scoreLabels = [
   { key: 'attitudeScore', title: '态度' }, { key: 'logicScore', title: '逻辑' }, { key: 'programmingScore', title: '编程' },
   { key: 'timeCommitmentScore', title: '时间投入' }, { key: 'comprehensiveScore', title: '综合' }
 ] as const
-const label = (row: ArchiveRow) => recordingLabels[row.recording.state]
+// 「未录制」要讲清楚原因：会议结束后无法再补录，只有进行中才允许主持人启用录制。
+const label = (row: ArchiveRow) => {
+  if (row.recording.state !== 'NONE') return recordingLabels[row.recording.state]
+  return ['OPEN', 'WAITING', 'UPCOMING'].includes(row.status) ? '未录制（会中可启用）' : '未录制（未启用录制）'
+}
 function duration(value?: number) {
   if (value == null) return '—'
   return `${Math.floor(value / 60)} 分 ${value % 60} 秒`

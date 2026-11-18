@@ -116,7 +116,12 @@ function mountArchive(router, access, fail) {
   router.post('/:id/recording/enable', asyncMutation(async (req, res) => {
     const { store, interview, role } = access(req, true)
     if (role !== 'HOST') fail('只有主持人可以启用本场录制', 'ROLE_FORBIDDEN', 403)
-    if (!['UPCOMING', 'WAITING'].includes(roomStatus(store, interview))) fail('请在主持人开启会议前启用录制告知')
+    // 会议进行中（OPEN）同样允许启用：主持人常在「开始并加入会议」后才想起录制，
+    // 只放开 UPCOMING/WAITING 会让这个窗口永久错过，会议结束后只能显示「未录制」。
+    // 无论何时启用，录制都要等本场全部在场人员同意后才真正开始（见 reconcile 的 WAITING 分支），
+    // 因此会中启用只是在录制起点上后移，不违反「先告知后录制」。
+    const status = roomStatus(store, interview)
+    if (!['UPCOMING', 'WAITING', 'OPEN'].includes(status)) fail('会议已结束，无法再启用录制', 'VIDEO_UNAVAILABLE', 409)
     const existing = recording.recordingFor(store, interview)
     if (existing) return res.json(ok(recording.recordingView(store, interview, req.user.uid, true)))
     const storage = recording.storageConfig()

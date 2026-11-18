@@ -40,6 +40,25 @@ async function test() {
     assert.equal((await request('GET', base + '/archive', leader.token)).status, 200)
     assert.equal((await request('GET', '/interview-video/archives', panel.token)).data.total, 1)
     assert.equal((await request('GET', '/interview-video/archives?keyword=missing', admin.token)).data.total, 0)
+
+    // 会议进行中（OPEN）也要允许补启录制。主持人常在「开始并加入会议」之后才想起录制，
+    // 旧逻辑只认 UPCOMING/WAITING，窗口一过就永久无法录制，档案只能显示「未录制」。
+    // 同一学生不能并行开两场，这里直接注入一场已经开始的会议来覆盖该分支。
+    const openStore = JSON.parse(fs.readFileSync(file, 'utf8'))
+    const source = openStore.interviews[0]
+    const lateInterview = { ...source, id: source.id + 1, onlineRoomName: `labmatch-late-${randomUUID()}`,
+      onlineStartedAt: new Date().toISOString(), onlineEndedAt: null, interviewStatus: 'SCHEDULED' }
+    const seats = openStore.interviewParticipants.filter(row => row.interviewId === source.id)
+    const nextSeat = Math.max(0, ...openStore.interviewParticipants.map(row => row.id)) + 1
+    openStore.interviews.push(lateInterview)
+    openStore.interviewParticipants.push(...seats.map((row, index) => ({ ...row, id: nextSeat + index, interviewId: lateInterview.id })))
+    fs.writeFileSync(file, JSON.stringify(openStore))
+    const lateBase = `/interview-video/${lateInterview.id}`
+    const lateSend = (actor, path, body) => request('POST', lateBase + path, actor.token, body)
+    assert.equal((await lateSend(student, '/recording/enable')).status, 403)
+    const lateEnabled = await lateSend(host, '/recording/enable')
+    assert.equal(lateEnabled.status, 200, lateEnabled.message)
+    assert.equal(lateEnabled.data.state, 'WAITING')
     assert.equal((await send(admin, '/recording/link', { download: true })).status, 409)
     assert.equal((await send(admin, '/recording/link', { download: false })).status, 403)
     assert.equal((await send(host, '/recording/link', { download: false })).status, 409)
