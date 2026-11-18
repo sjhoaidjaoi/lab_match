@@ -2,7 +2,7 @@
   /* 与登录页一致的橙白视觉体系；底色交给液态玻璃环境光层，这里只保留暖白兜底 */
   --lm-primary: #ea580c;
   --lm-primary-dark: #c2410c;
-  --lm-bg: #ece3d5;
+  --lm-bg: #f2efe8;
   --lm-text: #14161a;
   --lm-text-secondary: #4d545e;
   /* 边框统一成白色发丝光，全站 rule 里写 border 的地方自动变成玻璃边缘高光 */

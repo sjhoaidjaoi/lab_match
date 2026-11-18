@@ -80,6 +80,9 @@
   will-change: transform;
 }
 
+/* 环境光统一收敛为「浅橙 → 米白」暖调，与登录页橙白基调一致。
+   五团光斑不再用粉红/天蓝/石板灰做冷暖对撞（会显得五颜六色），
+   而是把色相压进同一段浅橙色带，只靠明度与位置制造层次与流动。 */
 .lg-ambient__blob--amber {
   top: -18vw;
   left: -14vw;
@@ -88,7 +91,8 @@
   min-width: 520px;
   min-height: 520px;
   background: radial-gradient(circle at 42% 44%,
-    #ffbe86 0%, #ffa862 32%, rgba(255, 143, 69, 0.62) 56%, rgba(255, 143, 69, 0) 88%);
+    #ffd9b8 0%, #ffc9a0 34%, rgba(255, 185, 138, 0.52) 58%, rgba(255, 185, 138, 0) 90%);
+  opacity: 0.72;
   animation: lgDriftA 30s ease-in-out infinite;
 }
 
@@ -100,8 +104,8 @@
   min-width: 420px;
   min-height: 420px;
   background: radial-gradient(circle at 55% 45%,
-    #ffb0be 0%, #fb97b0 32%, rgba(248, 134, 166, 0.58) 56%, rgba(248, 134, 166, 0) 90%);
-  opacity: 0.7;
+    #ffdcc0 0%, #ffcfad 34%, rgba(255, 196, 158, 0.5) 58%, rgba(255, 196, 158, 0) 90%);
+  opacity: 0.66;
   animation: lgDriftB 36s ease-in-out infinite;
 }
 
@@ -113,8 +117,8 @@
   min-width: 560px;
   min-height: 560px;
   background: radial-gradient(circle at 48% 42%,
-    #aecdff 0%, #9cbdea 32%, rgba(143, 178, 226, 0.52) 56%, rgba(143, 178, 226, 0) 88%);
-  opacity: 0.56;
+    #ffe9d2 0%, #ffdcc0 34%, rgba(255, 207, 168, 0.48) 58%, rgba(255, 207, 168, 0) 90%);
+  opacity: 0.6;
   animation: lgDriftC 42s ease-in-out infinite;
 }
 
@@ -126,12 +130,12 @@
   min-width: 360px;
   min-height: 360px;
   background: radial-gradient(circle at 50% 50%,
-    #ffeacd 0%, #ffe0bc 36%, rgba(255, 216, 173, 0.66) 58%, rgba(255, 216, 173, 0) 90%);
-  opacity: 0.85;
+    #fff3e2 0%, #ffe9cf 36%, rgba(255, 224, 188, 0.6) 58%, rgba(255, 224, 188, 0) 90%);
+  opacity: 0.8;
   animation: lgDriftD 26s ease-in-out infinite;
 }
 
-/* 冷色石板：与暖色制造冷暖对撞，缺了它整屏就只剩一片糖水暖调 */
+/* 原冷色石板改为极浅杏米白，延续同一段暖色带的最浅端 */
 .lg-ambient__blob--slate {
   left: -10vw;
   top: 34vh;
@@ -140,8 +144,8 @@
   min-width: 380px;
   min-height: 380px;
   background: radial-gradient(circle at 50% 50%,
-    #b7c6dd 0%, #a9bad4 34%, rgba(157, 177, 205, 0.5) 56%, rgba(157, 177, 205, 0) 88%);
-  opacity: 0.42;
+    #ffe6cc 0%, #ffddbb 34%, rgba(255, 211, 178, 0.44) 58%, rgba(255, 211, 178, 0) 90%);
+  opacity: 0.5;
   animation: lgDriftB 44s ease-in-out infinite reverse;
 }
 
