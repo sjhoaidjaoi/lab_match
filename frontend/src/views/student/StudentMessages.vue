@@ -1,15 +1,14 @@
 <template>
-  <section v-loading="loading" class="student-page">
-    <h1>学院通知</h1>
+  <section v-loading="loading" class="student-page" aria-label="学院通知">
     <div class="student-actions">
       <el-button :disabled="!unreadIds.length" :loading="markingAll" @click="markAllRead">全部标为已读</el-button>
       <span>{{ unreadIds.length }} 条未读</span>
     </div>
-    <el-empty v-if="!loading && !notices.length" description="暂无通知" />
-    <el-card v-for="notice in notices" :key="notice.id" shadow="never">
+    <el-empty :image-size="88" v-if="!loading && !notices.length" description="暂无通知" />
+    <el-card v-for="notice in notices" :key="notice.id" shadow="never" class="student-notice-card" :class="{ 'student-notice-unread': !notice.read }">
       <h2>{{ notice.title }}</h2>
       <p>{{ notice.content }}</p>
-      <p>发布时间 · {{ formatDateTime(notice.createdAt) }}</p>
+      <p class="notice-time">发布时间 · {{ formatDateTime(notice.createdAt) }}</p>
       <div class="student-actions">
         <el-tag :type="notice.read ? 'info' : 'warning'">{{ notice.read ? '已读' : '未读' }}</el-tag>
         <el-button v-if="!notice.read" text :loading="markingId === notice.id" @click="markRead(notice)">标为已读</el-button>
@@ -20,20 +19,23 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useStudentNoticesStore } from '@/stores/studentNotices'
 import type { NoticeItem } from '@/types'
-import { formatDateTime, studentApi } from '@/api/student'
+import { formatDateTime } from '@/api/student'
 
 const loading = ref(false)
 const markingAll = ref(false)
 const markingId = ref<number | null>(null)
-const notices = ref<NoticeItem[]>([])
+const noticeStore = useStudentNoticesStore()
+const { notices } = storeToRefs(noticeStore)
 
 const unreadIds = computed(() => notices.value.filter((item) => !item.read).map((item) => item.id))
 
 async function load() {
   loading.value = true
   try {
-    notices.value = await studentApi.myNotices()
+    await noticeStore.load()
   } catch (error) {
     console.error('通知读取失败', error)
   } finally {
@@ -45,8 +47,7 @@ async function markRead(notice: NoticeItem) {
   if (notice.read || markingId.value !== null) return
   markingId.value = notice.id
   try {
-    await studentApi.readNotice(notice.id)
-    notice.read = true
+    await noticeStore.markRead(notice.id)
   } catch (error) {
     console.error('标记已读失败', error)
   } finally {
@@ -58,7 +59,7 @@ async function markAllRead() {
   if (markingAll.value || !unreadIds.value.length) return
   markingAll.value = true
   try {
-    await Promise.all(unreadIds.value.map((id) => studentApi.readNotice(id)))
+    await Promise.all(unreadIds.value.map((id) => noticeStore.markRead(id)))
     await load()
   } catch (error) {
     console.error('批量标记已读失败', error)

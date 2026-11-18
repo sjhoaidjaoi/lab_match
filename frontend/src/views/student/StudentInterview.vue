@@ -1,9 +1,8 @@
 <template>
-  <section v-loading="loading" class="student-page">
-    <h1>面试安排</h1>
+  <section v-loading="loading" class="student-page" aria-label="面试安排">
     <el-alert v-if="failed" title="面试安排加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
-    <el-empty v-if="!loading && !interviews.length" description="暂无面试安排" />
-    <div v-else class="student-page">
+    <el-empty :image-size="88" v-if="!loading && !interviews.length" description="暂无面试安排" />
+    <div v-else class="student-grid">
       <el-card v-for="item in interviews" :key="item.id" shadow="never">
         <h2>{{ item.laboratoryName || '实训室#' + item.laboratoryId }}</h2>
         <p>时间 · {{ formatDateTime(item.interviewTime) }}<span v-if="item.durationMinutes"> · {{ item.durationMinutes }} 分钟</span></p>

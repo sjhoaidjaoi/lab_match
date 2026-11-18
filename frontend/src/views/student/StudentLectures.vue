@@ -4,20 +4,17 @@
       <h1>{{ openDay ? '实训室开放日' : '集中宣讲' }}</h1>
       <p>{{ openDay ? '选择实训室，观看组长发布的云游视频。' : '选择实训室，查看简介、宣讲文稿和介绍视频。' }}</p>
     </header>
-    <el-input v-model="query" clearable placeholder="搜索实训室或研究方向" aria-label="搜索实训室" />
+    <el-input class="student-lab-search" v-model="query" clearable placeholder="搜索实训室或研究方向" aria-label="搜索实训室" />
     <el-alert v-if="failed" title="实训室加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
-    <el-empty v-else-if="!loading && !filteredLabs.length" description="没有匹配的实训室" />
+    <el-empty :image-size="88" v-else-if="!loading && !filteredLabs.length" description="没有匹配的实训室" />
     <ul v-else class="student-lab-list" aria-label="实训室列表">
       <li v-for="lab in filteredLabs" :key="lab.id">
         <RouterLink class="student-lab-link"
           :to="openDay ? '/student/labs/' + lab.id + '/tour' : '/student/announcement/' + lab.id">
           <div class="student-lab-summary">
-            <h2>{{ lab.name }}</h2>
+            <h2><el-icon class="student-lab-icon" aria-hidden="true"><OfficeBuilding /></el-icon>{{ lab.name }}</h2>
             <p v-if="lab.projectDirection">{{ lab.projectDirection }}</p>
           </div>
-          <span class="student-lab-action">
-            {{ openDay ? '进入开放日' : '查看宣讲资料' }} <span aria-hidden="true">→</span>
-          </span>
         </RouterLink>
       </li>
     </ul>
@@ -25,6 +22,7 @@
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { OfficeBuilding } from '@element-plus/icons-vue'
 import type { LabView } from '@/types'
 import { studentApi } from '@/api/student'
 
