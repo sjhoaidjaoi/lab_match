@@ -1,5 +1,5 @@
 <template>
-  <main class="meeting">
+  <main ref="meetingEl" class="meeting">
     <header class="meeting-header">
       <div>
         <router-link class="back" :to="returnPath">← 返回面试安排</router-link>
@@ -48,9 +48,12 @@
       </template>
       <p v-if="recording.failureReason" role="status">{{ recording.failureReason }}</p>
       <div v-if="meeting.role === 'HOST'" class="device-controls">
-        <el-button v-if="recording.state === 'NONE' && ['UPCOMING', 'WAITING'].includes(meeting.status)"
+        <el-button v-if="recording.state === 'NONE' && ['UPCOMING', 'WAITING', 'OPEN'].includes(meeting.status)"
           :disabled="!recording.available" @click="enableRecording">启用本场录制</el-button>
         <span v-if="recording.state === 'NONE' && !recording.available" class="hint">配置私有存储和学校录制告知后可启用录制。</span>
+        <span v-else-if="recording.state === 'NONE' && meeting.status === 'OPEN'" class="hint">
+          会议已开始，录制会从你启用的时刻起算，之前的画面不会录入。
+        </span>
         <el-button v-if="consentOpen && recording.state !== 'STOPPING'" @click="stopRecording">
           {{ recording.state === 'WAITING' ? '取消录制计划' : '停止录制' }}
         </el-button>
@@ -179,13 +182,13 @@
       </div>
       <footer class="toolbar" aria-label="会议控制">
         <template v-if="meeting.role !== 'OBSERVER'">
-          <el-button :icon="Microphone" :disabled="controlsLocked" :aria-pressed="!!local?.mic" @click="toggle('microphone')">
+          <el-button :icon="Microphone" :disabled="!connected" :loading="pendingDevice === 'microphone'" :aria-pressed="!!local?.mic" @click="toggle('microphone')">
             {{ local?.mic ? '关闭麦克风' : '开启麦克风' }}
           </el-button>
-          <el-button :icon="VideoCamera" :disabled="controlsLocked" :aria-pressed="!!local?.camera" @click="toggle('camera')">
+          <el-button :icon="VideoCamera" :disabled="!connected" :loading="pendingDevice === 'camera'" :aria-pressed="!!local?.camera" @click="toggle('camera')">
             {{ local?.camera ? '关闭摄像头' : '开启摄像头' }}
           </el-button>
-          <el-button :icon="Monitor" :disabled="controlsLocked" :aria-pressed="!!local?.screen" @click="toggle('screen')">
+          <el-button :icon="Monitor" :disabled="!connected" :loading="pendingDevice === 'screen'" :aria-pressed="!!local?.screen" @click="toggle('screen')">
             {{ local?.screen ? '停止共享' : '共享屏幕' }}
           </el-button>
         </template>
@@ -265,8 +268,20 @@ const pinned = ref('')
 const speakerMode = ref(false)
 const time = ref(Date.now())
 const dismissedMute = ref<string | null>(null)
+const meetingEl = ref<HTMLElement>()
 const isFullscreen = ref(false)
-const fullscreenAvailable = document.fullscreenEnabled
+// 按设备粒度的进行中标记：只锁当前点击的那个按钮，麦克风/摄像头互不牵连。
+// 之前用一个 deviceBusy 锁住整条工具栏，点麦克风时摄像头、共享也一起变灰，
+// 再加上按钮没有 loading 反馈，操作起来就显得「卡」。
+const pendingDevice = ref<'' | 'camera' | 'microphone' | 'screen'>('')
+type FullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null
+  webkitFullscreenEnabled?: boolean
+  webkitExitFullscreen?: () => Promise<void> | void
+}
+type FullscreenElement = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> | void }
+const fullscreenAvailable = Boolean(document.fullscreenEnabled ||
+  (document as FullscreenDocument).webkitFullscreenEnabled)
 const deviceOptions = ref<MediaDeviceInfo[]>([])
 const deviceDialog = ref(false)
 const deviceSelection = reactive<Partial<Record<MediaDeviceKind, string>>>({})
@@ -292,7 +307,6 @@ const connected = computed(() => connection.value === ConnectionState.Connected)
 const reconnecting = computed(() => connection.value === ConnectionState.Reconnecting ||
   connection.value === ConnectionState.SignalReconnecting)
 const inCall = computed(() => connected.value || reconnecting.value)
-const controlsLocked = computed(() => deviceBusy.value || !connected.value)
 const interviewer = computed(() => ['HOST', 'PANEL'].includes(meeting.value?.role || ''))
 const hostName = computed(() => meeting.value?.participants.find(item => item.role === 'HOST')?.name || '—')
 const waitingText = computed(() => {
@@ -472,12 +486,35 @@ async function selectDevice(kind: MediaDeviceKind, value: string) {
     else problem.value = '设备切换失败，请检查设备连接。'
   } catch (error) { problem.value = deviceMessage(error, '音视频设备') }
 }
-function syncFullscreen() { isFullscreen.value = Boolean(document.fullscreenElement) }
+// 全屏作用在会议页根元素上而不是 <html>：这样 .meeting:fullscreen 能接管布局，
+// 全屏时视频区真正铺满、控制栏贴底，用户一眼就能看出「已进入全屏」。
+// 之前对 documentElement 请求全屏，页面布局几乎不变，看起来就像没生效。
+function fullscreenElement(): Element | null {
+  const doc = document as FullscreenDocument
+  return doc.fullscreenElement || doc.webkitFullscreenElement || null
+}
+function syncFullscreen() { isFullscreen.value = Boolean(fullscreenElement()) }
+function fullscreenError() { problem.value = '无法切换全屏，可按 F11 使用浏览器全屏。' }
 async function fullscreen() {
+  const doc = document as FullscreenDocument
+  const target = meetingEl.value as FullscreenElement | undefined
+  problem.value = ''
   try {
-    if (document.fullscreenElement) await document.exitFullscreen()
-    else await document.documentElement.requestFullscreen()
-  } catch { problem.value = '此窗口无法切换全屏。' }
+    if (fullscreenElement()) {
+      if (doc.exitFullscreen) await doc.exitFullscreen()
+      else if (doc.webkitExitFullscreen) await doc.webkitExitFullscreen()
+      return
+    }
+    if (!target) return
+    if (target.requestFullscreen) await target.requestFullscreen()
+    else if (target.webkitRequestFullscreen) await target.webkitRequestFullscreen()
+    else { problem.value = '当前浏览器不支持网页全屏，可按 F11 使用浏览器全屏。'; return }
+    // 少数环境（内嵌 WebView、被窗口策略拦截）会静默不进入全屏，这里补一次状态确认。
+    syncFullscreen()
+    if (!fullscreenElement()) problem.value = '浏览器未能进入全屏，可按 F11 使用浏览器全屏。'
+  } catch {
+    problem.value = '浏览器拒绝了全屏请求（部分内嵌窗口不支持），可按 F11 使用浏览器全屏。'
+  }
 }
 
 function deviceMessage(error: unknown, device: string) {
@@ -589,14 +626,37 @@ async function load(explicit = false) {
   }
 }
 
+// 直接发布 lobby 已创建好的轨道，跳过 setXxxEnabled 内部的 createTracks。
+// 轨道已结束或发布失败时释放它并回退到常规开启路径。
+async function adopt(track: LocalVideoTrack | LocalAudioTrack, device: 'camera' | 'microphone') {
+  const room = activeRoom
+  if (room && track.mediaStreamTrack.readyState === 'live') {
+    try {
+      await room.localParticipant.publishTrack(track, {
+        source: device === 'camera' ? Track.Source.Camera : Track.Source.Microphone
+      })
+      if (room === activeRoom) revision.value++
+      return
+    } catch { /* 回退到常规开启路径 */ }
+  }
+  track.stop()
+  if (room === activeRoom) await toggle(device)
+}
+
 async function join() {
   const current = generation
-  const camera = Boolean(previewCamera.value)
-  const microphone = Boolean(previewMic.value)
+  // 交接 lobby 已测试好的轨道：入会后直接发布它们，省掉重新 getUserMedia 的几百毫秒，
+  // 这也是「测完设备点加入，麦克风却还要等一下才开」的原因。先摘出引用，避免被 stopPreview 销毁。
+  const carriedCamera = previewCamera.value
+  const carriedMicrophone = previewMic.value
+  previewCamera.value = undefined
+  previewMic.value = undefined
   const start = meeting.value?.status === 'WAITING' && meeting.value.role === 'HOST'
   joining.value = true
   problem.value = ''
   interrupted.value = false
+  // 轨道交接出去之前，任何失败路径都要释放它们，否则摄像头/麦克风会一直占用。
+  let handedOver = false
   try {
     const credentials = await interviewVideoApi.token(roomId.value, start)
     if (current !== generation || closed.value) return
@@ -635,23 +695,30 @@ async function join() {
     if (room !== activeRoom) return
     sync()
     void load()
-    if (camera) await toggle('camera')
-    if (microphone && room === activeRoom) await toggle('microphone')
+    handedOver = true
+    if (carriedCamera) await adopt(carriedCamera, 'camera')
+    if (carriedMicrophone && room === activeRoom) await adopt(carriedMicrophone, 'microphone')
   } catch (error) {
     if (current !== generation) return
     disconnect()
     problem.value = message(error, '无法连接视频会议。请确认网络可访问视频会议服务（若开启了代理，请放行 livekit.cloud），再重试。')
     void load()
-  } finally { if (current === generation) joining.value = false }
+  } finally {
+    if (!handedOver) { carriedCamera?.stop(); carriedMicrophone?.stop() }
+    if (current === generation) joining.value = false
+  }
 }
 
 async function toggle(device: 'camera' | 'microphone' | 'screen') {
   const room = activeRoom
-  if (!room) return
+  if (!room || pendingDevice.value) return
   const participant = room.localParticipant
-  deviceBusy.value = true
+  pendingDevice.value = device
   problem.value = ''
   try {
+    // LiveKit 对已存在的轨道走 mute/unmute，只有第一次开启才需要 getUserMedia。
+    // 这里不再用全局 deviceBusy 卡住整条工具栏，点击后按钮立刻进入 loading，
+    // 另外两个按钮仍可点，交互才跟手。
     if (device === 'camera') await participant.setCameraEnabled(!participant.isCameraEnabled)
     if (device === 'microphone') await participant.setMicrophoneEnabled(!participant.isMicrophoneEnabled)
     if (device === 'screen') {
@@ -667,7 +734,7 @@ async function toggle(device: 'camera' | 'microphone' | 'screen') {
       deviceMessage(error, device === 'camera' ? '摄像头' : '麦克风')
   } finally {
     if (room === activeRoom) revision.value++
-    deviceBusy.value = false
+    pendingDevice.value = ''
   }
 }
 
@@ -683,7 +750,14 @@ function leave() {
 
 async function end() {
   const id = roomId.value
-  try { await ElMessageBox.confirm('所有参会人员将离开会议。', '结束本场面试', { confirmButtonText: '结束会议', cancelButtonText: '继续面试', type: 'warning' }) }
+  const state = recording.value?.state
+  // 结束后档案页的录像列会按真实状态显示「未录制」，这里先讲清楚原因，
+  // 免得主持人以为录了、结果档案里什么都没有。
+  const videoNote = !state || state === 'NONE' ? '本场没有启用录制，结束后不会生成录像。'
+    : state === 'FAILED' ? '本场录制失败，结束后没有可播放的录像。'
+    : state === 'WAITING' ? '录制还在等待全部在场人员同意，现在结束不会产生录像。'
+    : '录制会在会议结束后自动保存并处理。'
+  try { await ElMessageBox.confirm(`所有参会人员将离开会议。${videoNote}`, '结束本场面试', { confirmButtonText: '结束会议', cancelButtonText: '继续面试', type: 'warning' }) }
   catch { return }
   if (id !== roomId.value) return
   ending.value = true
@@ -708,6 +782,7 @@ watch(roomId, (_id, _old, onCleanup) => {
   problem.value = ''
   loading.value = true
   refreshing = syncing = sending.value = joining.value = deviceBusy.value = interrupted.value = false
+  pendingDevice.value = ''
   void load(true)
   const timer = window.setInterval(() => {
     time.value = Date.now()
@@ -720,9 +795,14 @@ watch(roomId, (_id, _old, onCleanup) => {
     stopPreview()
   })
 }, { immediate: true })
-onMounted(() => document.addEventListener('fullscreenchange', syncFullscreen))
+onMounted(() => {
+  for (const event of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(event, syncFullscreen)
+  document.addEventListener('fullscreenerror', fullscreenError)
+  syncFullscreen()
+})
 onBeforeUnmount(() => {
-  document.removeEventListener('fullscreenchange', syncFullscreen)
+  for (const event of ['fullscreenchange', 'webkitfullscreenchange']) document.removeEventListener(event, syncFullscreen)
+  document.removeEventListener('fullscreenerror', fullscreenError)
   disconnect()
   stopPreview()
 })
@@ -781,5 +861,25 @@ onBeforeUnmount(() => {
 .toolbar { padding: 12px; justify-content: center; }
 .remote-audio { display: none; }.loading-panel { min-height: 180px; }
 .meeting :deep(a:focus-visible), .meeting :deep(button:focus-visible) { outline: 2px solid #a63f24; outline-offset: 3px; }
+/* 全屏：整页改成 100dvh 的竖向布局，视频区吃掉剩余高度、控制栏贴底。
+   以前全屏作用于 <html>，页面留白和网格几乎没变，看起来像「没进全屏」；
+   现在由会议页自己接管布局，全屏前后差异一眼可辨。 */
+.meeting:fullscreen {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+}
+.meeting:fullscreen .meeting-header { padding: 10px 20px; }
+.meeting:fullscreen .meeting-header h1 { font-size: 20px; margin: 4px 0 2px; }
+.meeting:fullscreen .meeting-header .back { display: none; }
+.meeting:fullscreen .call-layout { flex: 1; min-height: 0; gap: 10px; padding: 10px 16px; }
+.meeting:fullscreen .tiles { height: 100%; min-height: 0; overflow-y: auto; }
+.meeting:fullscreen .participant-tile.featured { max-height: calc(100dvh - 156px); }
+.meeting:fullscreen .screen-tile { max-height: calc(100dvh - 156px); }
+.meeting:fullscreen .people { max-height: 100%; overflow-y: auto; }
+.meeting:fullscreen .toolbar { flex: none; border-radius: 0; padding: 10px 16px; }
 @media (max-width: 760px) { .lobby, .call-layout.panel-open { grid-template-columns: minmax(0, 1fr); } .people { order: 1; } }
 </style>
