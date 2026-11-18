@@ -119,7 +119,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const cycleStore = useCycleStore()
-const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.jpg`
+const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.png`
 
 const currentMenus = computed(() => menus[auth.currentRole] ?? [])
 const activeMenuPath = computed(() => {

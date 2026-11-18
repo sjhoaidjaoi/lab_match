@@ -103,7 +103,12 @@
             type="datetime"
             placeholder="选择面试时间"
             style="width: 100%"
+            :disabled-date="disabledInterviewDate"
+            :default-time="new Date(2000, 1, 1, 9, 0, 0)"
           />
+          <div v-if="scheduleDetails.mode === 'LIVEKIT' && interviewStage" class="stage-window-tip">
+            面试阶段：{{ formatTime(stageStart?.toISOString() || '') }} 至 {{ formatTime(stageEnd?.toISOString() || '') }}
+          </div>
         </el-form-item>
         <el-form-item label="面试方式">
           <el-radio-group v-model="scheduleDetails.mode">
@@ -188,12 +193,19 @@ import { labApi, type InterviewRow, type PreferenceRow, type ScorePayload } from
 import { interviewVideoApi, meetingStatusLabels, type MeetingSummary } from '@/api/interviewVideo'
 import { appointments, interviewSelection, scoreDimensions as scoreDims, type Evaluation, type ScorePolicy } from '@/api/interviewSelection'
 import { useAuthStore } from '@/stores/auth'
+import { useCycleStore } from '@/stores/cycle'
 import { INTERVIEW_STATUS_LABELS, RECOMMENDATION_LABELS, formatTime, statusTag } from '../college/shared'
 
 const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
+const cycle = useCycleStore()
 const labId = computed(() => auth.user?.laboratoryId ?? null)
+
+// 面试阶段（第 4 阶段）时间窗，用于限制线上面试的排期时间
+const interviewStage = computed(() => cycle.stages.find((s) => s.stageNumber === 4))
+const stageStart = computed(() => interviewStage.value ? new Date(interviewStage.value.startTime) : null)
+const stageEnd = computed(() => interviewStage.value ? new Date(interviewStage.value.endTime) : null)
 
 const list = ref<InterviewRow[]>([])
 const preferences = ref<PreferenceRow[]>([])
@@ -250,6 +262,17 @@ const scoreForm = reactive<{
   recommendation: 'PENDING'
 })
 
+function disabledInterviewDate(date: Date) {
+  // 常规面试不限制（只有线上面试受阶段时间窗约束）
+  if (scheduleDetails.mode !== 'LIVEKIT') return false
+  const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0)
+  const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59)
+  // 日期需落在面试阶段时间窗内
+  if (stageStart.value && dayEnd < stageStart.value) return true
+  if (stageEnd.value && dayStart > stageEnd.value) return true
+  return false
+}
+
 function openSchedule() {
   lockedStudent.value = false
   retryOf.value = undefined
@@ -279,6 +302,23 @@ async function submitSchedule() {
   if (!scheduleForm.interviewTime) {
     ElMessage.warning('请选择面试时间')
     return
+  }
+  // 线上面试需满足阶段时间窗 + 未来时间 + 结束不超截止，提前拦截并给出明确提示
+  if (scheduleDetails.mode === 'LIVEKIT') {
+    const start = new Date(scheduleForm.interviewTime).getTime()
+    const end = start + scheduleDetails.durationMinutes * 60000
+    if (start <= Date.now()) {
+      ElMessage.warning('面试时间必须晚于当前时间，请选择未来的时段')
+      return
+    }
+    if (stageStart.value && start < stageStart.value.getTime()) {
+      ElMessage.warning(`面试时间早于面试阶段开始时间（${formatTime(stageStart.value.toISOString())}），请重新选择`)
+      return
+    }
+    if (stageEnd.value && end > stageEnd.value.getTime()) {
+      ElMessage.warning(`面试结束时间超出阶段截止（${formatTime(stageEnd.value.toISOString())}），请提前开始或缩短时长`)
+      return
+    }
   }
   scheduling.value = true
   try {
@@ -392,7 +432,7 @@ async function load() {
 }
 
 onMounted(async () => {
-  await load()
+  await Promise.all([load(), cycle.load()])
   const preference = preferences.value.find(item => item.id === Number(route.query.preferenceId))
   if (preference) {
     openSchedule()
@@ -412,4 +452,5 @@ onMounted(async () => {
 .panel-meetings h3 { margin: 0 0 8px; }
 .panel-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0; }
 .panel-row :deep(.el-input), .panel-row :deep(.el-select) { max-width: 260px; }
+.stage-window-tip { margin-top: 6px; font-size: 12px; line-height: 1.5; color: #ea580c; }
 </style>

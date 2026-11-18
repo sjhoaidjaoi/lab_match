@@ -255,7 +255,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.archive-page { max-width: 1420px; margin-inline: auto; }
+.archive-page { width: 100%; max-width: 1420px; margin-inline: auto; }
 .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
 .filters > :deep(.el-input) { width: min(100%, 245px); }
 .filters > :deep(.el-input-number) { width: min(100%, 140px); }

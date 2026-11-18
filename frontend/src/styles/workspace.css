@@ -81,31 +81,9 @@
 }
 .workspace-backdrop-branch::before { inset-block-start: -4px; }
 .workspace-backdrop-branch::after { inset-block-end: -4px; }
-.workspace-backdrop-stickers {
-  position: absolute;
-  inset: 0;
-}
-.workspace-sticker {
-  position: absolute;
-  display: block;
-  width: clamp(70px, 8vw, 116px);
-  aspect-ratio: 1;
-  background-image: url('/brand/workspace-robot-stickers.png');
-  background-repeat: no-repeat;
-  background-size: 300% 100%;
-  opacity: .53;
-  filter: saturate(.73);
-}
-.workspace-sticker--type { inset: 11% auto auto 18%; background-position: left center; transform: rotate(-8deg) scale(.93); }
-.workspace-sticker--wave { inset: 30% auto auto 52%; background-position: center; transform: rotate(4deg); }
-.workspace-sticker--book { inset: 8% 8% auto auto; background-position: right center; transform: rotate(8deg) scale(.86); }
 @media (max-width: 700px) {
   .workspace-backdrop { block-size: 132px; }
   .workspace-backdrop-code { inset-block-end: 5px; }
-  .workspace-sticker { width: clamp(54px, 12vw, 76px); opacity: .45; }
-  .workspace-sticker--type { inset: 3% auto auto 5%; }
-  .workspace-sticker--wave { inset: 21% auto auto 42%; }
-  .workspace-sticker--book { inset: 5% 4% auto auto; }
   .workspace-backdrop-branch { display: none; }
 }
 
@@ -119,7 +97,6 @@
   display: block;
   width: clamp(116px, 15vw, 190px);
   height: auto;
-  mix-blend-mode: multiply;
 }
 
 .workspace-ribbon {

@@ -367,7 +367,7 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
-const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.jpg`
+const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.png`
 /* 开场页右侧的时光塔。窄屏换小图，解码像素只有六成。 */
 const bootTower = window.innerWidth < 900
   ? `${import.meta.env.BASE_URL}images/tower-boot-sm.webp`
@@ -2868,7 +2868,6 @@ onBeforeUnmount(() => {
   display: block;
   height: auto;
   object-fit: contain;
-  mix-blend-mode: multiply;
 }
 
 .nav-school-logo {

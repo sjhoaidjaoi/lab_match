@@ -43,7 +43,7 @@ import '@/styles/student.css'
 import '@/styles/workspace.css'
 
 const auth = useAuthStore()
-const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.jpg`
+const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.png`
 const mvpMenuPaths = new Set([
   '/student/dashboard', '/student/labs', '/student/application', '/student/application/record',
   '/student/interview', '/student/admission-confirmation', '/student/result', '/student/profile',

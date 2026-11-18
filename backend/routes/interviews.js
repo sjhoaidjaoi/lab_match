@@ -106,9 +106,14 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
       throw new BusinessError('共同面试官必须是本实训室的在用教师账号', 'ROLE_FORBIDDEN', 403)
     }
     const stage = stageOf(store, activeBatch.id, 4)
-    if (start <= Date.now() || (stage?.startTime && start < Date.parse(stage.startTime)) ||
-        (stage?.endTime && end > Date.parse(stage.endTime))) {
-      throw new BusinessError('请在面试阶段内选择尚未开始的完整时段', 'BUSINESS_ERROR', 409)
+    if (start <= Date.now()) {
+      throw new BusinessError('面试时间必须晚于当前时间，请选择未来的时段', 'BUSINESS_ERROR', 409)
+    }
+    if (stage?.startTime && start < Date.parse(stage.startTime)) {
+      throw new BusinessError('面试时间早于面试阶段开始时间，请在面试阶段内选择', 'BUSINESS_ERROR', 409)
+    }
+    if (stage?.endTime && end > Date.parse(stage.endTime)) {
+      throw new BusinessError('面试结束时间超出面试阶段截止时间，请提前开始或缩短时长', 'BUSINESS_ERROR', 409)
     }
     details.location = ''
     details.interviewForm = '平台线上面试'
