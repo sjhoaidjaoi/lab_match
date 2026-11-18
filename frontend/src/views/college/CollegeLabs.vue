@@ -3,8 +3,8 @@
     <div class="page-header">
       <div class="header-row">
         <div>
-          <h2 class="page-title">实训室与组长管理</h2>
-          <p class="page-desc">统筹全院实训室档案，并为每个实训室指派唯一组长账号。组长负责本室教师账号的增删改停。</p>
+          <h2 class="page-title">实训室与教师管理</h2>
+          <p class="page-desc">统筹全院实训室档案，指派唯一组长账号，并在实训室详情里维护本室教师账号与导师名额。宣传物料（PPT / 视频）由实训室组长在本室维护。</p>
         </div>
         <el-button type="primary" @click="openCreateLab">新增实训室</el-button>
       </div>
@@ -55,9 +55,10 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" align="right">
+        <el-table-column label="操作" width="260" align="right">
           <template #default="{ row }">
             <el-button size="small" text type="primary" @click="router.push(`/college/labs/${row.id}`)">查看</el-button>
+            <el-button size="small" text type="primary" @click="router.push({ path: `/college/labs/${row.id}`, query: { tab: 'profile' } })">编辑资料</el-button>
             <el-button v-if="!leaderOf(row)" size="small" type="primary" plain @click="openLeaderCreate(row)">创建组长</el-button>
             <el-dropdown v-else trigger="click" @command="(command: string) => onLeaderCommand(command, row)">
               <el-button size="small" plain>
@@ -112,13 +113,49 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="labDialogVisible" title="新建实训室档案" width="560px">
+    <el-dialog v-model="labDialogVisible" title="新建实训室档案" width="620px">
       <el-form ref="labFormRef" :model="labForm" :rules="labRules" label-width="100px">
-        <el-form-item label="实训室名称" prop="name">
-          <el-input v-model="labForm.name" maxlength="64" placeholder="如：智能软件实训室" />
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="实训室编号" prop="labCode">
+              <el-input v-model="labForm.labCode" maxlength="32" placeholder="如 202，全院唯一" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="实训室名称" prop="name">
+              <el-input v-model="labForm.name" maxlength="128" placeholder="如：智能软件实训室" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="所属学院">
+              <el-input v-model="labForm.college" maxlength="128" placeholder="选填" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="地点">
+              <el-input v-model="labForm.location" maxlength="128" placeholder="选填" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="项目方向">
+              <el-input v-model="labForm.projectDirection" maxlength="255" placeholder="选填" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="技术栈">
+              <el-input v-model="labForm.technologyStack" maxlength="255" placeholder="选填" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="简介">
+          <el-input v-model="labForm.description" type="textarea" :rows="3" maxlength="5000" show-word-limit placeholder="选填，面向学生展示" />
         </el-form-item>
       </el-form>
-      <p class="dialog-hint">建档后可在列表中为该实训室创建并绑定组长账号。</p>
+      <p class="dialog-hint">建档后可在列表中为该实训室创建并绑定组长账号；招生名额请在详情页「招生名额」中按学年设置。</p>
       <template #footer>
         <el-button @click="labDialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="labSubmitting" @click="submitLab">保存</el-button>
@@ -133,6 +170,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { collegeApi, listOf } from '@/api/college'
+import { labProfileApi } from '@/api/labProfiles'
 import type { LabView, UserAccount } from '@/types'
 
 const LEADER_ROLE = 'LAB_LEADER'
@@ -192,11 +230,16 @@ const rows = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const [labList, accounts] = await Promise.all([
+    const [labList, accounts, overview] = await Promise.all([
       collegeApi.labs(),
-      collegeApi.users({ role: LEADER_ROLE, pageSize: 500 })
+      collegeApi.users({ role: LEADER_ROLE, pageSize: 500 }),
+      labProfileApi.overview().catch(() => null)
     ])
-    labs.value = labList
+    // 名额以「学年计划」口径为准，与详情页「招生名额」保持一致
+    const quotaMap = new Map((overview?.labs || []).map((item) => [item.id, item.totalQuota]))
+    labs.value = labList.map((lab) => (
+      quotaMap.has(lab.id) ? { ...lab, recruitmentQuota: quotaMap.get(lab.id) as number } : lab
+    ))
     leaders.value = listOf(accounts).filter((user) => user.role === LEADER_ROLE)
   } catch { /* 请求层已提示读取失败原因 */ }
   finally { loading.value = false }
@@ -206,13 +249,22 @@ async function load() {
 const labDialogVisible = ref(false)
 const labSubmitting = ref(false)
 const labFormRef = ref<FormInstance>()
-const labForm = reactive({ name: '' })
+const labForm = reactive({
+  labCode: '',
+  name: '',
+  college: '',
+  location: '',
+  projectDirection: '',
+  technologyStack: '',
+  description: ''
+})
 const labRules: FormRules = {
+  labCode: [{ required: true, message: '请输入实训室编号', trigger: 'blur' }],
   name: [{ required: true, message: '请输入实训室名称', trigger: 'blur' }]
 }
 
 function openCreateLab() {
-  labForm.name = ''
+  Object.assign(labForm, { labCode: '', name: '', college: '', location: '', projectDirection: '', technologyStack: '', description: '' })
   labDialogVisible.value = true
 }
 
@@ -222,11 +274,20 @@ async function submitLab() {
     if (!valid) return
     labSubmitting.value = true
     try {
-      await collegeApi.createLab({ name: labForm.name.trim() })
-      ElMessage.success('实训室档案已建立')
+      const created = await labProfileApi.createLab({
+        labCode: labForm.labCode.trim(),
+        name: labForm.name.trim(),
+        college: labForm.college.trim(),
+        location: labForm.location.trim(),
+        projectDirection: labForm.projectDirection.trim(),
+        technologyStack: labForm.technologyStack.trim(),
+        description: labForm.description.trim()
+      })
+      ElMessage.success('实训室档案已建立，请到详情页设置招生名额')
       labDialogVisible.value = false
       await load()
-    } catch { /* 请求层已提示保存失败原因 */ }
+      router.push({ path: `/college/labs/${created.id}`, query: { tab: 'quotas' } })
+    } catch { /* 请求层已提示保存失败原因（如编号重复） */ }
     finally { labSubmitting.value = false }
   })
 }

@@ -47,6 +47,10 @@ app.use(express.urlencoded({ extended: true }))
 const { apiThrottle } = require('./middleware/rateLimit')
 app.use('/api', apiThrottle)
 
+// E宝 助手是一次十几秒的大模型推理，虽然用 POST 但属只读问答：
+// 必须挂在写串行队列之前，否则一次提问会把全站写请求堵在队列里。
+app.use('/api/assistant', require('./routes/assistant'))
+
 app.use('/api', (req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next()
   enqueueMutation(() => new Promise((release) => {
@@ -95,6 +99,8 @@ app.use('/api/logs', require('./routes/logs'))
 app.use('/api/users', require('./routes/users'))
 app.use('/api/statistics', require('./routes/statistics'))
 app.use('/api/open-days', require('./routes/openDays'))
+// 多轮补录 + 全院调剂池（剩余名额、轮次、调剂池、学生补录志愿）
+app.use('/api/allocation', require('./routes/allocation'))
 
 // ============ 错误处理 ============
 app.use(notFound)

@@ -289,8 +289,9 @@ router.post('/import', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res)
 // 新建账号
 router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   const body = CreateSchema.parse(req.body || {})
-  if (body.role === ROLES.LAB_TEACHER && body.laboratoryId != null) {
-    return res.status(403).json(fail(ResultCode.ROLE_FORBIDDEN, '本室教师由该实训室组长建档'))
+  // 学院端可为本室教师建档（需指定实训室），组长端仍可维护本室教师
+  if (body.role === ROLES.LAB_TEACHER && body.laboratoryId == null) {
+    return res.status(400).json(fail(ResultCode.VALIDATION_FAILED, '请为本室教师指定所属实训室'))
   }
   const store = getStore()
   const managed = isManagedAccount(body.role)

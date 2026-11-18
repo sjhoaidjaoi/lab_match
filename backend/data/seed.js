@@ -84,6 +84,7 @@ function emptyStore() {
     laboratories: [],
     recruitmentBatches: [],
     recruitmentStages: [],
+    recruitmentRounds: [],
     studentPreferences: [],
     interviews: [],
     interviewParticipants: [],
@@ -401,8 +402,14 @@ function migrateStore(store) {
   if (!store.publicationObjections) { store.publicationObjections = []; changed = true }
   if (!store.labTeachers) { store.labTeachers = []; changed = true }
   // 实训室资料统一管理：新增集合与字段（非破坏性，仅补默认值）
-  for (const key of ['labYearlyPlans', 'teacherYearlyQuotas', 'labPromotionFiles']) {
+  for (const key of ['labYearlyPlans', 'teacherYearlyQuotas', 'labPromotionFiles', 'recruitmentRounds']) {
     if (!store[key]) { store[key] = []; changed = true }
+  }
+  // 多轮补录：历史数据没有 round 字段，一律视为第 1 轮
+  for (const key of ['studentPreferences', 'interviews', 'admissionIntentions', 'adjustments', 'finalAdmissions']) {
+    ;(store[key] || []).forEach((row) => {
+      if (row.round === undefined) { row.round = 1; changed = true }
+    })
   }
   ;(store.laboratories || []).forEach((l) => {
     // 旧数据以大写编号命名（如「505」），自动补成实训室编号

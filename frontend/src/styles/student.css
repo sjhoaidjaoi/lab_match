@@ -1,7 +1,9 @@
 .student-shell { min-height: 100vh; }
+
+/* 学生端顶栏：与教师/学院端同构的悬浮玻璃胶囊 */
 .student-top {
   position: sticky;
-  top: 0;
+  top: 12px;
   z-index: 8;
   display: flex;
   align-items: center;
@@ -9,14 +11,46 @@
   flex-wrap: wrap;
   gap: 4px 14px;
   min-height: 60px;
-  padding: 8px var(--workspace-gutter);
-  border-bottom: 1px solid var(--workspace-border);
+  margin: 14px var(--workspace-gutter) 0;
+  padding: 7px 14px 7px 8px;
+  border-radius: 999px;
+  overflow: visible;
+  background-color: rgba(255, 255, 255, 0.3);
+  background-image:
+    radial-gradient(120% 200% at 3% -60%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 62%),
+    linear-gradient(148deg, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.1) 52%, rgba(255, 255, 255, 0.3));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 1px 0 0 rgba(255, 255, 255, 0.5),
+    inset -1px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.7),
+    var(--lg-shadow);
 }
+.student-top .lg-lens { border-radius: 999px; }
 .student-account { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; }
-.student-account .workspace-account { padding: 7px 9px; border-radius: 8px; }
+
+@media (max-width: 720px) {
+  .student-top {
+    flex-wrap: wrap;
+    border-radius: 24px;
+    top: 8px;
+    margin-top: 10px;
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .student-nav { border-radius: 20px; padding: 4px 7px; }
+  .student-frame { min-height: calc(100svh - 120px); }
+}
+.student-account .workspace-account {
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--workspace-muted);
+  font-weight: 550;
+  transition: background-color 0.26s var(--lg-ease), color 0.26s var(--lg-ease);
+}
 .student-account .el-button { margin: 0; }
 .student-user { padding-inline-end: 7px; color: var(--workspace-muted); font: 12px var(--workspace-mono); }
-.student-brand { display: inline-flex; padding-block: 5px; }
+.student-brand { display: inline-flex; padding: 5px 8px; border-radius: 999px; }
 .student-demo-note { color: #4f6078; font-size: 13px; margin: 0 0 20px; }
 .student-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .student-page h1, .student-page h2, .student-page h3 { margin: 0; }
@@ -33,54 +67,68 @@
 .student-choice { display: grid; gap: 8px; }
 .student-choice .el-checkbox { margin: 0; height: auto; min-height: 34px; white-space: normal; }
 .student-timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); list-style: none; padding: 0; gap: 10px; }
-.student-timeline li { border: 1px solid #dce4ef; padding: 10px; border-radius: 6px; }
-.student-timeline .active { background: #eaf2ff; border-color: #8bb1e9; }
+.student-timeline li { border: 0; padding: 10px; border-radius: 14px; background: rgba(255, 255, 255, 0.3); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8); }
+.student-timeline .active {
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.9), color-mix(in srgb, var(--workspace-accent) 16%, rgba(255, 255, 255, 0.5)));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98), 0 8px 20px -14px rgba(58, 41, 28, 0.4);
+}
 
 .student-frame {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto 1fr;
-  gap: clamp(14px, 1.6vw, 24px);
+  gap: clamp(14px, 1.6vw, 22px);
   width: 100%;
-  min-height: calc(100svh - 60px);
+  min-height: calc(100svh - 96px);
   align-content: start;
   max-width: 1920px;
   margin-inline: auto;
-  padding: clamp(14px, 1.7vw, 25px) var(--workspace-gutter) 0;
+  padding: clamp(14px, 1.7vw, 22px) var(--workspace-gutter) 0;
 }
 .student-nav {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  scrollbar-width: thin;
-  background: var(--workspace-paper);
-  padding: 7px 9px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 12px;
+  scrollbar-width: none;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.26);
+  background-image:
+    radial-gradient(100% 220% at 0% -80%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(148deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.62),
+    var(--lg-shadow);
 }
+.student-nav::-webkit-scrollbar { height: 0; }
 .student-nav section { display: flex; flex: none; align-items: center; gap: 3px; }
-.student-nav section + section { padding-inline-start: 10px; border-inline-start: 1px solid var(--workspace-border); }
-.student-nav p { margin: 0 4px; color: var(--workspace-muted); font-size: 11px; }
+.student-nav section + section { padding-inline-start: 10px; border-inline-start: 1px solid rgba(255, 255, 255, 0.6); }
+.student-nav p { margin: 0 5px; color: var(--workspace-muted); font-size: 10.5px; letter-spacing: 0.06em; opacity: .8; }
 .student-nav a {
   display: flex;
   align-items: center;
   gap: 7px;
-  min-height: 39px;
-  padding: 8px clamp(8px, .75vw, 13px);
-  border-radius: 7px;
-  color: var(--workspace-ink);
+  min-height: 36px;
+  padding: 7px clamp(9px, .8vw, 14px);
+  border-radius: 999px;
+  color: var(--workspace-muted);
+  font-weight: 550;
   white-space: nowrap;
 }
 .student-nav .student-nav-active {
   color: var(--workspace-accent);
-  background: var(--workspace-tint);
-  box-shadow: inset 0 -2px var(--workspace-accent);
-  font-weight: 650;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 1px 3px rgba(58, 41, 28, 0.1),
+    0 6px 16px -10px rgba(58, 41, 28, 0.3);
+  font-weight: 700;
 }
 @media (hover: hover) {
   .student-nav a:hover, .student-account .workspace-account:hover {
-    color: var(--workspace-accent);
-    background: var(--workspace-tint);
+    color: var(--workspace-ink);
+    background: rgba(255, 255, 255, 0.46);
   }
 }
 .student-main { width: 100%; min-width: 0; }
@@ -94,30 +142,61 @@
   gap: 12px;
   min-height: 72px;
   padding: 14px clamp(14px, 3vw, 24px);
-  border: 1px solid #e9ded5;
-  border-radius: 12px;
-  background: #fffcf8;
-  color: #302622;
+  border: 0;
+  border-radius: 18px;
+  background-color: rgba(255, 255, 255, 0.34);
+  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.06));
+  color: var(--workspace-ink);
   text-decoration: none;
+  -webkit-backdrop-filter: blur(6px) saturate(170%);
+  backdrop-filter: blur(6px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.58),
+    var(--lg-shadow);
+  transition: box-shadow 0.4s var(--lg-ease), background-color 0.3s var(--lg-ease);
 }
-.student-page .student-lab-link:hover { border-color: #bd7967; background: #fff7f0; }
+.student-page .student-lab-link:hover {
+  background-color: rgba(255, 255, 255, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.7),
+    var(--lg-shadow-hover);
+}
 .student-lab-summary { min-width: 0; overflow-wrap: anywhere; }
 .student-lab-summary h2 { font-size: clamp(15px, 2vw, 18px); }
-.student-page .student-lab-summary p { margin: 3px 0 0; color: #6b5a50; font-size: 13px; }
-.student-lab-action { color: #8c3827; font-weight: 600; font-size: 13px; white-space: nowrap; }
+.student-page .student-lab-summary p { margin: 3px 0 0; color: var(--workspace-muted); font-size: 13px; }
+.student-lab-action { color: var(--workspace-accent); font-weight: 650; font-size: 13px; white-space: nowrap; }
 @media (max-width: 480px) {
   .student-page .student-lab-link { grid-template-columns: minmax(0, 1fr); gap: 6px; }
 }
 .student-welcome {
   position: relative;
+  /* ::after 的 </> 装饰用 z-index:-1，必须靠 isolate 让它停在本元素背景之上 */
   isolation: isolate;
   padding: clamp(20px, 3vw, 42px);
-  border: 1px solid var(--workspace-border);
-  border-radius: 18px;
-  background:
+  border: 0;
+  border-radius: 26px;
+  background-color: var(--workspace-paper);
+  background-image:
     var(--workspace-grid),
-    linear-gradient(118deg, var(--workspace-paper) 36%, var(--workspace-tint));
-  background-size: 34px 34px, 34px 34px, 100% 100%;
+    radial-gradient(130% 120% at 4% -22%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(118deg, rgba(255, 255, 255, 0.52) 24%, var(--workspace-tint) 100%);
+  background-size: 34px 34px, 34px 34px, 100% 100%, 100% 100%;
+  -webkit-backdrop-filter: blur(8px) saturate(175%);
+  backdrop-filter: blur(8px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 1px 0 0 rgba(255, 255, 255, 0.5),
+    inset -1px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 0 34px rgba(255, 255, 255, 0.32),
+    var(--lg-shadow);
+  animation: studentHeroFlow 28s ease-in-out infinite;
+}
+@keyframes studentHeroFlow {
+  0%, 100% { background-position: 0 0, 0 0, 0% 0%, 0% 0%; }
+  50% { background-position: 0 0, 0 0, 100% 100%, 100% 100%; }
 }
 .student-welcome::after {
   content: '</>' / '';
@@ -134,24 +213,72 @@
 .student-progress { min-width: 0; }
 .student-progress .student-timeline { display: flex; overflow-x: auto; scrollbar-width: thin; gap: 0; padding: 8px 4px; margin-bottom: 0; }
 .student-progress .student-timeline li { flex: 1 0 108px; padding: 0 6px; border: 0; border-radius: 0; background: transparent; position: relative; }
-.student-progress .student-timeline li:not(:last-child)::before { content: ''; position: absolute; top: 22px; left: 27px; right: -27px; border-top: 1px solid #dbc9bf; }
-.student-progress .student-timeline li a { display: grid; align-content: start; height: 100%; gap: 5px; padding: 8px; border-radius: 8px; position: relative; font-size: 13px; }
-.student-progress .student-timeline li a:hover { background: color-mix(in srgb, var(--workspace-tint) 75%, transparent); }
-.student-step { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid #dbc9bf; background: var(--workspace-paper); font: 600 12px var(--workspace-mono); }
-.student-timeline .active .student-step { background: var(--workspace-accent); border-color: var(--workspace-accent); color: white; }
-.student-timeline .done .student-step { background: #e5efdf; color: #325439; }
-.student-timeline small { color: #6b5a51; }
+.student-progress .student-timeline li:not(:last-child)::before { content: ''; position: absolute; top: 22px; left: 27px; right: -27px; border-top: 1px solid rgba(255, 255, 255, 0.62); }
+.student-progress .student-timeline li a { display: grid; align-content: start; height: 100%; gap: 5px; padding: 8px; border-radius: 12px; position: relative; font-size: 13px; transition: background-color 0.26s var(--lg-ease); }
+.student-progress .student-timeline li a:hover { background: rgba(255, 255, 255, 0.5); }
+.student-step {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    0 1px 3px rgba(58, 41, 28, 0.1);
+  font: 600 12px var(--workspace-mono);
+}
+.student-timeline .active .student-step {
+  background: linear-gradient(155deg, #ffa163, var(--workspace-accent));
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 4px 12px -4px rgba(211, 74, 6, 0.55);
+}
+.student-timeline .done .student-step { background: rgba(210, 236, 218, 0.8); color: #2c6144; }
+.student-timeline small { color: var(--workspace-muted); }
 .student-home-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.85fr); gap: 16px; }
-.student-blackboard { padding: clamp(16px, 2vw, 24px); color: #f5f6eb; background: linear-gradient(150deg, #22362f, #2d453b); border: 1px solid #526c5a; border-radius: 14px; }
-.student-blackboard details { border-bottom: 1px solid #ffffff2f; }
-.student-blackboard summary { padding: 10px 6px; border-radius: 6px; cursor: pointer; overflow-wrap: anywhere; }
-.student-blackboard summary:hover, .student-blackboard details[open] summary { background: #ffffff12; }
+
+/* 公告板：深色玻璃，与浅色卡片形成光学对比，是整页的视觉重音 */
+.student-blackboard {
+  position: relative;
+  padding: clamp(16px, 2vw, 24px);
+  color: #f3f0ea;
+  background-color: rgba(34, 30, 27, 0.62);
+  background-image:
+    radial-gradient(120% 110% at 8% -14%, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0) 54%),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02));
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
+  border: 0;
+  border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 1px 0 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.16),
+    0 18px 40px -22px rgba(28, 22, 18, 0.6),
+    0 2px 6px rgba(28, 22, 18, 0.14);
+}
+.student-blackboard details { border-bottom: 1px solid rgba(255, 255, 255, 0.16); }
+.student-blackboard summary { padding: 10px 8px; border-radius: 10px; cursor: pointer; overflow-wrap: anywhere; transition: background-color 0.24s var(--lg-ease); }
+.student-blackboard summary:hover, .student-blackboard details[open] summary { background: rgba(255, 255, 255, 0.1); }
 .student-blackboard :is(summary, a):focus-visible { outline-color: #fae2b9; }
-.student-blackboard small { display: block; color: #c9d6c9; margin: 5px 0 0 14px; }
-.student-blackboard a { display: inline-block; margin-top: 14px; color: #fae2b9; }
+.student-blackboard small { display: block; color: rgba(255, 255, 255, 0.62); margin: 5px 0 0 14px; }
+.student-blackboard a { display: inline-block; margin-top: 14px; color: #ffcb9a; }
 .student-blackboard a:hover { text-decoration: underline; }
 .student-personal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.student-preference { min-width: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); margin: 14px 0; padding: 12px; border: 1px solid #e9ded5; border-radius: 10px; }
-.student-preference legend { color: #784535; padding: 0 6px; }
+.student-preference {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  margin: 14px 0;
+  padding: 14px;
+  border: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.26);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+.student-preference legend { color: var(--workspace-accent); padding: 0 6px; font-weight: 600; }
 @media (max-width: 950px) { .student-home-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 460px) { .student-personal { grid-template-columns: minmax(0, 1fr); } }

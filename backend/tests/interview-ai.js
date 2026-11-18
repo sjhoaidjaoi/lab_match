@@ -11,6 +11,10 @@ const policy = {
   INTERVIEW_AI_NOTICE: '隔离测试。语音归转写服务，文字归 DeepSeek。',
   INTERVIEW_AI_POLICY_VERSION: 'fixture-v1',
   INTERVIEW_STT_URL: 'http://127.0.0.1:9988/v1/audio/transcriptions',
+  // 显式固定模型名：policyKey 由 [notice, version, sttUrl, sttModel, model] 计算，
+  // 若让服务端从 .env 取到不同的模型名，测试进程与服务端的 policyKey 会不一致。
+  INTERVIEW_STT_MODEL: 'fixture-stt-model',
+  DEEPSEEK_MODEL: 'fixture-deepseek-model',
   INTERVIEW_AI_COLLEGE_VIEW_IDS: '1',
   RECORDING_MANAGE_IDS: '1'
 }

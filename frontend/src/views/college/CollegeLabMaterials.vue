@@ -232,7 +232,7 @@ onMounted(load)
 .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .stat-card {
   display: grid; gap: 6px; padding: 18px 20px; border-radius: var(--lm-radius);
-  background: #fff; border: 1px solid var(--lm-border);
+  background-color: var(--workspace-paper); border: 0; -webkit-backdrop-filter: blur(6px) saturate(175%); backdrop-filter: blur(6px) saturate(175%); box-shadow: inset 0 1px 0 rgba(255,255,255,.94), inset 0 -1px 0 rgba(255,255,255,.6), var(--lg-shadow);
   box-shadow: 0 1px 2px rgba(31, 35, 40, .04);
 }
 .stat-label { font-size: 13px; color: var(--lm-text-secondary); }
@@ -246,7 +246,7 @@ onMounted(load)
 .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; min-height: 120px; }
 .lab-card {
   display: grid; gap: 14px; padding: 20px; border-radius: var(--lm-radius);
-  background: #fff; border: 1px solid var(--lm-border);
+  background-color: var(--workspace-paper); border: 0; -webkit-backdrop-filter: blur(6px) saturate(175%); backdrop-filter: blur(6px) saturate(175%); box-shadow: inset 0 1px 0 rgba(255,255,255,.94), inset 0 -1px 0 rgba(255,255,255,.6), var(--lg-shadow);
   transition: box-shadow .18s ease, transform .18s ease, border-color .18s ease;
 }
 .lab-card:hover { border-color: #f3c6a8; box-shadow: 0 10px 26px rgba(234, 88, 12, .10); transform: translateY(-2px); }

@@ -1,7 +1,7 @@
 <template>
   <div v-loading="loading" class="page lab-material-detail">
     <div class="detail-head">
-      <el-button text class="back" @click="router.push('/college/lab-materials')">
+      <el-button text class="back" @click="goBack">
         <el-icon><ArrowLeft /></el-icon>返回实训室列表
       </el-button>
       <div class="head-main">
@@ -101,6 +101,7 @@
                   <el-option label="实训室组长" value="LEADER" />
                   <el-option label="普通教师" value="TEACHER" />
                 </el-select>
+                <el-button @click="openAccountCreate">新增教师账号</el-button>
                 <el-button type="primary" @click="openTeacherDrawer(null)">新增教师</el-button>
               </div>
             </div>
@@ -133,9 +134,23 @@
             <el-table-column label="本学年名额" width="110" align="center">
               <template #default="{ row }">{{ row.quota }}</template>
             </el-table-column>
-            <el-table-column label="关联账号" width="130">
+            <el-table-column label="关联账号" width="170">
               <template #default="{ row }">
-                <span v-if="row.userId">{{ row.accountName || '已绑定' }}</span>
+                <el-dropdown v-if="row.userId" trigger="click" @command="(cmd: string) => onAccountCommand(cmd, row)">
+                  <span class="account-link">
+                    {{ row.accountName || '已绑定' }}
+                    <el-tag v-if="accountOf(row.userId)?.status === 'INACTIVE'" size="small" type="info" effect="plain">停用</el-tag>
+                    <el-icon><ArrowDown /></el-icon>
+                  </span>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="reset">重置登录密码</el-dropdown-item>
+                      <el-dropdown-item command="toggle">
+                        {{ accountOf(row.userId)?.status === 'ACTIVE' ? '停用账号' : '启用账号' }}
+                      </el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
                 <span v-else class="muted">未绑定</span>
               </template>
             </el-table-column>
@@ -149,7 +164,8 @@
             </el-table-column>
           </el-table>
           <p class="form-hint">
-            教师资料与登录账号分开建模：新增教师不会自动创建登录账号。已有报名、面试或录取记录的教师移除后只解除关联，历史记录保留。
+            教师资料与登录账号分开建模：「新增教师」只建档案（用于分配名额、绑定志愿），「新增教师账号」才会开登录入口。
+            已有报名、面试或录取记录的教师移除后只解除关联，历史记录保留。
           </p>
         </el-card>
       </el-tab-pane>
@@ -294,6 +310,31 @@
         <el-button type="primary" :loading="teacherDrawer.saving" @click="submitTeacher">保存</el-button>
       </template>
     </el-drawer>
+
+    <!-- 新增教师登录账号 -->
+    <el-dialog v-model="accountDialog.visible" title="新增教师登录账号" width="520px">
+      <el-form ref="accountRef" :model="accountForm" :rules="accountRules" label-width="100px">
+        <el-form-item label="姓名" prop="realName">
+          <el-input v-model="accountForm.realName" maxlength="32" placeholder="教师真实姓名" />
+        </el-form-item>
+        <el-form-item label="工号（账号）" prop="employeeNumber">
+          <el-input v-model="accountForm.employeeNumber" maxlength="64" placeholder="登录账号，须全院唯一" />
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-input v-model="accountForm.phone" maxlength="20" placeholder="选填" />
+        </el-form-item>
+        <el-form-item label="初始密码">
+          <el-input v-model="accountForm.password" type="password" show-password maxlength="64" placeholder="留空则使用系统初始密码" />
+        </el-form-item>
+        <p class="form-hint">
+          账号创建后即可在「教师管理 → 编辑 → 关联登录账号」中绑定到对应教师档案；首次登录须修改初始密码。
+        </p>
+      </el-form>
+      <template #footer>
+        <el-button @click="accountDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="accountDialog.saving" @click="submitAccount">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -301,7 +342,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft } from '@element-plus/icons-vue'
 import {
   labProfileApi, type LabProfileDetail, type LabProfilePayload,
   type LabQuotaSummary, type LabTeacherItem, type LabTeacherPayload
@@ -334,21 +375,25 @@ const savingProfile = ref(false)
 
 const PROFILE_FIELDS = Object.keys(blankProfile()) as Array<keyof LabProfilePayload>
 
+/** 用字段值拼出指纹，用来判断「用户是否真的动过表单」。 */
+function profileSignature(source?: Partial<LabProfilePayload | LabProfileDetail>) {
+  return PROFILE_FIELDS.map((field) => String(source?.[field] ?? '').trim()).join('\u0001')
+}
+
+/** 最近一次从服务端回填的值：表单与它一致 = 没有未保存修改。 */
+const profileSnapshot = ref(profileSignature(profile))
+
 function fillProfile(source?: Partial<LabProfileDetail>) {
   PROFILE_FIELDS.forEach((field) => {
     const value = source?.[field as keyof LabProfileDetail]
     ;(profile as Record<string, unknown>)[field] = typeof value === 'string' ? value : ''
   })
+  profileSnapshot.value = profileSignature(profile)
 }
 
-const dirty = computed(() => {
-  if (!lab.value) return false
-  return PROFILE_FIELDS.some((field) => {
-    const next = (profile[field] ?? '').trim()
-    const prev = String(lab.value?.[field as keyof LabProfileDetail] ?? '').trim()
-    return next !== prev
-  })
-})
+const hasPendingEdits = () => profileSignature(profile) !== profileSnapshot.value
+
+const dirty = computed(() => Boolean(lab.value) && hasPendingEdits())
 
 function resetProfile() {
   fillProfile(lab.value)
@@ -368,6 +413,8 @@ async function saveProfile() {
         }
       })
       await labProfileApi.updateProfile(labId.value, payload)
+      // 先认账，避免 load() 把「刚保存的值」当成未保存修改而不再回填
+      profileSnapshot.value = profileSignature(profile)
       ElMessage.success('实训室资料已保存，各端将读取最新内容')
       await load()
     } catch { /* 请求层已提示 */ }
@@ -470,6 +517,84 @@ async function setLeader(row: LabTeacherItem) {
   } catch { /* 请求层已提示 */ }
 }
 
+/* ---------------- 教师登录账号 ---------------- */
+const accountDialog = reactive({ visible: false, saving: false })
+const accountRef = ref<FormInstance>()
+const accountForm = reactive({ realName: '', employeeNumber: '', phone: '', password: '' })
+const accountRules: FormRules = {
+  realName: [{ required: true, message: '请输入教师姓名', trigger: 'blur' }],
+  employeeNumber: [{ required: true, message: '请输入工号（登录账号）', trigger: 'blur' }]
+}
+
+function openAccountCreate() {
+  Object.assign(accountForm, { realName: '', employeeNumber: '', phone: '', password: '' })
+  accountDialog.visible = true
+}
+
+async function submitAccount() {
+  const valid = await accountRef.value?.validate().catch(() => false)
+  if (!valid) return
+  accountDialog.saving = true
+  try {
+    const employeeNumber = accountForm.employeeNumber.trim()
+    await collegeApi.createUser({
+      username: employeeNumber,
+      employeeNumber,
+      realName: accountForm.realName.trim(),
+      phone: accountForm.phone.trim() || null,
+      ...(accountForm.password ? { password: accountForm.password } : {}),
+      role: 'LAB_TEACHER',
+      laboratoryId: labId.value,
+      status: 'ACTIVE'
+    })
+    ElMessage.success('登录账号已创建，请到「教师管理」中编辑教师并关联该账号')
+    accountDialog.visible = false
+    await load()
+  } catch { /* 请求层已提示失败原因（如工号重复） */ }
+  finally { accountDialog.saving = false }
+}
+
+function goBack() {
+  if (window.history.state?.back) router.back()
+  else router.push('/college/labs')
+}
+
+async function resetAccountPassword(row: LabTeacherItem) {
+  if (!row.userId) return
+  try {
+    await ElMessageBox.confirm(
+      `确认将「${row.name}」的登录密码重置为系统初始密码？重置后该账号当前登录状态立即失效。`,
+      '重置密码', { type: 'warning', confirmButtonText: '确认重置' }
+    )
+  } catch { return }
+  try {
+    await collegeApi.resetPassword(row.userId)
+    ElMessage.success('密码已重置，该账号需重新登录并改密')
+  } catch { /* 请求层已提示 */ }
+}
+
+function accountOf(userId?: number | null) {
+  if (!userId) return null
+  return accounts.value.find((item) => item.id === userId) || null
+}
+
+async function onAccountCommand(command: string, row: LabTeacherItem) {
+  if (!row.userId) return
+  if (command === 'reset') return resetAccountPassword(row)
+  const account = accountOf(row.userId)
+  if (!account) return
+  const next: 'ACTIVE' | 'INACTIVE' = account.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
+  const label = next === 'ACTIVE' ? '启用' : '停用'
+  try {
+    await ElMessageBox.confirm(`确认${label}「${account.realName}」的登录账号？`, '账号状态', { type: 'warning' })
+  } catch { return }
+  try {
+    await collegeApi.setUserStatus(row.userId, next)
+    ElMessage.success(`账号已${label}`)
+    await load()
+  } catch { /* 请求层已提示 */ }
+}
+
 /* ---------------- 名额 ---------------- */
 const quota = ref<LabQuotaSummary>({
   academicYear: '', batchId: null, totalQuota: 0, allocatedQuota: 0,
@@ -539,7 +664,8 @@ async function load() {
     if (!academicYear.value) academicYear.value = detail.academicYear
     quota.value = detail.quota
     syncQuotaState()
-    if (!dirty.value || route.query.tab !== 'profile') fillProfile(detail)
+    // 只有用户真的动过表单才保留草稿，否则一律回填服务端最新资料
+    if (!hasPendingEdits()) fillProfile(detail)
   } catch { /* 请求层已提示 */ }
   finally { loading.value = false }
 }
@@ -560,6 +686,7 @@ onMounted(async () => {
 
 <style scoped>
 .lab-material-detail { display: grid; gap: 16px; }
+.account-link { display: inline-flex; align-items: center; gap: 4px; color: var(--el-color-primary); cursor: pointer; font-size: 13px; }
 .detail-head { display: grid; gap: 10px; }
 .back { justify-self: start; padding-left: 0; }
 .head-main { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }

@@ -19,7 +19,13 @@
     "test:interview-ai": "node tests/interview-ai.js",
     "test:rate-limit": "node tests/rate-limit.js",
     "test:stage-clock": "node tests/stage-clock.js",
-    "test:all": "node tests/run-all.js"
+    "test:allocation": "node tests/allocation.js",
+    "test:all": "node tests/run-all.js",
+    "check:storage": "node scripts/check-storage.js",
+    "check:ffmpeg": "node scripts/check-ffmpeg.js",
+    "check:ai": "node scripts/check-ai.js",
+    "check:stt": "node scripts/check-stt.js",
+    "stt": "tools\\venv-stt\\Scripts\\python.exe scripts/stt-server.py"
   },
   "keywords": [
     "lab",

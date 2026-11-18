@@ -18,6 +18,7 @@ const { logOperation } = require('../utils/audit')
 const { mentorCapacityError, occupiesInvitation, labCapacity } = require('../utils/mentorCapacity')
 const { scopedChoice, stageOpen } = require('../utils/applicationScope')
 const { currentBatch, batchWritableError, stageOf } = require('../utils/recruitment')
+const { syncFinalAdmissions } = require('../utils/finalSync')
 
 const AdjustmentSchema = z.object({
   studentId: z.number().int(),
@@ -343,6 +344,8 @@ router.post('/:id/confirm', requireAuth, requireRole(ROLES.STUDENT), asyncMutati
   }
   item.status = confirmed ? 'CONFIRMED' : 'REJECTED'
   item.confirmedAt = new Date().toISOString()
+  // 调剂确认即生效：直接同步进学院端最终名单，不再需要学院二次确认
+  syncFinalAdmissions(store, item.batchId, { strict: false })
   logOperation(store, req, {
     operationType: 'CONFIRM_ADJUSTMENT', targetType: 'ADJUSTMENT', targetId: item.id,
     description: confirmed ? '学生确认调剂结果' : '学生拒绝调剂结果'

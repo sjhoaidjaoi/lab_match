@@ -261,7 +261,7 @@ onMounted(load)
 .stop-dialog { display: flex; flex-direction: column; gap: 12px; }
 .stop-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 14px; border-radius: 10px; background: #faf7f3; font-size: 13px; }
 .stop-row span { color: var(--lm-text-secondary); }
-.stop-impact { padding: 12px 16px; border: 1px solid #f6d7c4; border-radius: 12px; background: #fff8f2; }
+.stop-impact { padding: 12px 16px; border: 0; border-radius: 14px; background: color-mix(in srgb, #ea580c 10%, rgba(255,255,255,.55)); box-shadow: inset 0 1px 0 rgba(255,255,255,.9); }
 .impact-title { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #b91c1c; }
 .stop-impact ul { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.9; color: #6b4a38; }
 .reopen-tip { margin: 0; padding: 10px 14px; border-radius: 10px; background: #fdf6e9; font-size: 12.5px; line-height: 1.7; color: #7a5a2f; }

@@ -1,23 +1,25 @@
 .workspace-theme {
   --workspace-accent: #ea580c;
-  --workspace-tint: #fdece1;
-  --workspace-paper: #fffdf9;
-  --workspace-canvas: #f4efe8;
-  --workspace-border: #e9ddd2;
-  --workspace-ink: #292423;
-  --workspace-muted: #645851;
+  /* 液态玻璃：所有「纸面」改成半透，靠环境光与模糊产生厚度 */
+  --workspace-tint: rgba(234, 88, 12, 0.1);
+  --workspace-paper: rgba(255, 255, 255, 0.22);
+  --workspace-canvas: transparent;
+  /* 白色发丝光：全站 border: 1px solid var(--workspace-border) 自动变成玻璃边缘 */
+  --workspace-border: rgba(255, 255, 255, 0.66);
+  --workspace-ink: #14161a;
+  --workspace-muted: #4d545e;
   --workspace-gutter: clamp(16px, 2.6vw, 52px);
   --workspace-mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
   --workspace-grid:
-    linear-gradient(90deg, color-mix(in srgb, var(--workspace-accent) 8%, transparent) 1px, transparent 1px),
-    linear-gradient(color-mix(in srgb, var(--workspace-accent) 8%, transparent) 1px, transparent 1px);
-  --lm-bg: var(--workspace-canvas);
+    linear-gradient(90deg, color-mix(in srgb, var(--workspace-accent) 7%, transparent) 1px, transparent 1px),
+    linear-gradient(color-mix(in srgb, var(--workspace-accent) 7%, transparent) 1px, transparent 1px);
+  --lm-bg: transparent;
   --lm-text: var(--workspace-ink);
   --lm-text-secondary: var(--workspace-muted);
   --lm-border: var(--workspace-border);
   --lm-primary: var(--workspace-accent);
   --lm-primary-dark: color-mix(in srgb, var(--workspace-accent) 80%, #1c1717);
-  --lm-radius: 13px;
+  --lm-radius: 20px;
   --el-color-primary: var(--workspace-accent);
   --el-color-primary-dark-2: var(--lm-primary-dark);
   --el-color-primary-light-3: color-mix(in srgb, var(--workspace-accent) 80%, white);
@@ -27,22 +29,18 @@
   --el-color-primary-light-9: color-mix(in srgb, var(--workspace-accent) 10%, white);
   --el-text-color-primary: var(--workspace-ink);
   --el-text-color-regular: var(--workspace-muted);
-  --el-border-radius-base: 9px;
+  --el-border-radius-base: 12px;
   --el-border-color-light: var(--workspace-border);
   --el-border-color-lighter: color-mix(in srgb, var(--workspace-border) 55%, white);
   color: var(--workspace-ink);
-  background-color: var(--workspace-canvas);
-  background-image:
-    radial-gradient(color-mix(in srgb, var(--workspace-accent) 12%, transparent) 1px, transparent 1px),
-    radial-gradient(ellipse at 96% 76%, #d4dceb55, transparent 48%),
-    radial-gradient(ellipse at 2% 98%, var(--workspace-tint), transparent 58%);
-  background-size: 24px 24px, 100% 100%, 100% 100%;
+  background-color: transparent;
+  background-image: none;
 }
 
-/* 四端统一橙白主色，仅用极浅的底色差异区分端别，避免各端各一套色系 */
-.workspace-theme[data-role="LAB_TEACHER"] { --workspace-tint: #fbe8da; }
-.workspace-theme[data-role="LAB_LEADER"] { --workspace-tint: #fbe4d2; }
-.workspace-theme[data-role="COLLEGE_ADMIN"] { --workspace-tint: #fdeee2; }
+/* 四端统一橙白主色，仅用极浅的橙色浓度区分端别 */
+.workspace-theme[data-role="LAB_TEACHER"] { --workspace-tint: rgba(234, 88, 12, 0.09); }
+.workspace-theme[data-role="LAB_LEADER"] { --workspace-tint: rgba(234, 88, 12, 0.12); }
+.workspace-theme[data-role="COLLEGE_ADMIN"] { --workspace-tint: rgba(234, 88, 12, 0.08); }
 
 .workspace-backdrop {
   position: relative;
@@ -79,7 +77,7 @@
   height: 7px;
   border: 1px solid color-mix(in srgb, var(--workspace-accent) 24%, transparent);
   border-radius: 50%;
-  background: var(--workspace-canvas);
+  background: rgba(255, 255, 255, 0.7);
 }
 .workspace-backdrop-branch::before { inset-block-start: -4px; }
 .workspace-backdrop-branch::after { inset-block-end: -4px; }
@@ -111,10 +109,10 @@
   .workspace-backdrop-branch { display: none; }
 }
 
+/* 顶栏与导航岛的玻璃外观由各自布局组件定义（含透镜层与让位动画），这里只保证不冲突 */
 .workspace-theme .topbar,
 .workspace-theme .student-top {
-  background: #fffbf7;
-  border-bottom-color: var(--workspace-border);
+  border-bottom-color: transparent;
 }
 
 .workspace-logo {
@@ -126,19 +124,37 @@
 
 .workspace-ribbon {
   position: relative;
-  isolation: isolate;
+  isolation: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, auto);
   align-items: center;
   gap: 16px;
   padding: clamp(18px, 2.5vw, 30px);
-  border: 1px solid var(--workspace-border);
-  border-radius: 16px;
-  background:
+  border: 0;
+  border-radius: 24px;
+  /* 玻璃面：淡淡的技术网格留在玻璃内部，作为折射的纹理锚点 */
+  background-color: var(--workspace-paper);
+  background-image:
     var(--workspace-grid),
-    linear-gradient(110deg, var(--workspace-paper) 35%, var(--workspace-tint));
-  background-size: 32px 32px, 32px 32px, 100% 100%;
-  box-shadow: 0 10px 32px #34241c08;
+    radial-gradient(130% 120% at 6% -18%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 56%),
+    linear-gradient(112deg, rgba(255, 255, 255, 0.5) 20%, var(--workspace-tint) 100%);
+  background-size: 32px 32px, 32px 32px, 100% 100%, 100% 100%;
+  -webkit-backdrop-filter: blur(8px) saturate(175%);
+  backdrop-filter: blur(8px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 1px 0 0 rgba(255, 255, 255, 0.5),
+    inset -1px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.7),
+    inset 0 0 34px rgba(255, 255, 255, 0.34),
+    var(--lg-shadow);
+  animation: ribbonFlow 26s ease-in-out infinite;
+}
+
+/* 高光在玻璃里缓慢巡游：流动感来自 background-position，不叠加覆盖层 */
+@keyframes ribbonFlow {
+  0%, 100% { background-position: 0 0, 0 0, 0% 0%, 0% 0%; }
+  50% { background-position: 0 0, 0 0, 100% 100%, 100% 100%; }
 }
 
 .workspace-ribbon strong { font-size: clamp(17px, 2vw, 22px); }
@@ -168,13 +184,15 @@
 .workspace-theme .page-title { color: var(--workspace-ink); font-size: clamp(21px, 2.2vw, 28px); font-weight: 700; }
 .workspace-theme .page-desc { color: var(--workspace-muted); }
 .workspace-theme :where(.el-card, .card) {
-  --el-card-border-color: var(--workspace-border);
-  --el-card-border-radius: var(--lm-radius);
+  --el-card-border-color: transparent;
+  --el-card-border-radius: 20px;
   --el-card-bg-color: var(--workspace-paper);
 }
 .workspace-theme .el-card__header {
-  background: color-mix(in srgb, var(--workspace-tint) 38%, var(--workspace-paper));
-  font-weight: 650;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), color-mix(in srgb, var(--workspace-tint) 42%, transparent));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  font-weight: 680;
+  letter-spacing: -0.005em;
 }
 .workspace-theme .el-card__header::before {
   content: '';
@@ -183,16 +201,42 @@
   width: 8px;
   height: 8px;
   margin: .45em 9px .25em 0;
-  border: 1px solid var(--workspace-accent);
-  border-radius: 2px;
+  border: 0;
+  border-radius: 3px;
+  background: linear-gradient(150deg, #ffa163, var(--workspace-accent));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--workspace-accent) 14%, transparent);
 }
 .workspace-theme .stat-card {
   min-width: 0;
-  background: linear-gradient(135deg, var(--workspace-paper) 55%, var(--workspace-tint));
-  border: 1px solid var(--workspace-border);
-  border-inline-start: 2px solid var(--workspace-accent);
-  border-radius: var(--lm-radius);
+  position: relative;
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.42);
+  background-image:
+    radial-gradient(130% 130% at 0% -20%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(140deg, rgba(255, 255, 255, 0.42) 40%, var(--workspace-tint) 100%);
+  border: 0;
+  border-radius: 20px;
   font-variant-numeric: tabular-nums;
+  -webkit-backdrop-filter: blur(6px) saturate(175%);
+  backdrop-filter: blur(6px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 1px 0 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    var(--lg-shadow);
+  transition: box-shadow 0.42s var(--lg-ease);
+}
+/* 左侧一道橙色光带，替代原来的硬色条 */
+.workspace-theme .stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, transparent, var(--workspace-accent) 24%, var(--workspace-accent) 76%, transparent);
+  opacity: .85;
+}
+@media (hover: hover) {
+  .workspace-theme .stat-card:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.98), inset 0 -1px 0 rgba(255, 255, 255, 0.7), var(--lg-shadow-hover); }
 }
 .workspace-theme .el-table {
   --el-table-header-bg-color: var(--workspace-tint);
@@ -235,36 +279,52 @@
   min-width: 0;
   min-height: 42px;
   padding: 9px 13px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 9px;
-  background: var(--workspace-paper);
+  border: 0;
+  border-radius: 14px;
+  background-color: rgba(255, 255, 255, 0.44);
+  background-image: linear-gradient(158deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08));
   color: var(--workspace-accent);
   font-weight: 600;
   line-height: 1.4;
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+  backdrop-filter: blur(8px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.55),
+    0 1px 2px rgba(58, 41, 28, 0.04),
+    0 6px 16px -14px rgba(58, 41, 28, 0.26);
 }
 .workspace-action .el-icon { flex: none; }
 .workspace-action .workspace-arrow { margin-inline-start: auto; flex: none; }
 @media (hover: hover) {
   .workspace-theme .workspace-action:hover {
-    background: var(--workspace-tint);
-    border-color: var(--el-color-primary-light-5);
-    box-shadow: 0 3px 8px #32231d13;
+    background-color: rgba(255, 255, 255, 0.66);
+    background-image: linear-gradient(158deg, rgba(255, 255, 255, 0.7), color-mix(in srgb, var(--workspace-tint) 60%, transparent));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.98),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.7),
+      0 2px 4px rgba(58, 41, 28, 0.04),
+      0 12px 24px -14px rgba(58, 41, 28, 0.32);
   }
   .workspace-theme .el-button:not(.is-text, .is-link, .is-disabled, .is-loading):hover {
-    box-shadow: inset 0 -2px 0 #17101125, 0 3px 8px #32231d13;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.98),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.62),
+      0 2px 4px rgba(58, 41, 28, 0.04),
+      0 12px 24px -14px rgba(58, 41, 28, 0.32);
   }
 }
 
 .workspace-popover {
-  --workspace-accent: #594779;
-  --workspace-tint: #eee7f3;
+  --workspace-accent: #ea580c;
+  --workspace-tint: rgba(234, 88, 12, 0.1);
   --el-menu-hover-bg-color: var(--workspace-tint);
   --el-menu-active-color: var(--workspace-accent);
-  --el-dropdown-menuItem-hover-fill: var(--workspace-tint);
+  --el-dropdown-menuItem-hover-fill: rgba(255, 255, 255, 0.72);
   --el-dropdown-menuItem-hover-color: var(--workspace-accent);
 }
-.workspace-popover .el-menu--popup { padding: 6px; border-radius: 10px; }
-.workspace-popover .el-menu-item { border-radius: 7px; }
+.workspace-popover .el-menu--popup { padding: 6px; border-radius: 16px; }
+.workspace-popover .el-menu-item { border-radius: 10px; }
 
 @media (max-width: 600px) {
   .workspace-ribbon { grid-template-columns: minmax(0, 1fr); }

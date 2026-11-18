@@ -117,11 +117,17 @@ npm run db:init
 npm run db:check
 ```
 
-迁移脚本位于 `database/`，编号 `migration_v2.sql` … `migration_v12.sql`，按序应用。上线前可先做静态校验：
+迁移脚本位于 `database/`，编号 `migration_v2.sql` … `migration_v13.sql`，按序应用。上线前可先做静态校验：
 
 ```bash
 node database/verify.js
 ```
+
+> **v13 迁移要点（多轮补录与全院调剂池）**：新增 `recruitment_rounds` 表（批次内轮次），并给
+> `student_preferences` / `interviews` / `admission_intentions` / `adjustments` / `final_admissions`
+> 五张表补 `round` 列（默认 1）；面试唯一键由 `(batch, student, lab, attempt_no)` 调整为
+> `(batch, student, lab, round, attempt_no)`，使同一学生在不同补录轮可各面一次。
+> 历史数据无需回填处理，`round` 默认为 1 即等价于「第一轮」。
 
 > **注意**：`database/verify.js` 只做静态检查（编号连续性、DDL 完整性、表映射覆盖）。首次在目标库执行迁移前，请先在**测试库**跑一遍 `npm run db:init` 并用 `npm run db:check` 确认，再对生产库执行。迁移只做新增与修改，不删除既有表。
 
@@ -301,6 +307,7 @@ S3_BUCKET=
 S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
 S3_FORCE_PATH_STYLE=false
+S3_PRESIGN_MINIMAL=false
 
 RECORDING_POLICY_VERSION=
 RECORDING_NOTICE=
@@ -313,6 +320,39 @@ RECORDING_MANAGE_IDS=
 - 桶应设为**私有**，播放通过后端签发的短期地址进行。
 - `RECORDING_POLICY_VERSION` 等告知类配置未填写时，系统不开启录制。
 - 录像保留天数由 `RECORDING_RETENTION_DAYS` 控制，到期由后台任务清理。
+
+### 阿里云 OSS 的三处差异（已实测）
+
+用阿里云 OSS 的 S3 兼容接口时，下列三项与 AWS / Cloudflare R2 不同，配错会直接 403 或 400：
+
+| 配置 | 取值 | 不这样配的后果 |
+| --- | --- | --- |
+| `S3_ENDPOINT` | `https://s3.oss-{region}.aliyuncs.com` | 用 `oss-{region}.aliyuncs.com` 也能连通，但 S3 兼容语义以 `s3.` 域名为准 |
+| `S3_FORCE_PATH_STYLE` | 必须 `false` | `true` 时报 `403 SecondLevelDomainForbidden: Please use virtual hosted style` |
+| `S3_PRESIGN_MINIMAL` | 必须 `true` | `false` 时预签名带 `response-content-type`，报 `400 InvalidRequest: Can not override response header on content-type`，导致录像播放与下载全部失败 |
+
+另注意：2025-03-20 起新开通的中国内地地域 Bucket，默认外网域名禁止数据操作 API，需绑定已备案的自定义域名；选 `cn-hongkong` 可规避。
+
+RAM 子账号最小权限（自定义策略，桶名按实际替换）：
+
+```json
+{
+  "Version": "1",
+  "Statement": [
+    { "Effect": "Allow",
+      "Action": ["oss:PutObject", "oss:GetObject", "oss:DeleteObject",
+                 "oss:AbortMultipartUpload", "oss:ListParts"],
+      "Resource": ["acs:oss:*:*:lab-match-recordings-2026/*"] },
+    { "Effect": "Allow",
+      "Action": ["oss:ListObjects", "oss:GetBucketInfo"],
+      "Resource": ["acs:oss:*:*:lab-match-recordings-2026"] }
+  ]
+}
+```
+
+策略建好后必须到「用户 → 权限管理 → 新增授权」挂到 RAM 子账号上，并把策略类型切到「自定义策略」；只建不挂等于没有权限。
+
+配置完成后用 `npm run check:storage` 验证（桶权限 → 写入 → 读回 → 预签名 → 删除，五步）。
 
 ---
 

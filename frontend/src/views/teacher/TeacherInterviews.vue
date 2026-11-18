@@ -408,7 +408,7 @@ onMounted(async () => {
 
 <style scoped>
 .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.panel-meetings { padding: 16px; margin-bottom: 16px; border: 1px solid #ebd8cc; border-radius: 12px; background: #fff7ef; }
+.panel-meetings { padding: 16px; margin-bottom: 16px; border: 0; border-radius: 16px; background: color-mix(in srgb, #ea580c 9%, rgba(255,255,255,.6)); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); }
 .panel-meetings h3 { margin: 0 0 8px; }
 .panel-row { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0; }
 .panel-row :deep(.el-input), .panel-row :deep(.el-select) { max-width: 260px; }

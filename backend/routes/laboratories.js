@@ -30,6 +30,18 @@ const LabSchema = z.object({
   technologyStack: z.string().trim().max(255).optional().default(''),
   recruitmentQuota: z.number().int().min(0).max(4294967295).optional().default(5),
   leaderId: z.number().int().optional().nullable(),
+  // 档案类字段：学院端维护，列表与详情都会展示。
+  // 注意：这些字段一律不写 .default()，避免 PUT（LabSchema.partial()）时被空串覆盖。
+  labCode: z.string().trim().max(64).optional(),
+  college: z.string().trim().max(64).optional(),
+  location: z.string().trim().max(128).optional(),
+  researchDirection: z.string().trim().max(255).optional(),
+  detail: z.string().trim().max(5000).optional(),
+  features: z.string().trim().max(5000).optional(),
+  achievements: z.string().trim().max(5000).optional(),
+  equipment: z.string().trim().max(5000).optional(),
+  contact: z.string().trim().max(128).optional(),
+  remark: z.string().trim().max(1000).optional(),
   // 集中宣讲：每个实训室的文字介绍 + 外部视频（教师线下宣讲录制）
   briefingText: z.string().optional().default(''),
   briefingVideoUrl: videoAddress.optional().nullable(),
@@ -124,8 +136,7 @@ router.get('/:id', (req, res) => {
 })
 
 router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
-  const { name } = LabSchema.pick({ name: true }).parse(req.body || {})
-  const body = LabSchema.parse({ name, recruitmentQuota: 0 })
+  const body = LabSchema.parse({ recruitmentQuota: 0, ...(req.body || {}) })
   const store = getStore()
   const id = nextId(store.laboratories)
   const lab = { id, ...body, createdAt: new Date().toISOString() }
@@ -149,7 +160,9 @@ router.put('/:id', requireAuth, (req, res) => {
     return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '无权限修改此实训室', data: null })
   }
 
-  const body = LabSchema.partial().parse(req.body || {})
+  const parsed = LabSchema.partial().parse(req.body || {})
+  // 只更新显式传入的字段，避免任何默认值把已有资料清空
+  const body = Object.fromEntries(Object.entries(parsed).filter(([, value]) => value !== undefined))
   if (role === ROLES.COLLEGE_ADMIN) {
     // 学院管理员：可维护全部基础资料并指定组长
     if (body.leaderId != null && !store.users.some(user => user.id === body.leaderId &&

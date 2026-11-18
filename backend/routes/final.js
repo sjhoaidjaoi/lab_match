@@ -1,5 +1,7 @@
 // ============ 第八阶段：最终录取名单 / 公示 ============
-// POST   /api/final/merge                 学院合并确认+调剂结果生成最终名单
+// 学生确认录取、调剂确认、调剂池确认时已由 utils/finalSync 自动同步进最终名单，
+// 学院端不再设置「名单审核 / 录取确认」闸门，本文件只负责汇总、校验与公示。
+// POST   /api/final/merge                 重算最终名单（幂等，用于数据修复）
 // GET    /api/final/list                  最终名单（按实训室）
 // POST   /api/final/publicity             发布公示
 // GET    /api/final/publication           查询公示
@@ -16,6 +18,7 @@ const { logOperation } = require('../utils/audit')
 const { scopedChoice, currentBatch, stageOpen } = require('../utils/applicationScope')
 const { batchWritableError } = require('../utils/recruitment')
 const { labCapacity, teacherCapacity } = require('../utils/mentorCapacity')
+const { syncFinalAdmissions } = require('../utils/finalSync')
 
 // 批次已停止/结束/暂停时拒绝新的业务写入
 function assertWritable(res, batch) {
@@ -31,7 +34,7 @@ function assertWritable(res, batch) {
   return true
 }
 
-// 合并生成最终名单（学院管理员）
+// 重算最终名单（学院管理员）：正常流程下名单已随录取确认自动同步，这里只做幂等重算
 router.post('/merge', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyncMutation(async (req, res) => {
   const store = structuredClone(getStore())
   const activeBatch = currentBatch(store)
@@ -40,75 +43,32 @@ router.post('/merge', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyncMutati
   if (store.publication?.batchId === activeBatch.id && store.publication.status === 'PUBLISHED') {
     return res.status(409).json({ message: '公示已发布，不能重新合并已审核名单' })
   }
-  if ((store.recruitmentReviews || []).some(row => row.batchId === activeBatch.id && row.kind !== 'TEACHER' && row.status === 'SUBMITTED')) {
-    return res.status(409).json({ message: '请先处理实训室待审核名单及内部调剂汇总' })
-  }
 
-  // 合并规则：
-  // 1. admissionIntentions 中 CONFIRMED 的 INTENDED
-  // 2. adjustments 中 CONFIRMED 的 CROSS_LAB / INTERNAL（不重复计入 1）
-  const confirmed = new Map() // studentId -> admission_source
-  const conflicting = new Set()
-  function addConfirmed(studentId, value) {
-    const existing = confirmed.get(studentId)
-    if (existing && (existing.laboratoryId !== value.laboratoryId ||
-        (existing.labTeacherId != null && value.labTeacherId != null && existing.labTeacherId !== value.labTeacherId))) {
-      conflicting.add(studentId)
-    }
-    if (!existing) confirmed.set(studentId, value)
-  }
-  store.admissionIntentions
-    .filter((a) => a.batchId === activeBatch.id && a.admissionType === 'INTENDED' && a.status === 'CONFIRMED')
-    .forEach((a) => addConfirmed(a.studentId, { laboratoryId: a.laboratoryId, labTeacherId: a.labTeacherId, source: 'INTENDED_CONFIRMED' }))
-
-  store.adjustments
-    .filter((a) => a.batchId === activeBatch.id && a.status === 'CONFIRMED')
-    .forEach((a) => {
-      addConfirmed(a.studentId, { laboratoryId: a.targetLaboratoryId, labTeacherId: a.targetLabTeacherId, source: a.adjustmentType })
-    })
-  if (conflicting.size) return res.status(409).json({ message: '存在重复确认的录取去向，请先处理异常记录' })
-
-  // 合并前校验：名额与重复录取
-  const perLabCount = new Map()
-  confirmed.forEach((v) => perLabCount.set(v.laboratoryId, (perLabCount.get(v.laboratoryId) || 0) + 1))
-  const overQuota = store.laboratories
-    .filter((lab) => (perLabCount.get(lab.id) || 0) > labCapacity(store, activeBatch.id, lab))
-    .map((lab) => `${lab.name}（${perLabCount.get(lab.id)}/${labCapacity(store, activeBatch.id, lab)}）`)
-  if (overQuota.length) {
-    return res.status(400).json({
+  // 已确认去向 = 拟录取确认 + 调剂确认；冲突/超额在这里显式报错，不做静默丢弃
+  const result = syncFinalAdmissions(store, activeBatch.id, { strict: true })
+  if (result.conflicts.length) {
+    return res.status(409).json({
       code: 'BUSINESS_ERROR',
-      message: `存在超额录取，无法生成最终名单：${overQuota.join('、')}`,
+      message: `存在重复确认的录取去向，请先处理异常记录（学生#${result.conflicts.join('、#')}）`,
       data: null
     })
   }
-
-  // 保留已正式入组记录的状态，避免重复合并丢失入组结果
-  const enrolledMap = new Map(
-    store.finalAdmissions
-      .filter((f) => f.batchId === activeBatch.id && f.finalStatus === 'ENROLLED')
-      .map((f) => [f.studentId, f])
-  )
-  store.finalAdmissions = store.finalAdmissions.filter(item => item.batchId !== activeBatch.id)
-  confirmed.forEach((v, studentId) => {
-    const wasEnrolled = enrolledMap.get(studentId)
-    store.finalAdmissions.push({
-      id: nextId(store.finalAdmissions),
-      batchId: activeBatch.id, studentId, laboratoryId: v.laboratoryId,
-      labTeacherId: v.labTeacherId ?? null,
-      admissionSource: v.source,
-      finalStatus: wasEnrolled && wasEnrolled.laboratoryId === v.laboratoryId ? 'ENROLLED' : 'ADMITTED',
-      confirmedAt: wasEnrolled?.confirmedAt || new Date().toISOString()
+  if (result.overQuota.length) {
+    return res.status(400).json({
+      code: 'BUSINESS_ERROR',
+      message: `存在超额录取，无法生成最终名单：${result.overQuota.map((lab) => `${lab.name}（${lab.count}/${lab.capacity}）`).join('、')}`,
+      data: null
     })
-  })
+  }
   const validation = finalChecks(store, activeBatch)
   if (validation.overMentorQuota.length) return res.status(409).json({ message: '存在导师超额或归属异常，请先校正名单' })
   if (store.finalReview?.batchId === activeBatch.id) store.finalReview = null
   logOperation(store, req, {
     operationType: 'MERGE_FINAL_LIST', targetType: 'FINAL_LIST', targetId: activeBatch.id,
-    description: `合并生成最终录取名单，共 ${store.finalAdmissions.length} 人`
+    description: `重算最终录取名单，共 ${result.merged} 人`
   })
   await commitStore(store)
-  res.json(ok({ merged: confirmed.size }))
+  res.json(ok({ merged: result.merged }))
 }))
 
 // 查看最终名单（学院全院 / 教师组长本室）

@@ -182,9 +182,13 @@ onMounted(load)
   gap: 6px;
   min-width: 0;
   padding: 14px 16px;
-  border: 1px solid var(--workspace-border);
-  border-radius: 11px;
-  background: #fffaf6e8;
+  border: 0;
+  border-radius: 14px;
+  background-color: rgba(255, 255, 255, 0.56);
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.24));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.62);
 }
 .student-current .workspace-action { margin-top: 4px; }
 .student-current small, .student-stage-heading small { color: var(--workspace-muted); font-size: 12px; }

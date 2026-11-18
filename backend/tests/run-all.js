@@ -14,6 +14,7 @@ const SUITES = [
   { name: '接口冒烟（四端业务 + 权限）', file: 'tests/api.smoke.js' },
   { name: '选拔流程（八阶段 + 批次停止 + 分级账号）', file: 'tests/recruitment-flow.js' },
   { name: '实训室资料管理（学院统一维护）', file: 'tests/lab-profile.js' },
+  { name: '多轮补录与全院调剂池', file: 'tests/allocation.js' },
   { name: '阶段真实时钟自动流转', file: 'tests/stage-clock.js' },
   { name: '接口限流与登录防爆破', file: 'tests/rate-limit.js' },
   { name: '线上面试（排期/等候/令牌/聊天）', file: 'tests/interview-video.js' },
@@ -27,6 +28,7 @@ function extractSummary(output) {
     /=====\s*流程验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/,
     /结果：通过\s*(\d+)\s*项，失败\s*(\d+)\s*项/,
     /=====\s*阶段时钟验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/,
+    /=====\s*补录与调剂验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/,
     /=====\s*限流验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/
   ]
   for (const pattern of patterns) {

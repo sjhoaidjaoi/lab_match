@@ -216,11 +216,22 @@ onBeforeUnmount(() => window.clearInterval(timer))
   justify-content: space-between;
   gap: 20px;
   padding: 22px 24px;
-  border: 1px solid var(--lm-border);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 92% 10%, rgba(255, 178, 107, 0.24), transparent 52%),
-    #fffaf4;
+  border: 0;
+  border-radius: 26px;
+  background-color: var(--workspace-paper);
+  background-image:
+    radial-gradient(130% 130% at 90% -20%, rgba(255, 178, 107, 0.4), rgba(255, 255, 255, 0) 56%),
+    radial-gradient(120% 120% at 0% -30%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 58%),
+    linear-gradient(118deg, rgba(255, 255, 255, 0.5) 20%, rgba(234, 88, 12, 0.1) 100%);
+  background-size: 100% 100%, 100% 100%, 220% 220%;
+  -webkit-backdrop-filter: blur(8px) saturate(175%);
+  backdrop-filter: blur(8px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 1px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.7),
+    var(--lg-shadow);
+  animation: dashHeroFlow 26s ease-in-out infinite;
 }
 
 .kicker {
@@ -254,9 +265,16 @@ onBeforeUnmount(() => window.clearInterval(timer))
 /* ---------- 待办 ---------- */
 .todo-block {
   padding: 18px 20px 20px;
-  border: 1px solid var(--lm-border);
-  border-radius: 18px;
-  background: #fff;
+  border: 0;
+  border-radius: 22px;
+  background-color: var(--workspace-paper);
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.08) 62%);
+  -webkit-backdrop-filter: blur(6px) saturate(175%);
+  backdrop-filter: blur(6px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    var(--lg-shadow);
 }
 
 .block-head {
@@ -283,9 +301,13 @@ onBeforeUnmount(() => window.clearInterval(timer))
   align-items: center;
   gap: 14px;
   padding: 14px 16px;
-  border: 1px solid #f0e4d8;
-  border-radius: 14px;
-  background: #fffdfa;
+  border: 0;
+  border-radius: 16px;
+  background-color: rgba(255, 255, 255, 0.5);
+  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.22));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6);
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -295,10 +317,10 @@ onBeforeUnmount(() => window.clearInterval(timer))
 
 .todo-card:hover,
 .todo-card:focus-visible {
-  transform: translateY(-2px);
-  border-color: #f3c39c;
-  background: #fff8f1;
-  box-shadow: 0 10px 24px rgba(196, 120, 60, 0.12);
+  background-color: rgba(255, 255, 255, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 12px 26px -16px rgba(58, 41, 28, 0.4);
   outline: none;
 }
 
@@ -309,8 +331,9 @@ onBeforeUnmount(() => window.clearInterval(timer))
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  background: #fdeee0;
+  border-radius: 14px;
+  background: color-mix(in srgb, #ea580c 14%, rgba(255, 255, 255, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
   color: #c2410c;
   font-size: 18px;
   font-weight: 700;
@@ -366,7 +389,8 @@ onBeforeUnmount(() => window.clearInterval(timer))
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #f1f7f2;
+  background: color-mix(in srgb, #2f7d4f 12%, rgba(255, 255, 255, 0.6));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   color: #2f7d4f;
   font-size: 18px;
   font-weight: 700;
@@ -396,9 +420,16 @@ onBeforeUnmount(() => window.clearInterval(timer))
   align-items: center;
   gap: 16px;
   padding: 18px 20px;
-  border: 1px solid var(--lm-border);
-  border-radius: 16px;
-  background: #fff;
+  border: 0;
+  background-color: var(--workspace-paper, rgba(255, 255, 255, 0.46));
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.08) 62%);
+  -webkit-backdrop-filter: blur(6px) saturate(175%);
+  backdrop-filter: blur(6px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    var(--lg-shadow);
+  border-radius: 20px;
 }
 
 .metric-icon {
@@ -409,13 +440,16 @@ onBeforeUnmount(() => window.clearInterval(timer))
   justify-content: center;
   border-radius: 14px;
   flex-shrink: 0;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.55);
 }
 
 .metric-icon svg { width: 24px; height: 24px; }
 
-.tone-brand { background: #fdeee0; color: #ea580c; }
-.tone-warm { background: #fdf1e4; color: #c2410c; }
-.tone-sand { background: #f4efe7; color: #8a6a4b; }
+.tone-brand { background: color-mix(in srgb, #ea580c 14%, rgba(255, 255, 255, 0.46)); color: #ea580c; }
+.tone-warm { background: color-mix(in srgb, #c2410c 12%, rgba(255, 255, 255, 0.46)); color: #c2410c; }
+.tone-sand { background: color-mix(in srgb, #8a6a4b 12%, rgba(255, 255, 255, 0.5)); color: #8a6a4b; }
 
 .metric-body {
   display: flex;
@@ -448,9 +482,16 @@ onBeforeUnmount(() => window.clearInterval(timer))
 /* ---------- 面板 ---------- */
 .panel {
   padding: 18px 20px 20px;
-  border: 1px solid var(--lm-border);
-  border-radius: 18px;
-  background: #fff;
+  border: 0;
+  border-radius: 22px;
+  background-color: var(--workspace-paper);
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.08) 62%);
+  -webkit-backdrop-filter: blur(6px) saturate(175%);
+  backdrop-filter: blur(6px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    var(--lg-shadow);
 }
 
 .panel-head {
@@ -480,5 +521,10 @@ onBeforeUnmount(() => window.clearInterval(timer))
 @media (max-width: 900px) {
   .metrics { grid-template-columns: 1fr; }
   .dash-head { flex-direction: column; }
+}
+
+@keyframes dashHeroFlow {
+  0%, 100% { background-position: 0 0, 0 0, 0% 0%; }
+  50% { background-position: 0 0, 0 0, 100% 100%; }
 }
 </style>

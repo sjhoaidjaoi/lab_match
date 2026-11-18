@@ -1,6 +1,8 @@
 <template>
   <div class="student-shell workspace-theme" data-role="STUDENT">
+    <GlassAmbient />
     <header class="student-top">
+      <span class="lg-lens" aria-hidden="true"></span>
       <RouterLink class="student-brand" to="/student/dashboard">
         <img class="workspace-logo" :src="schoolLogo" alt="河北师范大学软件学院" />
       </RouterLink>
@@ -26,6 +28,7 @@
       </main>
       <WorkspaceBackdrop />
     </div>
+    <AssistantDock />
   </div>
 </template>
 <script setup lang="ts">
@@ -34,6 +37,8 @@ import { menus } from '@/router/menus'
 import { useAuthStore } from '@/stores/auth'
 import { studentMvp } from '@/api/studentMvp'
 import WorkspaceBackdrop from '@/components/WorkspaceBackdrop.vue'
+import AssistantDock from '@/components/AssistantDock.vue'
+import GlassAmbient from '@/components/GlassAmbient.vue'
 import '@/styles/student.css'
 import '@/styles/workspace.css'
 
@@ -47,7 +52,7 @@ const mvpMenuPaths = new Set([
 const studentMenus = studentMvp ? menus.STUDENT.filter(item => mvpMenuPaths.has(item.path)) : menus.STUDENT
 const groups = [
   { name: '概览', paths: ['dashboard', 'announcement', 'labs'] },
-  { name: '选拔', paths: ['application', 'interview', 'admission-confirmation', 'allocation', 'result'] },
+  { name: '选拔', paths: ['application', 'interview', 'admission-confirmation', 'supplement', 'allocation', 'result'] },
   { name: '支持', paths: ['help'] }
 ].map(({ name, paths }) => ({ name, items: studentMenus.filter(item => paths.includes(item.path.replace('/student/', ''))) }))
 const route = useRoute()

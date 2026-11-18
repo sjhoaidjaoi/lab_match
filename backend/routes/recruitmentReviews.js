@@ -9,6 +9,7 @@ const { batchWritableError, stageOf } = require('../utils/recruitment')
 const { mentorCapacityError, occupiedAdmissionStudents, occupiesInvitation, labCapacity } = require('../utils/mentorCapacity')
 const { logOperation } = require('../utils/audit')
 const { resumeView } = require('./resumes')
+const rounds = require('../utils/rounds')
 const selection = require('../services/interviewSelection')
 
 const staff = requireRole(ROLES.LAB_TEACHER, ROLES.LAB_LEADER, ROLES.COLLEGE_ADMIN)
@@ -218,39 +219,21 @@ router.post('/teacher/:id/return', requireAuth, requireRole(ROLES.LAB_LEADER), h
   return save(ctx, req, row, 'RETURN_TEACHER_LIST')
 }))
 
-router.post('/lab', requireAuth, requireRole(ROLES.LAB_LEADER), handler(async req => {
-  const ctx = context(req)
-  const labId = Number(ctx.user.laboratoryId)
-  if (!labId || ![4, 5].some(stage => stageOpen(ctx.store, ctx.batch.id, stage))) reject('当前不在名单提交阶段')
-  const last = ctx.rows.filter(row => row.kind === 'LAB' && row.batchId === ctx.batch.id && row.laboratoryId === labId)
-    .sort((a, b) => b.version - a.version)[0]
-  if (last && last.status !== 'RETURNED') reject('本室已有等待审核或已审核的名单')
-  const entries = selectEntries(ctx, req.body?.entries, labId)
-  const candidates = new Map(labCandidates(ctx.store, ctx.batch.id, ctx.user, labId).map(item => [item.studentId, item]))
-  if (entries.some(item => !candidates.has(item.studentId))) reject('名单须来自教师已发邀请、已提交建议或组长本人面试通过的学生')
-  if (entries.some(item => candidates.get(item.studentId).source === 'INVITATION' && item.type !== 'INTENDED')) {
-    reject('已发出的入组邀请只能以拟录取报送')
-  }
-  const row = { id: nextId(ctx.rows), batchId: ctx.batch.id, laboratoryId: labId,
-    kind: 'LAB', authorId: ctx.user.uid, entries,
-    version: (last?.version || 0) + 1, status: 'SUBMITTED', submittedAt: new Date().toISOString() }
-  ctx.rows.push(row)
-  return save(ctx, req, row, 'SUBMIT_LAB_LIST')
-}))
+// 补录轮次（第 2/3 轮）开放期间，报送与发布不再受首轮阶段时间窗限制
+function supplementRoundOf(store, batchId) {
+  const open = rounds.openRoundOf(store, batchId)
+  return open && open.round >= 2 ? open : null
+}
 
-router.post('/lab/:id/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), handler(async req => {
-  const ctx = context(req)
-  const row = findReview(ctx, req.params.id, 'LAB')
-  if (row.status !== 'SUBMITTED') reject('该版本已经处理')
-  if (!z.boolean().parse(req.body?.approve)) {
-    row.status = 'RETURNED'
-    row.returnReason = noteSchema.parse(req.body?.reason)
-    return save(ctx, req, row, 'RETURN_LAB_LIST')
-  }
-  if (!stageOpen(ctx.store, ctx.batch.id, 5)) reject('仅在拟录取确认阶段发布学生通知')
+// 名单生效：生成拟录取/递补记录并通知学生。
+// 学院端不再设「名单审核」闸门（阶段任务菜单已下线），组长报送即生效。
+function publishLabList(ctx, req, row) {
   const lab = ctx.store.laboratories.find(item => item.id === row.laboratoryId)
   if (!lab || lab.status !== 'ACTIVE') reject('实训室当前不可用')
   const stage = ctx.store.recruitmentStages.find(item => item.batchId === ctx.batch.id && item.stageNumber === 5)
+  const supplement = supplementRoundOf(ctx.store, ctx.batch.id)
+  // 补录轮次期间不设确认截止：由「结束本轮录取」统一控制
+  const deadline = supplement ? null : (stage?.endTime || null)
   for (const item of selectEntries(ctx, row.entries, lab.id)) {
     const active = ctx.store.admissionIntentions.filter(record => record.batchId === ctx.batch.id && occupiesInvitation(ctx.store, record))
     const existing = ctx.store.admissionIntentions.find(record => record.batchId === ctx.batch.id &&
@@ -268,13 +251,57 @@ router.post('/lab/:id/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), ha
     const now = new Date().toISOString()
     ctx.store.admissionIntentions.push({ id: nextId(ctx.store.admissionIntentions), batchId: ctx.batch.id,
       laboratoryId: lab.id, studentId: item.studentId, labTeacherId: item.labTeacherId, reason: item.reason,
-      admissionType: item.type, status: 'PENDING', createdAt: now, confirmationDeadline: stage.endTime || null })
+      admissionType: item.type, status: 'PENDING', round: rounds.currentRoundOf(ctx.store, ctx.batch.id),
+      createdAt: now, confirmationDeadline: deadline })
     if (item.type === 'INTENDED') ctx.store.notices.push({ id: nextId(ctx.store.notices), targetUserId: item.studentId,
       targetRole: 'STUDENT', title: `${lab.name} · 拟录取通知`, content: '请在截止前前往拟录取确认页面处理。',
-      read: false, createdBy: ctx.user.uid, createdAt: now })
+      read: false, createdBy: req.user.uid, createdAt: now })
   }
   row.status = 'APPROVED'
   row.reviewedAt = new Date().toISOString()
+  row.reviewedBy = req.user.uid
+  row.autoPublished = true
+  return row
+}
+
+router.post('/lab', requireAuth, requireRole(ROLES.LAB_LEADER), handler(async req => {
+  const ctx = context(req)
+  const labId = Number(ctx.user.laboratoryId)
+  if (!labId || (![4, 5].some(stage => stageOpen(ctx.store, ctx.batch.id, stage)) && !supplementRoundOf(ctx.store, ctx.batch.id))) {
+    reject('当前不在名单提交阶段')
+  }
+  const currentRound = rounds.currentRoundOf(ctx.store, ctx.batch.id)
+  const last = ctx.rows.filter(row => row.kind === 'LAB' && row.batchId === ctx.batch.id &&
+    row.laboratoryId === labId && (row.round ?? 1) === currentRound)
+    .sort((a, b) => b.version - a.version)[0]
+  if (last && last.status !== 'RETURNED') reject('本轮本室名单已报送，如需修改请先申请退回')
+  const entries = selectEntries(ctx, req.body?.entries, labId)
+  const candidates = new Map(labCandidates(ctx.store, ctx.batch.id, ctx.user, labId).map(item => [item.studentId, item]))
+  if (entries.some(item => !candidates.has(item.studentId))) reject('名单须来自教师已发邀请、已提交建议或组长本人面试通过的学生')
+  if (entries.some(item => candidates.get(item.studentId).source === 'INVITATION' && item.type !== 'INTENDED')) {
+    reject('已发出的入组邀请只能以拟录取报送')
+  }
+  const row = { id: nextId(ctx.rows), batchId: ctx.batch.id, laboratoryId: labId,
+    kind: 'LAB', authorId: ctx.user.uid, entries, round: currentRound,
+    version: (last?.version || 0) + 1, status: 'SUBMITTED', submittedAt: new Date().toISOString() }
+  ctx.rows.push(row)
+  // 报送即生效：直接生成拟录取记录并通知学生，无需学院再点审核
+  publishLabList(ctx, req, row)
+  return save(ctx, req, row, 'SUBMIT_LAB_LIST')
+}))
+
+// 兼容保留：学院若需人工干预可再次触发（已生效的版本不再重复发布）
+router.post('/lab/:id/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), handler(async req => {
+  const ctx = context(req)
+  const row = findReview(ctx, req.params.id, 'LAB')
+  if (row.status === 'APPROVED') return row
+  if (row.status !== 'SUBMITTED') reject('该版本已经处理')
+  if (!z.boolean().parse(req.body?.approve)) {
+    row.status = 'RETURNED'
+    row.returnReason = noteSchema.parse(req.body?.reason)
+    return save(ctx, req, row, 'RETURN_LAB_LIST')
+  }
+  publishLabList(ctx, req, row)
   return save(ctx, req, row, 'PUBLISH_LAB_LIST')
 }))
 

@@ -98,7 +98,11 @@ function clients() {
 
 function s3(storage) {
   const { endpoint, region, forcePathStyle, credentials } = storage
-  return new S3Client({ endpoint, region, forcePathStyle, credentials, maxAttempts: 2 })
+  // requestChecksumCalculation / responseChecksumValidation 设为 WHEN_REQUIRED：
+  // AWS SDK v3 默认会对请求做流式校验（aws-chunked），阿里云 OSS 等 S3 兼容服务
+  // 不接受这种签名形式，会直接报错。改为仅在协议要求时计算，对 AWS / R2 无影响。
+  return new S3Client({ endpoint, region, forcePathStyle, credentials, maxAttempts: 2,
+    requestChecksumCalculation: 'WHEN_REQUIRED', responseChecksumValidation: 'WHEN_REQUIRED' })
 }
 
 function storageFor(item) {
@@ -112,9 +116,14 @@ async function signAccess(item, download) {
   const sdk = s3(storage)
   try {
     const expiresIn = 300
+    // 部分 S3 兼容服务（如阿里云 OSS）拒绝预签名覆盖 response-content-type，
+    // 返回 400 InvalidRequest。设 S3_PRESIGN_MINIMAL=true 时只保留下载文件名，
+    // content-type 由对象自身元数据决定（LiveKit 上传时写入）。
+    const minimal = process.env.S3_PRESIGN_MINIMAL === 'true'
+    const headers = minimal ? {} : { ResponseContentType: 'video/mp4', ResponseCacheControl: 'private, no-store' }
     const url = await getSignedUrl(sdk, new GetObjectCommand({
-      Bucket: storage.bucket, Key: item.objectKey, ResponseContentType: 'video/mp4',
-      ResponseCacheControl: 'private, no-store',
+      Bucket: storage.bucket, Key: item.objectKey,
+      ...headers,
       ...(download ? { ResponseContentDisposition: `attachment; filename="interview-${item.interviewId}.mp4"` } : {})
     }), { expiresIn })
     return { url, expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString() }

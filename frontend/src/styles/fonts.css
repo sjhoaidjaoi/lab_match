@@ -1,0 +1,56 @@
+/* ============================================================================
+   标题字体层 —— 中文衬线 + 拉丁几何无衬线
+   ----------------------------------------------------------------------------
+   为什么是衬线：这套界面原本全用系统黑体（PingFang / 微软雅黑），黑体的字形
+   是为小字号屏幕阅读优化的，横竖笔画等粗，放到 100px 的大标题上就会变成一块
+   「没有笔锋的方块」，也就是「没质感」的来源。衬线体在大字号下才有横细竖粗的
+   对比、有收笔的锋芒，这正是纸质刊物标题的观感。
+
+   体积控制：Noto Serif SC 完整字重约 9MB，这里用 Google Fonts 的 text 子集
+   接口，只打包登录页实际出现的 194 个汉字，两个权重合计 73KB；拉丁字体
+   （Space Grotesk）只取 ASCII 可见字符，合计 16KB。
+
+   缺字兜底：子集字体没有的字会按 CSS 字体回退链逐字落到 Songti SC / 系统宋体，
+   不会出现豆腐块。所以新增中文标题文案时不必重新子集化，只是那几个字会换成
+   系统宋体，观感仍然统一。
+   ========================================================================== */
+
+@font-face {
+  font-family: "Lab Serif";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/noto-serif-sc-cn-700.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Lab Serif";
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url("/fonts/noto-serif-sc-cn-900.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Lab Grotesk";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin-500.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Lab Grotesk";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/space-grotesk-latin-700.woff2") format("woff2");
+}
+
+:root {
+  /* 中文大标题：衬线，回退链保证 macOS / Windows 都有兜底 */
+  --font-display: "Lab Serif", "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC",
+    "SimSun", serif;
+  /* 拉丁字母、数字、代码感标签：几何无衬线，带一点怪诞感，比等宽字体更"设计" */
+  --font-grotesk: "Lab Grotesk", "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+}

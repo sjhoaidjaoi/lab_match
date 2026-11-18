@@ -216,7 +216,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
 
 <style scoped>
 .ai-panel { display: grid; gap: 14px; min-height: 70px; }
-.ai-header, .summary-section { padding: 14px; background: #fff9f5; border: 1px solid #efdcd0; border-radius: 12px; }
+.ai-header, .summary-section { padding: 14px; background: rgba(255, 255, 255, 0.5); border: 0; border-radius: 16px; -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); box-shadow: inset 0 1px 0 rgba(255,255,255,.92); }
 .ai-header > span { margin-right: 8px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-block: 8px; }
 .actions :deep(.el-button) { margin-left: 0; }

@@ -460,19 +460,16 @@ async function main() {
     await request('POST', '/recruitment-reviews/teacher', { token: teacher, body: { entries, submit: true } })
     const confirmedEntry = { studentId: ownStudentId, type: 'INTENDED', reason: '本人已经接受邀请' }
     const labReview = await request('POST', '/recruitment-reviews/lab', { token: leader, body: { entries: [...entries, confirmedEntry] } })
-    check('组长可报送学院', labReview.status === 200)
-    const reviewPath = '/recruitment-reviews/lab/' + labReview.body?.data?.id + '/review'
-    check('学院不能提前发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 409)
+    check('组长报送名单即生效，不再经过学院审核',
+      labReview.status === 200 && labReview.body?.data?.status === 'APPROVED' && labReview.body?.data?.autoPublished === true)
+    check('名单生效后学生立即可见拟录取记录',
+      (await request('GET', '/admissions/my', { token: student })).body?.data?.some(item => item.laboratoryId === 1))
     await openStage(5)
-    await request('PUT', '/laboratories/1/teachers/2', { token: admin, body: { recruitmentQuota: 0 } })
-    check('导师零名额时不能发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 409)
-    await request('PUT', '/laboratories/1/teachers/2', { token: admin, body: { recruitmentQuota: null } })
-    check('学院在阶段五发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 200)
     check('已接受的教师邀请随本室名单报送时不会生成重复录取',
       (await request('GET', '/admissions/my', { token: ownStudent })).body?.data?.length === 1)
     const offers = await request('GET', '/admissions/my', { token: student })
     const offer = offers.body?.data?.find(item => item.laboratoryId === 1)
-    check('发布后学生才能确认', (await request('POST', '/admissions/' + offer?.id + '/confirm', { token: student, body: { confirmed: true } })).status === 200)
+    check('学生可确认拟录取', (await request('POST', '/admissions/' + offer?.id + '/confirm', { token: student, body: { confirmed: true } })).status === 200)
 
     console.log('\n== 4. 调剂规则 ==')
     const stage6 = stages.body?.data?.find(s => s.stageNumber === 6)

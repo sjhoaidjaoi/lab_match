@@ -98,7 +98,20 @@ onMounted(load)
 <style scoped>
 .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .summary { margin-bottom: 14px; }
-.stat-card { background: #fff; border: 1px solid var(--lm-border); border-radius: var(--lm-radius); padding: 14px 16px; margin-bottom: 12px; }
+.stat-card {
+  border: 0;
+  background-color: var(--workspace-paper, rgba(255, 255, 255, 0.46));
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.08) 62%);
+  -webkit-backdrop-filter: blur(6px) saturate(175%);
+  backdrop-filter: blur(6px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    var(--lg-shadow);
+  border-radius: var(--lm-radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
 .stat-label { color: var(--lm-text-secondary); font-size: 12.5px; }
 .stat-value { font-size: 24px; font-weight: 600; margin-top: 6px; }
 .stat-value.warning { color: #d97706; }
