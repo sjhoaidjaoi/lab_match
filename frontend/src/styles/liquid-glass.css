@@ -82,72 +82,73 @@
 
 /* 环境光统一收敛为「浅橙 → 米白」暖调，与登录页橙白基调一致。
    液态玻璃的雾透质感要求环境光是「若有若无的氛围色」，而不是明显的亮斑——
-   亮斑一浓，滚动时就会在视口里形成「橙带 / 白带」的分层断层。
-   所以核心色 alpha 压到 0.3 上下、衰减拉长到 100%，几团光斑均匀铺满整屏，
-   叠出来的是一层极淡、均匀的暖橙，任何高度看都是一致的。 */
+   亮斑一浓、圆心一偏，滚动时就会在视口里形成「橙带 / 白带」的上下分层断层。
+   所以这里让四团光斑的圆心全部居中（50% 50%）、尺寸大到覆盖整个视口、
+   核心色 alpha 压到 0.2 上下、衰减拉长到 100%，叠出来是一层均匀的浅橙氛围，
+   任何高度看都是一致的，不再有「中间橙、上下白」的断层。 */
 .lg-ambient__blob--amber {
-  top: -24vw;
-  left: -22vw;
-  width: 90vw;
-  height: 90vw;
-  min-width: 800px;
-  min-height: 800px;
-  background: radial-gradient(circle at 62% 58%,
-    rgba(255, 198, 152, 0.34) 0%, rgba(255, 198, 152, 0.16) 46%, rgba(255, 198, 152, 0.05) 78%, rgba(255, 198, 152, 0) 100%);
-  opacity: 0.7;
+  top: -30vw;
+  left: -30vw;
+  width: 120vw;
+  height: 120vw;
+  min-width: 1200px;
+  min-height: 1200px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 200, 158, 0.22) 0%, rgba(255, 200, 158, 0.1) 48%, rgba(255, 200, 158, 0.03) 78%, rgba(255, 200, 158, 0) 100%);
+  opacity: 0.8;
   animation: lgDriftA 30s ease-in-out infinite;
 }
 
 .lg-ambient__blob--rose {
-  right: -22vw;
-  top: -24vw;
-  width: 90vw;
-  height: 90vw;
-  min-width: 800px;
-  min-height: 800px;
-  background: radial-gradient(circle at 38% 58%,
-    rgba(255, 202, 166, 0.32) 0%, rgba(255, 202, 166, 0.15) 46%, rgba(255, 202, 166, 0.05) 78%, rgba(255, 202, 166, 0) 100%);
-  opacity: 0.7;
+  right: -30vw;
+  top: -30vw;
+  width: 120vw;
+  height: 120vw;
+  min-width: 1200px;
+  min-height: 1200px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 204, 170, 0.2) 0%, rgba(255, 204, 170, 0.09) 48%, rgba(255, 204, 170, 0.03) 78%, rgba(255, 204, 170, 0) 100%);
+  opacity: 0.8;
   animation: lgDriftB 36s ease-in-out infinite;
 }
 
 .lg-ambient__blob--sky {
-  left: -6vw;
-  bottom: -28vw;
-  width: 112vw;
-  height: 90vw;
-  min-width: 900px;
-  min-height: 800px;
-  background: radial-gradient(circle at 50% 30%,
-    rgba(255, 214, 180, 0.3) 0%, rgba(255, 214, 180, 0.14) 48%, rgba(255, 214, 180, 0.04) 80%, rgba(255, 214, 180, 0) 100%);
-  opacity: 0.7;
+  left: -10vw;
+  bottom: -40vw;
+  width: 140vw;
+  height: 110vw;
+  min-width: 1400px;
+  min-height: 1100px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 216, 184, 0.18) 0%, rgba(255, 216, 184, 0.08) 48%, rgba(255, 216, 184, 0.025) 78%, rgba(255, 216, 184, 0) 100%);
+  opacity: 0.8;
   animation: lgDriftC 42s ease-in-out infinite;
 }
 
 .lg-ambient__blob--cream {
-  right: -14vw;
-  bottom: -18vw;
-  width: 76vw;
-  height: 76vw;
-  min-width: 640px;
-  min-height: 640px;
+  right: -18vw;
+  bottom: -26vw;
+  width: 100vw;
+  height: 100vw;
+  min-width: 1000px;
+  min-height: 1000px;
   background: radial-gradient(circle at 50% 50%,
-    rgba(255, 234, 206, 0.34) 0%, rgba(255, 234, 206, 0.16) 48%, rgba(255, 234, 206, 0.05) 80%, rgba(255, 234, 206, 0) 100%);
-  opacity: 0.65;
+    rgba(255, 236, 210, 0.22) 0%, rgba(255, 236, 210, 0.1) 48%, rgba(255, 236, 210, 0.03) 78%, rgba(255, 236, 210, 0) 100%);
+  opacity: 0.75;
   animation: lgDriftD 26s ease-in-out infinite;
 }
 
-/* 原冷色石板改为极浅杏米白，放在视口中上部做补光，消除中部空白断层 */
+/* 原冷色石板改为极浅杏米白，放在视口中央做均匀补光 */
 .lg-ambient__blob--slate {
-  left: -18vw;
-  top: 6vh;
-  width: 70vw;
-  height: 70vw;
-  min-width: 560px;
-  min-height: 560px;
-  background: radial-gradient(circle at 55% 50%,
-    rgba(255, 224, 194, 0.3) 0%, rgba(255, 224, 194, 0.14) 48%, rgba(255, 224, 194, 0.04) 80%, rgba(255, 224, 194, 0) 100%);
-  opacity: 0.7;
+  left: -20vw;
+  top: 0;
+  width: 90vw;
+  height: 90vw;
+  min-width: 900px;
+  min-height: 900px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 226, 198, 0.2) 0%, rgba(255, 226, 198, 0.09) 48%, rgba(255, 226, 198, 0.03) 78%, rgba(255, 226, 198, 0) 100%);
+  opacity: 0.75;
   animation: lgDriftB 44s ease-in-out infinite reverse;
 }
 
