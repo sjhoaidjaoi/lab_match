@@ -507,24 +507,28 @@
 .el-table__empty-block { background: transparent; }
 .el-table__empty-text { color: var(--lg-ink-3); }
 
-/* 固定列会横向盖住滚动内容，必须给一层足够实的玻璃，否则文字会互相穿透。
-   这里是表格里唯一需要「实」的地方，用 82% 白直接盖住即可，不必再叠加模糊 ——
-   固定列是逐单元格渲染的，一个 20 行 × 2 列的表格就是 40 个模糊层。 */
-.el-table .el-table-fixed-column--left,
-.el-table .el-table-fixed-column--right {
-  background-color: rgba(255, 255, 255, 0.86) !important;
+/* 固定列横向滚动时会盖住下方穿过来的内容，需要一层背景，但纯白在米色玻璃底上很突兀。
+   用 accent 色调的半透明玻璃 + backdrop-filter 模糊：既能挡住穿透内容，白度又和卡片玻璃一致。
+   sticky 固定列是逐单元格渲染，模糊层只有固定列那几格，不会拖累整表性能。 */
+.el-table:not(.is-scrolling-none) .el-table-fixed-column--left,
+.el-table:not(.is-scrolling-none) .el-table-fixed-column--right {
+  background-color: color-mix(in srgb, var(--el-color-primary, #ea580c) 7%, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
 }
 
-.el-table th.el-table-fixed-column--left,
-.el-table th.el-table-fixed-column--right {
-  background-color: rgba(255, 255, 255, 0.9) !important;
+.el-table:not(.is-scrolling-none) th.el-table-fixed-column--left,
+.el-table:not(.is-scrolling-none) th.el-table-fixed-column--right {
+  background-color: color-mix(in srgb, var(--el-color-primary, #ea580c) 9%, rgba(255, 255, 255, 0.6)) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
 }
 
-.el-table__body tr:hover > td.el-table-fixed-column--left,
-.el-table__body tr:hover > td.el-table-fixed-column--right,
-.el-table__body tr.current-row > td.el-table-fixed-column--left,
-.el-table__body tr.current-row > td.el-table-fixed-column--right {
-  background-color: rgba(255, 255, 255, 0.94) !important;
+.el-table:not(.is-scrolling-none) .el-table__body tr:hover > td.el-table-fixed-column--left,
+.el-table:not(.is-scrolling-none) .el-table__body tr:hover > td.el-table-fixed-column--right,
+.el-table:not(.is-scrolling-none) .el-table__body tr.current-row > td.el-table-fixed-column--left,
+.el-table:not(.is-scrolling-none) .el-table__body tr.current-row > td.el-table-fixed-column--right {
+  background-color: color-mix(in srgb, var(--el-color-primary, #ea580c) 7%, rgba(255, 255, 255, 0.72)) !important;
 }
 
 /* 4.6 表单与描述列表 */
