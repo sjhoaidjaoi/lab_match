@@ -62,10 +62,13 @@
   font: 500 clamp(11px, 1.2vw, 15px)/1.55 var(--workspace-mono);
 }
 .workspace-backdrop-code code { font: inherit; }
+/* 底部的「回路走线」：原来是一整条 1px 实线描边（近千像素宽），在内容较少的页面上
+   很容易被误读成一张空卡片。改成虚线 + 更低的浓度，右端两个端子点保留，
+   这样它读起来是一段草稿线，而不是一个没填内容的框。 */
 .workspace-backdrop-branch {
   position: absolute;
-  inset: 30% 6% 21% 29%;
-  border: 1px solid color-mix(in srgb, var(--workspace-accent) 17%, transparent);
+  inset: 34% 8% 22% 29%;
+  border: 1px dashed color-mix(in srgb, var(--workspace-accent) 13%, transparent);
   border-inline-end: 0;
   border-radius: 38px 0 0 38px;
 }
