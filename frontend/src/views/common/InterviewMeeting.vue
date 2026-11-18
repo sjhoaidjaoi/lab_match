@@ -625,7 +625,13 @@ async function join() {
     room.on(RoomEvent.MediaDevicesError, error => {
       if (room === activeRoom) problem.value = deviceMessage(error, '音视频设备')
     })
-    await room.connect(credentials.url, credentials.token)
+    // 显式限制连接超时：默认 websocketTimeout/peerConnectionTimeout 各 15s，
+    // 遇到代理黑洞（TCP 通了但 TLS 握手卡住）时若不设上限，connect 会一直挂起、按钮无限转圈。
+    await room.connect(credentials.url, credentials.token, {
+      websocketTimeout: 12000,
+      peerConnectionTimeout: 15000,
+      maxRetries: 0
+    })
     if (room !== activeRoom) return
     sync()
     void load()
@@ -634,7 +640,7 @@ async function join() {
   } catch (error) {
     if (current !== generation) return
     disconnect()
-    problem.value = message(error, '无法连接视频会议，请稍后重试。')
+    problem.value = message(error, '无法连接视频会议。请确认网络可访问视频会议服务（若开启了代理，请放行 livekit.cloud），再重试。')
     void load()
   } finally { if (current === generation) joining.value = false }
 }
