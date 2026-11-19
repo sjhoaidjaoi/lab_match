@@ -4,6 +4,7 @@
 // POST /api/batches              创建批次
 // GET  /api/batches/:id/stages   八阶段时间窗（有效状态实时推导）
 // PUT  /api/batches/:batchId/stages/:stageId   调整时间/暂停/恢复
+// POST /api/batches/:id/stages/restart         重新开始（整条时间窗回到第 1 阶段）
 // POST /api/batches/:id/stop     停止批次（终止本次选拔）
 // POST /api/batches/:id/reopen   恢复已停止批次（受权限控制的独立流程）
 
@@ -200,6 +201,94 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
   })
   persistStore(store)
   res.json(ok({ ...stage, stageStatusLabel: STAGE_STATUS_LABELS[stage.stageStatus] || stage.stageStatus }))
+})
+
+// 重新开始：把整条八阶段时间窗整体移到新的起点，让流程从第 1 阶段重新跑一遍
+// 只重置「时间窗 + 人工干预标记」，不删除报名/面试/拟录取等业务数据
+router.post('/:id/stages/restart', requireAuth, collge, (req, res) => {
+  const schema = z.object({
+    startTime: z.string().optional(),
+    // KEEP=沿用当前各阶段时长与间隔；UNIFORM=每阶段固定 stageDays 天（默认 1 天）
+    mode: z.enum(['KEEP', 'UNIFORM']).optional(),
+    stageDays: z.number().positive().max(30).optional()
+  })
+  const body = schema.parse(req.body || {})
+  const store = getStore()
+  const batch = findBatch(store, req.params.id)
+  if (!batch) return res.status(404).json({ code: 'NOT_FOUND', message: '批次不存在', data: null })
+  if (batch.status === BATCH_STATUS.STOPPED) {
+    return res.status(409).json({
+      code: 'BUSINESS_ERROR',
+      message: '该批次已停止，请先在批次管理中恢复批次再重新开始',
+      data: null
+    })
+  }
+  const stages = (store.recruitmentStages || [])
+    .filter((s) => s.batchId === batch.id)
+    .sort((a, b) => a.stageNumber - b.stageNumber)
+  if (!stages.length) {
+    return res.status(400).json({ code: 'VALIDATION_FAILED', message: '该批次还没有阶段配置', data: null })
+  }
+
+  const base = body.startTime ? Date.parse(body.startTime) : Date.now()
+  if (!Number.isFinite(base)) {
+    return res.status(400).json({ code: 'VALIDATION_FAILED', message: '开始时间格式不正确', data: null })
+  }
+  // 起点取整到分钟，避免出现 :43 秒这种碎时间
+  const anchor = Math.floor(base / 60000) * 60000
+
+  // 计算新时间窗：优先沿用原有各阶段时长与间隔
+  const originStart = Date.parse(stages[0].startTime)
+  const layout = stages.map((s) => {
+    const start = Date.parse(s.startTime)
+    const end = Date.parse(s.endTime)
+    return {
+      offset: Number.isFinite(originStart) && Number.isFinite(start) ? start - originStart : null,
+      duration: Number.isFinite(start) && Number.isFinite(end) ? end - start : null
+    }
+  })
+  const keepUsable = layout.every((item) =>
+    item.offset !== null && item.offset >= 0 && item.duration !== null && item.duration >= 60000)
+  const mode = body.mode === 'KEEP' && keepUsable ? 'KEEP' : 'UNIFORM'
+  const stageDays = body.stageDays || 1
+  const slotMs = Math.round(stageDays * 24 * 60 * 60 * 1000)
+
+  const before = stages.map((s) => ({
+    stageNumber: s.stageNumber,
+    stageName: s.stageName,
+    startTime: s.startTime,
+    endTime: s.endTime,
+    stageStatus: s.stageStatus,
+    statusOverride: s.statusOverride || null
+  }))
+
+  stages.forEach((stage, index) => {
+    const offset = mode === 'KEEP' ? layout[index].offset : index * slotMs
+    const duration = mode === 'KEEP' ? layout[index].duration : slotMs
+    stage.startTime = new Date(anchor + offset).toISOString()
+    stage.endTime = new Date(anchor + offset + duration).toISOString()
+    // 重新开始意味着放弃此前所有人工干预，回到纯时间窗判定
+    stage.statusOverride = null
+    stage.stageStatus = STAGE_STATUS.NOT_STARTED
+  })
+
+  // 立即按新时间窗重算快照（第 1 阶段此刻即进行中，批次状态回到进行中）
+  syncStageStatuses(store)
+
+  logOperation(store, req, {
+    operationType: 'RESTART_STAGES',
+    targetType: 'BATCH',
+    targetId: batch.id,
+    description: `重新开始选拔批次「${batch.batchName}」，自第 1 阶段「${stages[0].stageName}」重启，${mode === 'KEEP' ? '沿用原各阶段时长' : `每阶段 ${stageDays} 天`}`,
+    detail: { before, anchor: new Date(anchor).toISOString(), mode }
+  })
+  persistStore(store)
+  res.json(ok({
+    batchId: batch.id,
+    mode,
+    anchor: new Date(anchor).toISOString(),
+    stages: batchStages(store, batch.id)
+  }))
 })
 
 // 停止批次：终止本次选拔，默认不可恢复

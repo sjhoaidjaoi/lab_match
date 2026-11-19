@@ -55,6 +55,7 @@ import { exportExcel, formatTime } from './shared'
 const OPERATION_LABELS: Record<string, string> = {
   CREATE_BATCH: '创建批次',
   UPDATE_STAGE: '调整阶段时间',
+  RESTART_STAGES: '重新开始选拔',
   CREATE_USER: '新建账号',
   UPDATE_USER: '修改账号',
   RESET_PASSWORD: '重置密码',

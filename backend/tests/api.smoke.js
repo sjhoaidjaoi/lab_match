@@ -682,6 +682,42 @@ async function main() {
       method: 'POST', headers: { Authorization: `Bearer ${student}` }, body: form
     })
     check('学生无文件上传权限', uploadForbidden.status === 403)
+
+    console.log('\n== 7. 重新开始（整条时间窗回到第 1 阶段） ==')
+    const restartDenied = await request('POST', '/batches/1/stages/restart', { token: leader, body: {} })
+    check('组长不能重新开始选拔批次', restartDenied.status === 403, `status=${restartDenied.status}`)
+    const restarted = await request('POST', '/batches/1/stages/restart', {
+      token: admin, body: { mode: 'UNIFORM', stageDays: 1 }
+    })
+    const restartedStages = restarted.body?.data?.stages || []
+    check('重新开始后第 1 阶段立即进行中',
+      restarted.status === 200 && restartedStages.find((s) => s.stageNumber === 1)?.stageStatus === 'IN_PROGRESS',
+      `status=${restarted.status} body=${JSON.stringify(restarted.body?.data?.stages?.[0]?.stageStatus)}`)
+    check('重新开始后其余阶段回到未开始',
+      restartedStages.filter((s) => s.stageNumber > 1).length === 7 &&
+      restartedStages.filter((s) => s.stageNumber > 1).every((s) => s.stageStatus === 'NOT_STARTED'))
+    check('重新开始会清除暂停/提前开始/提前结束的人工干预',
+      restartedStages.every((s) => !s.statusOverride))
+    check('重新开始后八阶段首尾相接且整段约 8 天',
+      restartedStages.every((s, i) => i === 0 ||
+        Date.parse(s.startTime) === Date.parse(restartedStages[i - 1].endTime)) &&
+      Math.abs(Date.parse(restartedStages[7].endTime) - Date.parse(restartedStages[0].startTime) - 8 * 86400000) < 1000)
+    const switchedBatch = await request('GET', '/batches/current', { token: admin })
+    check('重新开始后批次状态回到进行中',
+      switchedBatch.body?.data?.status === 'IN_PROGRESS',
+      `status=${switchedBatch.body?.data?.status}`)
+    // 指定起点 + 沿用原时长：应保留各阶段 1 天的长度
+    const anchor = new Date(Date.now() + 2 * 86400000).toISOString()
+    const keptRestart = await request('POST', '/batches/1/stages/restart', {
+      token: admin, body: { mode: 'KEEP', startTime: anchor }
+    })
+    const keptStages = keptRestart.body?.data?.stages || []
+    check('可按指定起点沿用原各阶段时长',
+      keptRestart.status === 200 && keptRestart.body?.data?.mode === 'KEEP' &&
+      Math.abs(Date.parse(keptStages[0]?.startTime) - Date.parse(anchor)) < 60000 &&
+      Math.abs(Date.parse(keptStages[0]?.endTime) - Date.parse(keptStages[0]?.startTime) - 86400000) < 1000)
+    check('起点在未来时八阶段全部未开始',
+      keptStages.every((s) => s.stageStatus === 'NOT_STARTED'))
   } finally {
     fs.rmSync(RESUME_DIR, { recursive: true, force: true })
     child.kill()

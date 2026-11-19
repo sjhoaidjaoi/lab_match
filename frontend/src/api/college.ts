@@ -25,6 +25,9 @@ export const collegeApi = {
   stages: (batchId: number) => http.get<StageInfo[]>(`/batches/${batchId}/stages`),
   updateStage: (batchId: number, stageId: number, payload: { startTime?: string; endTime?: string; stageStatus?: string }) =>
     http.put<StageInfo>(`/batches/${batchId}/stages/${stageId}`, payload),
+  /** 重新开始：整条八阶段时间窗移到新起点，回到第 1 阶段（不清业务数据） */
+  restartStages: (batchId: number, payload: { startTime?: string; mode?: 'KEEP' | 'UNIFORM'; stageDays?: number }) =>
+    http.post<{ batchId: number; mode: string; anchor: string; stages: StageInfo[] }>(`/batches/${batchId}/stages/restart`, payload),
   stopBatch: (id: number, reason: string) =>
     http.post<{ id: number; status: string; statusLabel: string; stoppedAt: string; stopReason: string }>(`/batches/${id}/stop`, { reason }),
   reopenBatch: (id: number, reason: string) =>
