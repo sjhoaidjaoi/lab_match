@@ -108,6 +108,9 @@
           />
           <div v-if="scheduleDetails.mode === 'LIVEKIT' && interviewStage" class="stage-window-tip">
             面试阶段：{{ formatTime(stageStart?.toISOString() || '') }} 至 {{ formatTime(stageEnd?.toISOString() || '') }}
+            <template v-if="stageEarlyStarted && interviewStageOpen">· 已提前开始，可选任意未来时段</template>
+            <template v-else-if="interviewStageOpen">· 已开放，可选任意未来时段</template>
+            <template v-else>· 尚未开放</template>
           </div>
         </el-form-item>
         <el-form-item label="面试方式">
@@ -194,6 +197,7 @@ import { interviewVideoApi, meetingStatusLabels, type MeetingSummary } from '@/a
 import { appointments, interviewSelection, scoreDimensions as scoreDims, type Evaluation, type ScorePolicy } from '@/api/interviewSelection'
 import { useAuthStore } from '@/stores/auth'
 import { useCycleStore } from '@/stores/cycle'
+import type { StageInfo } from '@/types'
 import { INTERVIEW_STATUS_LABELS, RECOMMENDATION_LABELS, formatTime, statusTag } from '../college/shared'
 
 const auth = useAuthStore()
@@ -206,6 +210,26 @@ const labId = computed(() => auth.user?.laboratoryId ?? null)
 const interviewStage = computed(() => cycle.stages.find((s) => s.stageNumber === 4))
 const stageStart = computed(() => interviewStage.value ? new Date(interviewStage.value.startTime) : null)
 const stageEnd = computed(() => interviewStage.value ? new Date(interviewStage.value.endTime) : null)
+
+// 阶段是否已开放：按「时间窗 + 人工干预」现算，不依赖缓存下来的 stageStatus。
+// 学院端点过「提前开始」时 statusOverride=STARTED，原定 startTime 可能还在未来，
+// 但阶段对业务已经开放，排期不能再拿 startTime 当下限。
+function stageOpenNow(stage?: StageInfo) {
+  if (!stage) return false
+  if (stage.statusOverride === 'PAUSED' || stage.statusOverride === 'COMPLETED') return false
+  const now = Date.now()
+  const end = Date.parse(stage.endTime)
+  if (Number.isFinite(end) && now >= end) return false
+  if (stage.statusOverride === 'STARTED') return true
+  const start = Date.parse(stage.startTime)
+  if (Number.isFinite(start) && now < start) return false
+  return true
+}
+
+const interviewStageOpen = computed(() => stageOpenNow(interviewStage.value))
+const stageEarlyStarted = computed(() => interviewStage.value?.statusOverride === 'STARTED')
+// 尚未开放时才用原定开始时间作为可选日期下限；已开放则只要求选未来时间
+const stageDayFloor = computed(() => (interviewStageOpen.value ? null : stageStart.value))
 
 const list = ref<InterviewRow[]>([])
 const preferences = ref<PreferenceRow[]>([])
@@ -267,8 +291,12 @@ function disabledInterviewDate(date: Date) {
   if (scheduleDetails.mode !== 'LIVEKIT') return false
   const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0)
   const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59)
-  // 日期需落在面试阶段时间窗内
-  if (stageStart.value && dayEnd < stageStart.value) return true
+  // 已经过去的日期不可选
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  if (dayEnd < todayStart) return true
+  // 阶段还没开放时，最早从阶段开始那天选；已开放（含提前开始）则不再卡原定开始时间
+  if (stageDayFloor.value && dayEnd < stageDayFloor.value) return true
   if (stageEnd.value && dayStart > stageEnd.value) return true
   return false
 }
@@ -281,6 +309,8 @@ function openSchedule() {
   Object.assign(scheduleDetails, { location: '', interviewForm: '', instructions: '', durationMinutes: 30,
     mode: 'STANDARD', panelIds: [] })
   scheduleVisible.value = true
+  // 打开弹窗先拉一次最新阶段时间窗，避免学院端刚调整/提前开始后这里还是旧数据
+  void cycle.load(true).catch(() => {})
 }
 function scheduleRow(row: InterviewRow) {
   openSchedule()
@@ -303,7 +333,7 @@ async function submitSchedule() {
     ElMessage.warning('请选择面试时间')
     return
   }
-  // 线上面试需满足阶段时间窗 + 未来时间 + 结束不超截止，提前拦截并给出明确提示
+  // 线上面试需满足阶段已开放 + 未来时间 + 结束不超截止，提前拦截并给出可操作提示
   if (scheduleDetails.mode === 'LIVEKIT') {
     const start = new Date(scheduleForm.interviewTime).getTime()
     const end = start + scheduleDetails.durationMinutes * 60000
@@ -311,8 +341,9 @@ async function submitSchedule() {
       ElMessage.warning('面试时间必须晚于当前时间，请选择未来的时段')
       return
     }
-    if (stageStart.value && start < stageStart.value.getTime()) {
-      ElMessage.warning(`面试时间早于面试阶段开始时间（${formatTime(stageStart.value.toISOString())}），请重新选择`)
+    if (!interviewStageOpen.value) {
+      const opened = formatTime(stageStart.value?.toISOString() || '')
+      ElMessage.warning(`面试阶段还没开放（原定 ${opened} 开始），请先在学院端「阶段时间管理」点「提前开始」，或等阶段开始后再安排`)
       return
     }
     if (stageEnd.value && end > stageEnd.value.getTime()) {

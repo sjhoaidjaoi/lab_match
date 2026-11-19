@@ -11,12 +11,20 @@ const { ok } = require('../utils/result')
 const { getStore, commitStore, nextId } = require('../data/seed')
 const { requireAuth, requireRole, ROLES, guardLab, isLabLeader } = require('../middleware/auth')
 const { currentBatch, scopedChoice, stageOpen } = require('../utils/applicationScope')
-const { findBatch, batchWritableError, stageOf } = require('../utils/recruitment')
+const { findBatch, batchWritableError, stageOf, STAGE_STATUS } = require('../utils/recruitment')
 const { logOperation } = require('../utils/audit')
 const { BusinessError } = require('../middleware/error')
 const { requireConfig, canPanel, newOnlineRoom, publicInterview, roomStatus } = require('../services/interviewVideo')
 const { asyncMutation } = require('./interviewWorkspace')
 const selection = require('../services/interviewSelection')
+
+// 本地时区的「YYYY-MM-DD HH:mm」，用于给教师端提示阶段开放时间
+function formatMoment(iso) {
+  const date = iso ? new Date(iso) : null
+  if (!date || Number.isNaN(date.getTime())) return '未设置时间'
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 
 const ScheduleSchema = z.object({
   studentId: z.number().int(),
@@ -60,7 +68,16 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
   if (!applied || (body.preferenceId && applied.id !== body.preferenceId)) {
     return res.status(403).json({ message: '无权安排该学生的面试' })
   }
-  if (!stageOpen(store, activeBatch.id, 4)) return res.status(409).json({ message: '面试阶段未开放' })
+  if (!stageOpen(store, activeBatch.id, 4)) {
+    // 面试阶段整体闸门：说清是没开始、暂停还是已结束，并给出可操作的下一步
+    const stage = stageOf(store, activeBatch.id, 4)
+    const reason = stage?.stageStatus === STAGE_STATUS.PAUSED
+      ? '面试阶段已暂停，请在学院端恢复阶段后再安排面试'
+      : stage?.stageStatus === STAGE_STATUS.COMPLETED
+        ? '面试阶段已结束，无法再安排面试'
+        : `面试阶段尚未开始（原定 ${formatMoment(stage?.startTime)} 开放），请先在学院端「阶段时间管理」点「提前开始」，或等阶段开始后再安排`
+    return res.status(409).json({ code: 'BUSINESS_ERROR', message: reason, data: null })
+  }
   const { mode, panelIds, preferenceId, retryOf, ...details } = body
   const online = mode === 'LIVEKIT'
   if (body.interviewStatus === 'SCHEDULED' && !online && !body.location && !body.interviewForm) {
@@ -105,12 +122,11 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
         panel.some(id => !canPanel(store.users.find(user => user.id === id), lab.id))) {
       throw new BusinessError('共同面试官必须是本实训室的在用教师账号', 'ROLE_FORBIDDEN', 403)
     }
+    // 能走到这里说明面试阶段已经开放（含学院端「提前开始」），
+    // 所以只约束「未来时间」和「不超出阶段截止」，不再拿原定 startTime 当排期下限。
     const stage = stageOf(store, activeBatch.id, 4)
     if (start <= Date.now()) {
       throw new BusinessError('面试时间必须晚于当前时间，请选择未来的时段', 'BUSINESS_ERROR', 409)
-    }
-    if (stage?.startTime && start < Date.parse(stage.startTime)) {
-      throw new BusinessError('面试时间早于面试阶段开始时间，请在面试阶段内选择', 'BUSINESS_ERROR', 409)
     }
     if (stage?.endTime && end > Date.parse(stage.endTime)) {
       throw new BusinessError('面试结束时间超出面试阶段截止时间，请提前开始或缩短时长', 'BUSINESS_ERROR', 409)

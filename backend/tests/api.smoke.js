@@ -683,7 +683,32 @@ async function main() {
     })
     check('学生无文件上传权限', uploadForbidden.status === 403)
 
-    console.log('\n== 7. 重新开始（整条时间窗回到第 1 阶段） ==')
+    console.log('\n== 7. 面试阶段提前开始后的排期约束 ==')
+    const lateStages = (await request('GET', '/batches/1/stages', { token: admin })).body?.data || []
+    const stage4 = lateStages.find((s) => s.stageNumber === 4)
+    const onlineBody = {
+      studentId: ownStudentId, laboratoryId: 1, mode: 'LIVEKIT', durationMinutes: 30, interviewStatus: 'SCHEDULED',
+      interviewTime: new Date(Date.now() + 3600000).toISOString()
+    }
+    // 原定开始时间在未来、还没提前开始 → 拒绝，并说清怎么解
+    await request('PUT', `/batches/1/stages/${stage4.id}`, { token: admin, body: {
+      startTime: new Date(Date.now() + 3 * 86400000).toISOString(),
+      endTime: new Date(Date.now() + 4 * 86400000).toISOString(),
+      stageStatus: 'NOT_STARTED'
+    } })
+    const closedStage = await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: onlineBody })
+    check('面试阶段还没开放时提示去学院端「提前开始」',
+      closedStage.status === 409 && /尚未开始/.test(closedStage.body?.message || ''),
+      `status=${closedStage.status} msg=${closedStage.body?.message}`)
+    // 学院端点「提前开始」：原定开始时间仍在未来，但阶段已对业务开放。
+    // 该学生在本套用例里面试已完成，这里只断言「阶段闸门已放行」——不再返回阶段时间窗类错误。
+    await request('PUT', `/batches/1/stages/${stage4.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
+    const earlyStage = await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: onlineBody })
+    check('提前开始的面试阶段不再用原定开始时间卡排期',
+      !/尚未开始|未开放|阶段开始时间|已暂停|已结束/.test(earlyStage.body?.message || ''),
+      `status=${earlyStage.status} msg=${earlyStage.body?.message}`)
+
+    console.log('\n== 8. 重新开始（整条时间窗回到第 1 阶段） ==')
     const restartDenied = await request('POST', '/batches/1/stages/restart', { token: leader, body: {} })
     check('组长不能重新开始选拔批次', restartDenied.status === 403, `status=${restartDenied.status}`)
     const restarted = await request('POST', '/batches/1/stages/restart', {
