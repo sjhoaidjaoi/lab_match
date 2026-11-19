@@ -55,7 +55,10 @@
 .student-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .student-page h1, .student-page h2, .student-page h3 { margin: 0; }
 .student-page p { line-height: 1.65; margin: 8px 0; }
-.student-page a, .student-top a { color: var(--workspace-accent); }
+/* 普通链接用品牌橙；但以 <a> 渲染的按钮（el-button tag="router-link"）必须保留自己的文字色，
+   否则「进入会议」这类主按钮会变成橙字压橙底，字完全看不见 */
+.student-page a:not(.el-button), .student-top a:not(.el-button) { color: var(--workspace-accent); }
+.student-page a.el-button, .student-top a.el-button { color: var(--el-button-text-color, #fff); }
 .student-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
 .student-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .student-actions .el-button + .el-button { margin-left: 0; }

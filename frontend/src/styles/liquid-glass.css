@@ -386,6 +386,17 @@
     0 10px 22px -12px rgba(211, 74, 6, 0.55);
 }
 
+/* 以 <a> 渲染的按钮（el-button tag="router-link"）：外层若存在 `a { color: … }` 这类
+   通用链接配色，会以更高优先级把按钮文字染成品牌橙，主按钮就成了橙字压橙底。
+   这里统一把按钮自己的文字色抢回来，避免各处再踩同一个坑。 */
+a.el-button:is(.el-button--primary, .el-button--success, .el-button--warning, .el-button--danger, .el-button--info) {
+  color: var(--el-button-text-color);
+}
+
+a.el-button:is(.el-button--primary, .el-button--success, .el-button--warning, .el-button--danger, .el-button--info):hover {
+  color: var(--el-button-hover-text-color, var(--el-button-text-color));
+}
+
 @media (hover: hover) {
   .el-button--primary:not(.is-text, .is-link, .is-plain, .is-disabled):hover {
     background-image: linear-gradient(165deg, #ff9a5a 0%, #f2600f 52%, #dc4d06 100%);
