@@ -31,7 +31,22 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
-        changeOrigin: true
+        changeOrigin: true,
+        // 后端 node --watch 热重启时会短暂关闭端口，http-proxy 默认回一个空 body 的 500，
+        // 前端只能弹出 "Request failed with status code 500"。这里改成 503 + 可读 JSON，
+        // 配合 request.ts 的 GET 自动重试，用户基本感知不到这次抖动。
+        configure: (proxy) => {
+          proxy.on('error', (_err, _req, res) => {
+            const response = res as unknown as import('node:http').ServerResponse
+            if (!response || typeof response.writeHead !== 'function' || response.headersSent) return
+            response.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' })
+            response.end(JSON.stringify({
+              code: 'BACKEND_UNAVAILABLE',
+              message: '后端服务正在重启，请稍后重试',
+              data: null
+            }))
+          })
+        }
       },
       '/uploads': {
         target: 'http://localhost:8080',

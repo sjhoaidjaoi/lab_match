@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "dev": "node --watch app.js",
+    "dev": "node --watch-path=./app.js --watch-path=./routes --watch-path=./services --watch-path=./utils --watch-path=./middleware --watch-path=./config --watch-path=./data/seed.js app.js",
     "seed": "node scripts/seed.js",
     "init:college": "node scripts/init-college-data.js",
     "accounts:report": "node scripts/inspect-accounts.js",
