@@ -108,7 +108,7 @@
           />
           <div v-if="scheduleDetails.mode === 'LIVEKIT' && interviewStage" class="stage-window-tip">
             面试阶段：{{ formatTime(stageStart?.toISOString() || '') }} 至 {{ formatTime(stageEnd?.toISOString() || '') }}
-            <template v-if="stageEarlyStarted && interviewStageOpen">· 已提前开始，可选任意未来时段</template>
+            <template v-if="stageEarlyStarted && interviewStageOpen">· 已立即开始，可选任意未来时段</template>
             <template v-else-if="interviewStageOpen">· 已开放，可选任意未来时段</template>
             <template v-else>· 尚未开放</template>
           </div>
@@ -343,11 +343,11 @@ async function submitSchedule() {
     }
     if (!interviewStageOpen.value) {
       const opened = formatTime(stageStart.value?.toISOString() || '')
-      ElMessage.warning(`面试阶段还没开放（原定 ${opened} 开始），请先在学院端「阶段时间管理」点「提前开始」，或等阶段开始后再安排`)
+      ElMessage.warning(`面试阶段还没开放（原定 ${opened} 开始），请先在学院端「阶段时间管理」点「立即开始」，或等阶段开始后再安排`)
       return
     }
     if (stageEnd.value && end > stageEnd.value.getTime()) {
-      ElMessage.warning(`面试结束时间超出阶段截止（${formatTime(stageEnd.value.toISOString())}），请提前开始或缩短时长`)
+      ElMessage.warning(`面试结束时间超出阶段截止（${formatTime(stageEnd.value.toISOString())}），请把面试时间往前挪或缩短时长`)
       return
     }
   }

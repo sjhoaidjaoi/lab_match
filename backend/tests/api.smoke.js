@@ -337,6 +337,29 @@ async function main() {
       token: admin, body: { stageStatus: 'IN_PROGRESS' }
     })
     check('恢复自动流转后回到未开始（原定时间未到）', resumed.body?.data?.stageStatus === 'NOT_STARTED')
+    // 「立即开始」= 进入该阶段：排在后面的、被提前开始的阶段要退回按时间自动流转，
+    // 否则后面的「进行中」会被误判成「首轮已结束」，把第 5 阶段的发送邀请关掉
+    const stageSixNext = stages.body.data.find(item => item.stageNumber === 6)
+    const stageSevenNext = stages.body.data.find(item => item.stageNumber === 7)
+    await request('PUT', `/batches/1/stages/${stageSevenNext.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
+    const enter5 = await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin, body: { stageStatus: 'STARTED' }
+    })
+    check('立即开始会退回后面已提前开始的阶段',
+      enter5.status === 200 && JSON.stringify(enter5.body?.data?.revertedStages) === '[7]',
+      `status=${enter5.status} reverted=${JSON.stringify(enter5.body?.data?.revertedStages)}`)
+    const afterEnter = (await request('GET', '/batches/1/stages', { token: admin })).body?.data || []
+    check('被退回的后续阶段恢复按时间自动判定',
+      afterEnter.find(item => item.stageNumber === 7)?.statusOverride == null &&
+      afterEnter.find(item => item.stageNumber === 7)?.stageStatus === 'NOT_STARTED')
+    const inviteOpen = await request('GET', '/admissions/teacher-invitations', { token: leader, role: 'LAB_TEACHER' })
+    check('立即开始第 5 阶段后首轮邀请保持开放', inviteOpen.body?.data?.open === true,
+      `open=${inviteOpen.body?.data?.open}`)
+    // 真正推进到调剂阶段时，首轮邀请要自动关闭
+    await request('PUT', `/batches/1/stages/${stageSixNext.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
+    const inviteClosed = await request('GET', '/admissions/teacher-invitations', { token: leader, role: 'LAB_TEACHER' })
+    check('进入调剂阶段后首轮邀请自动关闭', inviteClosed.body?.data?.open === false)
+    await request('PUT', `/batches/1/stages/${stageSixNext.id}`, { token: admin, body: { stageStatus: 'IN_PROGRESS' } })
     // 构造「开始时间早于现在、结束时间也已过」的阶段，验证不能再提前开始
     const expiredStart = await request('PUT', `/batches/1/stages/${stage5.id}`, {
       token: admin,

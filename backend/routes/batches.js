@@ -107,7 +107,7 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
   const schema = z.object({
     startTime: z.string().optional(),
     endTime: z.string().optional(),
-    // PAUSED=暂停；COMPLETED=提前结束；STARTED=提前开始；
+    // PAUSED=暂停；COMPLETED=提前结束；STARTED=立即开始（把该阶段设为当前阶段）；
     // IN_PROGRESS/NOT_STARTED=清除人工干预、恢复按时间自动流转
     stageStatus: z.enum([
       STAGE_STATUS.PAUSED,
@@ -142,11 +142,11 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
   if (startTs >= endTs) {
     return res.status(400).json({ code: 'VALIDATION_FAILED', message: '开始时间必须早于结束时间', data: null })
   }
-  // 提前开始只提前起点，结束时间照旧生效；结束时间已过就没法「开始」了
+  // 立即开始只把起点提前到现在，结束时间照旧生效；结束时间已过就没法「开始」了
   if (body.stageStatus === STAGE_STATUS.STARTED && endTs <= Date.now()) {
     return res.status(400).json({
       code: 'VALIDATION_FAILED',
-      message: '该阶段结束时间已过，请先把结束时间调整到当前之后，再提前开始',
+      message: '该阶段结束时间已过，请先把结束时间调整到当前之后，再点「立即开始」',
       data: null
     })
   }
@@ -183,12 +183,29 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
     stage.stageStatus = body.stageStatus
   }
 
+  // 「立即开始」= 进入该阶段：把排在这一阶段之后、被「立即开始」提前拉起的阶段退回按时间自动流转。
+  // 否则多个阶段同时挂 STARTED，后面阶段的「进行中」会被当成「首轮已结束」，
+  // 反过来把当前阶段的业务（例如第 5 阶段的发送入组邀请）关掉。
+  // 只清 STARTED，不动「暂停 / 提前结束」这类明确的人为决定。
+  const revertedStages = []
+  if (body.stageStatus === STAGE_STATUS.STARTED) {
+    for (const sibling of store.recruitmentStages.filter(
+      (s) => s.batchId === batchId &&
+        s.stageNumber > stage.stageNumber &&
+        s.statusOverride === STAGE_STATUS.STARTED
+    )) {
+      sibling.statusOverride = null
+      revertedStages.push(sibling.stageNumber)
+    }
+  }
+
   // 时间/人工状态变更后立即重算，避免快照与时间窗不一致
   syncStageStatuses(store)
 
   const statusText = body.stageStatus === STAGE_STATUS.PAUSED ? '，并暂停该阶段'
     : body.stageStatus === STAGE_STATUS.COMPLETED ? '，并提前结束该阶段'
-      : body.stageStatus === STAGE_STATUS.STARTED ? '，并提前开始该阶段'
+      : body.stageStatus === STAGE_STATUS.STARTED
+        ? `，并立即开始该阶段${revertedStages.length ? `（第 ${revertedStages.join('、')} 阶段回到按时间自动流转）` : ''}`
         : body.stageStatus === STAGE_STATUS.IN_PROGRESS ? '，并恢复该阶段自动流转'
           : body.stageStatus === STAGE_STATUS.NOT_STARTED ? '，并撤销人工干预' : ''
   logOperation(store, req, {
@@ -200,7 +217,7 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
     }
   })
   persistStore(store)
-  res.json(ok({ ...stage, stageStatusLabel: STAGE_STATUS_LABELS[stage.stageStatus] || stage.stageStatus }))
+  res.json(ok({ ...stage, stageStatusLabel: STAGE_STATUS_LABELS[stage.stageStatus] || stage.stageStatus, revertedStages }))
 })
 
 // 重新开始：把整条八阶段时间窗整体移到新的起点，让流程从第 1 阶段重新跑一遍

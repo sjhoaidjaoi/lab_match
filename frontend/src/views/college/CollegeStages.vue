@@ -4,7 +4,7 @@
       <div class="header-row">
         <div>
           <h2 class="page-title">阶段时间管理</h2>
-          <p class="page-desc">配置八阶段起止时间：到点自动开始与结束；赶进度时可对单个阶段「提前开始」或「提前结束」，也可暂停。</p>
+          <p class="page-desc">配置八阶段起止时间：到点自动开始与结束；要马上推进就点「立即开始」，该阶段业务立刻可用。</p>
         </div>
         <div class="header-actions">
           <el-select v-model="batchId" placeholder="选择批次" style="width: 240px" @change="loadStages">
@@ -47,7 +47,7 @@
               type="success"
               :disabled="batchStopped"
               @click="startEarly(row)"
-            >提前开始</el-button>
+            >立即开始</el-button>
             <el-button
               v-if="canPause(row)"
               size="small"
@@ -82,7 +82,7 @@
       type="info"
       :closable="false"
       title="说明"
-      description="阶段状态默认由起止时间自动推导：到点开始、到点结束。提前开始只把起点提前到现在，结束时间照旧生效；暂停与提前结束会一直生效，需点「恢复自动」才回到时间窗判定。提前开始某个阶段时，若上一阶段仍在进行中，两个阶段会同时开放。"
+      description="阶段状态默认由起止时间自动推导：到点开始、到点结束。点「立即开始」后该阶段业务立刻可用（结束时间照旧生效），排在其后的、已提前开始的阶段会退回按时间自动流转，避免多个阶段同时挂着「进行中」把后续业务判错。暂停与提前结束会一直生效，需点「恢复自动」才回到时间窗判定。"
     />
 
     <el-dialog v-model="restartVisible" title="重新开始选拔" width="520px" append-to-body>
@@ -111,7 +111,7 @@
         type="warning"
         :closable="false"
         title="不会删除业务数据"
-        description="报名、志愿、面试、拟录取等已有记录都会保留；被重置的只有阶段时间窗和「暂停 / 提前开始 / 提前结束」这类人工干预标记。"
+        description="报名、志愿、面试、拟录取等已有记录都会保留；被重置的只有阶段时间窗和「暂停 / 立即开始 / 提前结束」这类人工干预标记。"
       />
       <template #footer>
         <el-button @click="restartVisible = false">取消</el-button>
@@ -218,13 +218,17 @@ function canFinish(row: StageInfo) {
 async function startEarly(row: StageInfo) {
   try {
     await ElMessageBox.confirm(
-      `确认提前开始「${row.stageName}」？该阶段相关业务将立即开放，无需等到原定开始时间；结束时间仍按 ${readable(row.endTime)} 生效，到点自动结束。`,
-      '提前开始阶段',
-      { type: 'info', confirmButtonText: '确认开始', cancelButtonText: '取消' }
+      `确认立即开始「${row.stageName}」？该阶段相关业务会马上开放，无需等到原定开始时间；结束时间仍按 ${readable(row.endTime)} 生效、到点自动结束。`
+      + '排在它后面的阶段若已提前开始，会退回按时间自动流转（避免同时挂着多个「进行中」）。',
+      '立即开始阶段',
+      { type: 'info', confirmButtonText: '立即开始', cancelButtonText: '取消' }
     )
   } catch { return }
-  await collegeApi.updateStage(batchId.value, row.id, { stageStatus: 'STARTED' })
-  ElMessage.success(`「${row.stageName}」已提前开始`)
+  const result = await collegeApi.updateStage(batchId.value, row.id, { stageStatus: 'STARTED' })
+  const reverted = result?.revertedStages || []
+  ElMessage.success(reverted.length
+    ? `「${row.stageName}」已立即开始，第 ${reverted.join('、')} 阶段已退回按时间自动流转`
+    : `「${row.stageName}」已立即开始，相关业务已开放`)
   await loadStages()
 }
 

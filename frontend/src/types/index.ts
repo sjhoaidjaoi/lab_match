@@ -48,8 +48,10 @@ export interface StageInfo {
   startTime: string
   endTime: string
   stageStatus: string
-  /** 人工干预：PAUSED（暂停）/ COMPLETED（提前结束）/ STARTED（提前开始）；为空表示按时间窗自动流转 */
+  /** 人工干预：PAUSED（暂停）/ COMPLETED（提前结束）/ STARTED（立即开始）；为空表示按时间窗自动流转 */
   statusOverride?: 'PAUSED' | 'COMPLETED' | 'STARTED' | null
+  /** `立即开始` 时被退回按时间自动流转的后续阶段序号（接口回填） */
+  revertedStages?: number[]
   description?: string
 }
 

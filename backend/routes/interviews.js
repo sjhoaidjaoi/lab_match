@@ -75,7 +75,7 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
       ? '面试阶段已暂停，请在学院端恢复阶段后再安排面试'
       : stage?.stageStatus === STAGE_STATUS.COMPLETED
         ? '面试阶段已结束，无法再安排面试'
-        : `面试阶段尚未开始（原定 ${formatMoment(stage?.startTime)} 开放），请先在学院端「阶段时间管理」点「提前开始」，或等阶段开始后再安排`
+        : `面试阶段尚未开始（原定 ${formatMoment(stage?.startTime)} 开放），请先在学院端「阶段时间管理」点「立即开始」，或等阶段开始后再安排`
     return res.status(409).json({ code: 'BUSINESS_ERROR', message: reason, data: null })
   }
   const { mode, panelIds, preferenceId, retryOf, ...details } = body
@@ -129,7 +129,7 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
       throw new BusinessError('面试时间必须晚于当前时间，请选择未来的时段', 'BUSINESS_ERROR', 409)
     }
     if (stage?.endTime && end > Date.parse(stage.endTime)) {
-      throw new BusinessError('面试结束时间超出面试阶段截止时间，请提前开始或缩短时长', 'BUSINESS_ERROR', 409)
+      throw new BusinessError('面试结束时间超出面试阶段截止时间，请把面试时间往前挪或缩短时长', 'BUSINESS_ERROR', 409)
     }
     details.location = ''
     details.interviewForm = '平台线上面试'
