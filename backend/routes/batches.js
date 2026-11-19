@@ -106,10 +106,12 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
   const schema = z.object({
     startTime: z.string().optional(),
     endTime: z.string().optional(),
-    // PAUSED=暂停；COMPLETED=提前结束；IN_PROGRESS/NOT_STARTED=清除人工干预、恢复按时间自动流转
+    // PAUSED=暂停；COMPLETED=提前结束；STARTED=提前开始；
+    // IN_PROGRESS/NOT_STARTED=清除人工干预、恢复按时间自动流转
     stageStatus: z.enum([
       STAGE_STATUS.PAUSED,
       STAGE_STATUS.COMPLETED,
+      STAGE_STATUS.STARTED,
       STAGE_STATUS.IN_PROGRESS,
       STAGE_STATUS.NOT_STARTED
     ]).optional()
@@ -139,6 +141,14 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
   if (startTs >= endTs) {
     return res.status(400).json({ code: 'VALIDATION_FAILED', message: '开始时间必须早于结束时间', data: null })
   }
+  // 提前开始只提前起点，结束时间照旧生效；结束时间已过就没法「开始」了
+  if (body.stageStatus === STAGE_STATUS.STARTED && endTs <= Date.now()) {
+    return res.status(400).json({
+      code: 'VALIDATION_FAILED',
+      message: '该阶段结束时间已过，请先把结束时间调整到当前之后，再提前开始',
+      data: null
+    })
+  }
   // 阶段顺序：不允许早于上一阶段的开始时间
   const siblings = store.recruitmentStages
     .filter((s) => s.batchId === batchId && s.stageNumber < stage.stageNumber)
@@ -165,7 +175,8 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
   stage.endTime = new Date(endTs).toISOString()
   if (body.stageStatus) {
     // 人工干预写入 statusOverride，避免被定时同步按时间窗覆盖
-    stage.statusOverride = body.stageStatus === STAGE_STATUS.PAUSED || body.stageStatus === STAGE_STATUS.COMPLETED
+    stage.statusOverride = [STAGE_STATUS.PAUSED, STAGE_STATUS.COMPLETED, STAGE_STATUS.STARTED]
+      .includes(body.stageStatus)
       ? body.stageStatus
       : null
     stage.stageStatus = body.stageStatus
@@ -176,8 +187,9 @@ router.put('/:batchId/stages/:stageId', requireAuth, collge, (req, res) => {
 
   const statusText = body.stageStatus === STAGE_STATUS.PAUSED ? '，并暂停该阶段'
     : body.stageStatus === STAGE_STATUS.COMPLETED ? '，并提前结束该阶段'
-      : body.stageStatus === STAGE_STATUS.IN_PROGRESS ? '，并恢复该阶段自动流转'
-        : body.stageStatus === STAGE_STATUS.NOT_STARTED ? '，并撤销人工干预' : ''
+      : body.stageStatus === STAGE_STATUS.STARTED ? '，并提前开始该阶段'
+        : body.stageStatus === STAGE_STATUS.IN_PROGRESS ? '，并恢复该阶段自动流转'
+          : body.stageStatus === STAGE_STATUS.NOT_STARTED ? '，并撤销人工干预' : ''
   logOperation(store, req, {
     operationType: 'UPDATE_STAGE', targetType: 'STAGE', targetId: stage.id,
     description: `调整阶段「第${stage.stageNumber}阶段 ${stage.stageName}」时间：${stage.startTime} ~ ${stage.endTime}${statusText}`,

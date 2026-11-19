@@ -320,6 +320,40 @@ async function main() {
     await request('PUT', '/batches/1/stages/' + stage5.id, { token: admin, body: { stageStatus: 'NOT_STARTED' } })
     const viewed = await request('GET', '/batches/current')
     check('读取阶段不会提前开启拟录取', viewed.body?.data?.stages?.find(item => item.stageNumber === 5)?.stageStatus === 'NOT_STARTED')
+
+    // 提前开始 / 提前结束：学院可对单个阶段加速推进
+    const earlyStarted = await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin, body: { stageStatus: 'STARTED' }
+    })
+    check('学院可提前开始尚未到时间的阶段',
+      earlyStarted.status === 200 &&
+      earlyStarted.body?.data?.stageStatus === 'IN_PROGRESS' &&
+      earlyStarted.body?.data?.statusOverride === 'STARTED',
+      `status=${earlyStarted.status} body=${JSON.stringify(earlyStarted.body?.data?.stageStatus)}`)
+    const afterEarlyStart = (await request('GET', '/batches/1/stages', { token: admin }))
+      .body?.data?.find(item => item.stageNumber === 5)
+    check('提前开始的阶段实时状态为进行中', afterEarlyStart?.stageStatus === 'IN_PROGRESS')
+    const resumed = await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin, body: { stageStatus: 'IN_PROGRESS' }
+    })
+    check('恢复自动流转后回到未开始（原定时间未到）', resumed.body?.data?.stageStatus === 'NOT_STARTED')
+    // 构造「开始时间早于现在、结束时间也已过」的阶段，验证不能再提前开始
+    const expiredStart = await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin,
+      body: {
+        startTime: new Date(Date.now() - 30_000).toISOString(),
+        endTime: new Date(Date.now() - 10_000).toISOString(),
+        stageStatus: 'STARTED'
+      }
+    })
+    check('结束时间已过的阶段不能提前开始', expiredStart.status === 400, `status=${expiredStart.status}`)
+    // 还原阶段五时间窗，避免影响后续用例
+    await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin, body: { startTime: stage5.startTime, endTime: stage5.endTime, stageStatus: 'NOT_STARTED' }
+    })
+    check('提前开始的异常请求不会污染阶段时间窗',
+      (await request('GET', '/batches/1/stages', { token: admin })).body?.data
+        ?.find(item => item.stageNumber === 5)?.stageStatus === 'NOT_STARTED')
     const teacher2 = await login('T1002')
     const leaderAsTeacher = await request('GET', '/preferences/lab/1', { token: leader, role: 'LAB_TEACHER' })
     const own = await request('GET', '/preferences/lab/1', { token: teacher })

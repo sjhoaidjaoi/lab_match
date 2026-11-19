@@ -7,7 +7,10 @@ const STAGE_STATUS = {
   NOT_STARTED: 'NOT_STARTED',
   IN_PROGRESS: 'IN_PROGRESS',
   COMPLETED: 'COMPLETED',
-  PAUSED: 'PAUSED'
+  PAUSED: 'PAUSED',
+  // 仅作为人工干预标记（statusOverride）使用：让还没到开始时间的阶段立即开放。
+  // 推导结果仍会落到 IN_PROGRESS，快照里不会长期保留 STARTED。
+  STARTED: 'STARTED'
 }
 
 const BATCH_STATUS = {
@@ -21,7 +24,8 @@ const STAGE_STATUS_LABELS = {
   NOT_STARTED: '未开始',
   IN_PROGRESS: '进行中',
   COMPLETED: '已结束',
-  PAUSED: '已暂停'
+  PAUSED: '已暂停',
+  STARTED: '进行中'
 }
 
 const BATCH_STATUS_LABELS = {
@@ -69,8 +73,8 @@ function batchWritableError(batch) {
 }
 
 // 阶段有效状态：人工干预优先，其余按时间窗判定
-// 人工干预有两类：暂停（PAUSED）、提前结束（COMPLETED），记录在 statusOverride 上，
-// 不会被定时同步覆盖；恢复自动流转需显式清空 statusOverride。
+// 人工干预有三类：暂停（PAUSED）、提前结束（COMPLETED）、提前开始（STARTED），
+// 记录在 statusOverride 上，不会被定时同步覆盖；恢复自动流转需显式清空 statusOverride。
 // 边界：now < start → 未开始；start <= now < end → 进行中；now >= end → 已结束
 function deriveStageStatus(stage, now = Date.now()) {
   if (!stage) return null
@@ -82,6 +86,10 @@ function deriveStageStatus(stage, now = Date.now()) {
   const end = stage.endTime ? Date.parse(stage.endTime) : NaN
   const hasStart = Number.isFinite(start)
   const hasEnd = Number.isFinite(end)
+  // 提前开始：只把起点提前到现在，结束时间依然有效，到点照常结束
+  if (override === STAGE_STATUS.STARTED) {
+    return hasEnd && now >= end ? STAGE_STATUS.COMPLETED : STAGE_STATUS.IN_PROGRESS
+  }
   if (!hasStart && !hasEnd) return stage.stageStatus || STAGE_STATUS.NOT_STARTED
   if (hasStart && now < start) return STAGE_STATUS.NOT_STARTED
   if (hasEnd && now >= end) return STAGE_STATUS.COMPLETED
