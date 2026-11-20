@@ -367,7 +367,7 @@ router.get('/overview', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, re
       intended: list.length,
       confirmed: list.filter((a) => a.status === 'CONFIRMED').length,
       rejected: list.filter((a) => a.status === 'REJECTED').length,
-      quota: batch ? labCapacity(store, batch.id, lab) : lab.recruitmentQuota
+      quota: activeBatch ? labCapacity(store, activeBatch.id, lab) : lab.recruitmentQuota
     }
   })
   res.json(ok({
