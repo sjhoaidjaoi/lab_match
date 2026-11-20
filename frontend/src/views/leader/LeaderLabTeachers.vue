@@ -14,11 +14,18 @@
         <el-table-column label="状态" min-width="110">
           <template #default="{ row }">{{ row.role === 'LAB_LEADER' ? '组长兼教师' : row.status === 'ACTIVE' ? '启用' : '停用' }}</template>
         </el-table-column>
-        <el-table-column label="操作" min-width="200">
+        <el-table-column label="操作" min-width="330">
           <template #default="{ row }">
             <el-button v-if="row.role === 'LAB_TEACHER'" link type="primary" @click="editAccount(row)">编辑账号</el-button>
             <el-button v-if="row.role === 'LAB_TEACHER'" link @click="resetPassword(row)">重置密码</el-button>
             <el-button v-if="row.status === 'ACTIVE'" link type="primary" @click="editMentor(mentors.find(item => item.userId === row.id), row)">导师资料</el-button>
+            <el-button
+              v-if="row.role === 'LAB_TEACHER'"
+              link
+              :type="row.status === 'ACTIVE' ? 'warning' : 'success'"
+              @click="toggleStatus(row)"
+            >{{ row.status === 'ACTIVE' ? '停用' : '启用' }}</el-button>
+            <el-button v-if="row.role === 'LAB_TEACHER'" link type="danger" @click="deleteAccount(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -166,6 +173,29 @@ function saveMentor() {
 async function resetPassword(row: UserAccount) {
   const accepted = await ElMessageBox.confirm(`将 ${row.realName} 的密码重置为初始密码？`, '重置密码', { type: 'warning' }).then(() => true, () => false)
   if (accepted) await act(() => labApi.resetStaffPassword(props.labId, row.id))
+}
+
+/** 停用后该教师立即无法登录，历史业务记录保留 */
+async function toggleStatus(row: UserAccount) {
+  const disabling = row.status === 'ACTIVE'
+  const accepted = await ElMessageBox.confirm(
+    disabling
+      ? `停用「${row.realName}」后该账号立即无法登录，当前登录状态失效；历史带教、面试与录取记录全部保留，可随时重新启用。`
+      : `启用「${row.realName}」后该账号恢复登录权限。`,
+    disabling ? '停用教师账号' : '启用教师账号',
+    { type: 'warning', confirmButtonText: disabling ? '确认停用' : '确认启用' }
+  ).then(() => true, () => false)
+  if (accepted) await act(() => labApi.setStaffStatus(props.labId, row.id, disabling ? 'INACTIVE' : 'ACTIVE'))
+}
+
+/** 软删除：账号失效并解除档案绑定，历史记录不删除 */
+async function deleteAccount(row: UserAccount) {
+  const accepted = await ElMessageBox.confirm(
+    `确认删除「${row.realName}（${row.username}）」的教师账号？删除为软删除：历史面试、录取与操作日志全部保留，账号将无法再次登录。`,
+    '删除教师账号',
+    { type: 'warning', confirmButtonText: '确认删除' }
+  ).then(() => true, () => false)
+  if (accepted) await act(() => labApi.deleteStaff(props.labId, row.id))
 }
 
 async function removeMentor(row: LabTeacher) {

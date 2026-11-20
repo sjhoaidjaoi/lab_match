@@ -2,6 +2,12 @@ import axios, { type AxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 import type { Result } from '@/types'
 
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    silent?: boolean
+  }
+}
+
 const TOKEN_KEY = 'lm_token'
 const ROLE_KEY = 'lm_role'
 const USER_KEY = 'lm_user'
@@ -33,10 +39,22 @@ service.interceptors.response.use(
       return body.data as unknown as typeof response
     }
     const message = body?.message || '请求失败'
-    if (response.config.url !== '/auth/login' && response.config.url !== '/auth/logout') ElMessage.error(message)
+    if (!response.config.silent && response.config.url !== '/auth/login' && response.config.url !== '/auth/logout') ElMessage.error(message)
     return Promise.reject(new Error(message))
   },
-  (error) => {
+  async (error) => {
+    // 后端热重启（node --watch）或瞬断时，GET 属于幂等请求，最多自动重试三次
+    //（300ms / 700ms / 1000ms），覆盖两秒左右的重启窗口，避免整页同时弹红条。
+    const retryConfig = error.config as (AxiosRequestConfig & { __retryCount?: number }) | undefined
+    const method = (retryConfig?.method || 'get').toLowerCase()
+    const transientFailure = !error.response || [500, 502, 503, 504].includes(error.response.status)
+    const attempt = retryConfig?.__retryCount ?? 0
+    if (retryConfig && method === 'get' && transientFailure && attempt < 3) {
+      retryConfig.__retryCount = attempt + 1
+      await new Promise((resolve) => setTimeout(resolve, [300, 700, 1000][attempt] ?? 1000))
+      return service(retryConfig)
+    }
+
     const status = error.response?.status
     const loginRequest = error.config?.url === '/auth/login'
     if (error.config?.url === '/auth/logout') return Promise.reject(error)
@@ -57,7 +75,7 @@ service.interceptors.response.use(
     const message = serverMessage || (loginRequest && (!status || status >= 500)
       ? '暂时无法连接登录服务，请稍后重试'
       : error.message || '网络异常，请稍后重试')
-    if (!loginRequest && (error.config?.url !== '/auth/password' || status === 401)) ElMessage.error(message)
+    if (!error.config?.silent && !loginRequest && (error.config?.url !== '/auth/password' || status === 401)) ElMessage.error(message)
     if (status === 401) {
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(ROLE_KEY)
@@ -67,7 +85,7 @@ service.interceptors.response.use(
         window.location.href = '/login'
       }
     }
-    const inlineMessage = loginRequest || error.config?.url === '/auth/password'
+    const inlineMessage = error.config?.silent || loginRequest || error.config?.url === '/auth/password'
     return Promise.reject(inlineMessage ? new Error(message) : error)
   }
 )

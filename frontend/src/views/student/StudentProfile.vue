@@ -1,52 +1,43 @@
 <template>
-  <section v-loading="loading" class="student-page student-profile" aria-label="个人信息">
-    <div class="profile-grid">
-      <el-card shadow="never" class="profile-card">
-        <h2>账号资料</h2>
-        <dl class="student-fields">
-          <dt>登录账号</dt><dd>{{ auth.user?.username || '—' }}</dd>
-          <dt>姓名</dt><dd>{{ auth.user?.realName || '—' }}</dd>
-          <dt>学号</dt><dd>{{ auth.user?.studentNumber || '—' }}</dd>
-          <dt>角色</dt><dd>学生</dd>
-          <template v-if="!editing">
-            <dt>联系电话</dt><dd>{{ auth.user?.phone || '未填写' }}</dd>
-            <dt>联系邮箱</dt><dd>{{ auth.user?.email || '未填写' }}</dd>
-          </template>
-        </dl>
-        <el-form v-if="editing" :model="form" label-position="top" class="profile-form" @submit.prevent="save">
-          <el-form-item label="联系电话">
-            <el-input v-model.trim="form.phone" maxlength="20" placeholder="请输入手机号" :disabled="saving" />
-          </el-form-item>
-          <el-form-item label="联系邮箱">
-            <el-input v-model.trim="form.email" maxlength="128" placeholder="用于接收面试与调剂通知" :disabled="saving" />
-          </el-form-item>
-          <div class="student-actions">
-            <el-button type="primary" native-type="submit" :loading="saving">保存修改</el-button>
-            <el-button :disabled="saving" @click="editing = false">取消</el-button>
-          </div>
-        </el-form>
-        <div class="student-actions">
-          <el-button v-if="!editing" type="primary" @click="startEditing">修改联系方式</el-button>
-          <el-button :disabled="saving" @click="passwordVisible = true">修改密码</el-button>
-        </div>
-      </el-card>
-      <el-card shadow="never" class="profile-card">
-        <h2>我的志愿</h2>
-        <template v-if="preferences.length">
-          <ul class="student-list">
-            <li v-for="item in preferences" :key="item.id">{{ item.laboratoryName || '实训室#' + item.laboratoryId }}</li>
-          </ul>
-          <p>内部调剂 · {{ preferences[0].obeyInternalAdjustment ? '服从' : '不服从' }}</p>
-          <p>跨实训室调剂 · {{ preferences[0].obeyCollegeAdjustment ? '服从' : '不服从' }}</p>
-          <p>提交时间 · {{ formatDateTime(preferences[0].submittedAt) }}</p>
-        </template>
-        <el-empty :image-size="88" v-else description="暂无志愿记录" />
-        <div class="student-actions">
-          <RouterLink to="/student/application/record">查看我的填报回执</RouterLink>
-          <RouterLink to="/student/application">前往意向填报</RouterLink>
-        </div>
-      </el-card>
-    </div>
+  <section v-loading="loading" class="student-page">
+    <h1>个人信息与志愿情况</h1>
+    <el-card shadow="never">
+      <h2>账号资料</h2>
+      <dl class="student-fields">
+        <dt>登录账号</dt><dd>{{ auth.user?.username || '—' }}</dd>
+        <dt>姓名</dt><dd>{{ auth.user?.realName || '—' }}</dd>
+        <dt>学号</dt><dd>{{ auth.user?.studentNumber || '—' }}</dd>
+        <dt>角色</dt><dd>学生</dd>
+      </dl>
+      <el-form :model="form" label-width="82px" class="profile-form">
+        <el-form-item label="联系电话">
+          <el-input v-model="form.phone" maxlength="20" placeholder="请输入手机号" />
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="form.email" maxlength="128" placeholder="用于接收面试与调剂通知" />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" :loading="saving" @click="save">保存修改</el-button>
+          <el-button @click="passwordVisible = true">修改密码</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+    <el-card shadow="never">
+      <h2>我的志愿</h2>
+      <template v-if="preferences.length">
+        <ul class="student-list">
+          <li v-for="item in preferences" :key="item.id">{{ item.laboratoryName || '实训室#' + item.laboratoryId }}</li>
+        </ul>
+        <p>内部调剂 · {{ preferences[0].obeyInternalAdjustment ? '服从' : '不服从' }}</p>
+        <p>跨实训室调剂 · {{ preferences[0].obeyCollegeAdjustment ? '服从' : '不服从' }}</p>
+        <p>提交时间 · {{ formatDateTime(preferences[0].submittedAt) }}</p>
+      </template>
+      <el-empty v-else description="暂无志愿记录" />
+      <div class="student-actions">
+        <RouterLink to="/student/application/record">查看我的填报回执</RouterLink>
+        <RouterLink to="/student/application">前往意向填报</RouterLink>
+      </div>
+    </el-card>
 
     <el-dialog v-model="passwordVisible" title="修改密码" width="420px">
       <el-form :model="passwordForm" label-width="90px">
@@ -79,7 +70,6 @@ import { http } from '@/api/request'
 const auth = useAuthStore()
 const loading = ref(false)
 const saving = ref(false)
-const editing = ref(false)
 const changing = ref(false)
 const passwordVisible = ref(false)
 const preferences = ref<PreferenceItem[]>([])
@@ -91,25 +81,12 @@ function resetForm() {
   form.email = auth.user?.email || ''
 }
 
-function startEditing() {
-  resetForm()
-  editing.value = true
-}
-
 async function save() {
-  if (saving.value) return
   saving.value = true
   try {
     await http.put('/auth/profile', { phone: form.phone || null, email: form.email || null })
     await auth.refresh()
-    editing.value = false
-    ElMessage.success({
-      message: '联系方式已更新',
-      customClass: 'profile-notice',
-      offset: 24,
-      duration: 3000,
-      showClose: true
-    })
+    ElMessage.success('个人信息已更新')
   } finally {
     saving.value = false
   }
@@ -161,19 +138,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.student-profile { max-width: 1320px; margin-inline: auto; }
-.profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
-.profile-card { min-width: 0; }
-.profile-card h2 { padding-bottom: 16px; border-bottom: 1px solid var(--workspace-border); }
-.profile-card .student-fields { margin-block: 20px; gap: 12px 16px; }
-.profile-form { margin-top: 16px; }
-:global(.el-message.profile-notice) {
-  min-width: 0;
-  max-width: calc(100vw - 32px);
-  border-radius: 999px;
-  box-shadow: 0 8px 26px #4e31221f;
-}
+.profile-form { max-width: 420px; margin-top: 12px; }
 @media (max-width: 768px) {
-  .profile-grid { grid-template-columns: minmax(0, 1fr); }
+  .profile-form { max-width: 100%; }
 }
 </style>

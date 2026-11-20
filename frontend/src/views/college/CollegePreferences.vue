@@ -115,7 +115,20 @@ onMounted(load)
 .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .tools { display: flex; gap: 10px; }
 .summary { margin-bottom: 14px; }
-.mini-card { background: #fff; border: 1px solid var(--lm-border); border-radius: var(--lm-radius); padding: 12px 14px; margin-bottom: 12px; }
+.mini-card {
+  border: 0;
+  background-color: var(--workspace-paper, rgba(255, 255, 255, 0.46));
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.08) 62%);
+  -webkit-backdrop-filter: blur(6px) saturate(175%);
+  backdrop-filter: blur(6px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    var(--lg-shadow);
+  border-radius: var(--lm-radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
 .mini-name { font-size: 12.5px; color: var(--lm-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mini-value { font-size: 22px; font-weight: 600; margin: 4px 0; }
 .mini-value span { font-size: 12px; font-weight: 400; color: var(--lm-text-secondary); margin-left: 2px; }

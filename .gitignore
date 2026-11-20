@@ -1,6 +1,7 @@
 # 依赖与构建产物
 node_modules/
 dist/
+dist-verify/
 target/
 *.class
 *.jar
@@ -14,6 +15,7 @@ tmp/
 uploads/
 .screenshots/
 backend/data/.store.json
+backend/data/.store.json.bak-*
 backend/data/private-resumes/
 
 # IDE
@@ -24,9 +26,15 @@ backend/data/private-resumes/
 
 # 本地环境
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# 本地工作区数据（WorkBuddy 会话记录、记忆等）
+.workbuddy/
 
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# 本机工具二进制（ffmpeg 等，体积大且与平台绑定，不入库）
+backend/tools/

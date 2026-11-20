@@ -14,7 +14,7 @@ function nextLogId(list) {
  */
 function logOperation(store, req, payload) {
   if (!store.operationLogs) store.operationLogs = []
-  store.operationLogs.push({
+  const entry = {
     id: nextLogId(store.operationLogs),
     operatorId: req?.user?.uid ?? null,
     operationType: payload.operationType,
@@ -22,7 +22,10 @@ function logOperation(store, req, payload) {
     targetId: payload.targetId ?? null,
     operationDescription: payload.description,
     createdAt: new Date().toISOString()
-  })
+  }
+  // 关键操作的前后值快照（可选）
+  if (payload.detail !== undefined) entry.detail = payload.detail
+  store.operationLogs.push(entry)
 }
 
 module.exports = { logOperation }

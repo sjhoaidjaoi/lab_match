@@ -20,7 +20,7 @@
 - 后端 RBAC：角色来自账号数据，忽略伪造 `X-Role`；教师/组长按 `laboratoryId` 做实训室数据隔离。
 - 核心规则：最多 3 个平行志愿、截止自动锁定、单意向自动确认、多意向学生选择、名额释放与递补、调剂去重、防超额/重复录取、公示异议、批量入组。
 - 学院端：批次/阶段、学生、实训室、宣讲、开放日、志愿、面试、拟录取、确认、空缺、候选、内部/跨室调剂、安置、最终名单、公示、统计、日志。
-- 教师端：工作台、本室信息、报名学生、面试排期与五维评分、拟录取建议、确认进度、补录、成员。
+- 教师端：工作台、本室信息、报名学生、面试排期与五维评分、LiveKit 线上面试、确认进度、小组成员。
 - 组长端：工作台、选拔汇总、确认进度、内部调剂、补录统筹、名额上报。
 - 学生端：工作台、志愿填报、面试、拟录取确认、调剂确认、公示异议、消息、实训室资料、宣讲、开放日、个人中心。
 - 公共能力：帮助中心（按角色展示八阶段操作指引与 FAQ）、个人信息与密码修改、系统公告、站内文件上传（图片/视频/PDF）、操作日志、服务端分页、Excel 导出。
@@ -43,7 +43,7 @@ lab_match/
 
 ## 环境要求
 
-- Node.js 18+（推荐 20/22）
+- Node.js 20+（推荐 22/24）
 - npm 8+
 - 可选：MySQL 8（仅生产部署时需要）
 
@@ -76,6 +76,10 @@ npm run dev
 ```
 
 访问 `http://localhost:5173`。Vite 已将 `/api` 代理到 `http://localhost:8080`。
+
+线上面试需要配置 LiveKit Cloud。参见[线上面试配置、迁移及验收](docs/ONLINE_INTERVIEWS.md)。
+录制、私有存储和档案的设置见[面试录制与档案](docs/INTERVIEW_RECORDINGS.md)。
+中文转写、DeepSeek 纪要和审核的设置见[面试 AI 纪要](docs/INTERVIEW_AI.md)。
 
 生产构建：
 
@@ -111,30 +115,28 @@ cd backend
 # MYSQL_PASSWORD=你的密码
 # MYSQL_DATABASE=lab_match
 
-npm run db:init    # 新建库表并执行 v2/v3 增量迁移（可重复执行）
+npm run db:init    # 新建库表或执行至 v12 的增量迁移（可重复执行）
 npm run db:check   # 检查连接与各表数据量
 npm start          # /api/health 的 data.storage 应返回 mysql
 ```
 
-也可手动按顺序执行：
-
-```sql
-SOURCE database/schema.sql;
-SOURCE database/migration_v2.sql;
-SOURCE database/migration_v3.sql;
-```
-
-迁移内容：用户-实训室绑定、邮箱、面试/拟录取唯一索引、最终审核表、公示异议表、开放日表、导师团队表、宣讲字段、`extra_json` 扩展字段兜底。详见 [数据库设计说明](docs/DATABASE.md)。
-
-> 注意：MySQL 适配层已完成代码与迁移脚本，但当前开发环境没有 MySQL 实例，尚未在真实数据库上执行端到端验证。
+已有 MySQL 数据库使用上述增量迁移命令。详见[数据库设计说明](docs/DATABASE.md)及[线上面试迁移](docs/ONLINE_INTERVIEWS.md)。
 
 ## 测试
 
-后端接口冒烟测试（使用独立数据副本，不修改演示数据）：
+全部后端测试套件（各自使用独立数据副本与独立端口，不修改业务数据，不依赖外部服务）：
 
 ```powershell
 cd backend
-npm test
+npm run test:all        # 依次执行下列全部套件并汇总
+npm test                # 接口冒烟：四端业务 + 权限
+npm run test:flow       # 八阶段流转 + 批次停止 + 分级账号
+npm run test:profile    # 实训室资料管理与权限边界
+npm run test:stage-clock# 阶段按真实时钟自动开始/结束
+npm run test:rate-limit # 接口限流与登录防爆破
+npm run test:video      # 线上面试排期/等候/令牌/聊天
+npm run test:recording  # 会议录制与档案
+npm run test:interview-ai # AI 纪要（隔离适配器）
 ```
 
 前端类型检查与构建：
@@ -144,10 +146,19 @@ cd frontend
 npm run build
 ```
 
-本轮测试结果：后端 41 项接口测试全部通过；前端类型检查与构建成功；学生、教师、学院、组长四种角色完成浏览器实测。详见 [测试报告](docs/TEST_REPORT.md)。
+数据库迁移静态校验与密钥泄漏检查：
+
+```powershell
+node database/verify.js
+node scripts/verify-secrets.js
+```
+
+历次回归记录见[测试报告](docs/TEST_REPORT.md)，最终验收结论见[最终验收报告](docs/FINAL_ACCEPTANCE_REPORT.md)。
 
 ## 文档
 
+- [部署说明](docs/DEPLOYMENT.md)
+- [最终验收报告](docs/FINAL_ACCEPTANCE_REPORT.md)
 - [需求符合度审查报告](docs/REQUIREMENTS_AUDIT.md)
 - [问题修复记录](docs/REQUIREMENTS_FIX_LOG.md)
 - [测试与回归报告](docs/TEST_REPORT.md)

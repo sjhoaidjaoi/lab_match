@@ -48,6 +48,10 @@ export interface StageInfo {
   startTime: string
   endTime: string
   stageStatus: string
+  /** 人工干预：PAUSED（暂停）/ COMPLETED（提前结束）/ STARTED（立即开始）；为空表示按时间窗自动流转 */
+  statusOverride?: 'PAUSED' | 'COMPLETED' | 'STARTED' | null
+  /** `立即开始` 时被退回按时间自动流转的后续阶段序号（接口回填） */
+  revertedStages?: number[]
   description?: string
 }
 
@@ -57,6 +61,10 @@ export interface BatchInfo {
   academicYear: string
   description?: string
   status: string
+  statusLabel?: string
+  writable?: boolean
+  stoppedAt?: string | null
+  stopReason?: string | null
   createdAt: string
   stages?: StageInfo[]
   currentStage?: { no: number; name: string; key: string } | null
@@ -65,6 +73,19 @@ export interface BatchInfo {
 export interface LabView {
   id: number
   name: string
+  /** 名称为空时由后端给出的展示名（如「202 实训室」） */
+  displayName?: string
+  labCode?: string
+  college?: string
+  location?: string
+  researchDirection?: string
+  detail?: string
+  features?: string
+  achievements?: string
+  equipment?: string
+  contact?: string
+  remark?: string
+  academicYear?: string
   description?: string
   projectDirection?: string
   technologyStack?: string
@@ -171,6 +192,8 @@ export interface AnnouncementItem {
 
 export interface NoticeItem {
   id: number
+  destination?: string
+  interviewId?: number | null
   targetRole?: string | null
   targetUserId?: number | null
   title: string
@@ -254,6 +277,9 @@ export interface CollegeBatch {
   academicYear: string
   status: string
   description?: string
+  stoppedAt?: string | null
+  stopReason?: string | null
+  writable?: boolean
 }
 
 export interface CollegeLabProgress {
@@ -273,6 +299,8 @@ export interface CollegeLabProgress {
 
 export interface CollegeDashboard {
   batch: CollegeBatch | null
+  overview: { students: number; teachers: number; laboratories: number }
+  todos: CollegeTodo[]
   stages: StageInfo[]
   currentStage: StageInfo | null
   students: { total: number; submitted: number; unsubmitted: number }
@@ -280,6 +308,16 @@ export interface CollegeDashboard {
   totals: { quota: number; admitted: number; remaining: number }
   adjustments: { INTERNAL: number; CROSS_LAB: number; MANUAL_PLACEMENT: number; confirmed: number }
   lists: { intended: number; alternate: number; confirmed: number; rejected: number }
+}
+
+/** 学院端待办事项 */
+export interface CollegeTodo {
+  key: string
+  title: string
+  count: number
+  desc: string
+  path: string
+  level: 'info' | 'warning' | 'danger' | 'success'
 }
 
 export interface CapacityRow {
@@ -405,6 +443,8 @@ export interface PreferenceDetail extends PreferenceItem {
 
 export interface InterviewDetail extends InterviewItem {
   laboratoryName: string
+  appointmentStatus?: string
+  evaluationSummary?: import('@/api/interviewSelection').EvaluationSummary
 }
 
 export interface AdmissionDetail extends AdmissionItem {

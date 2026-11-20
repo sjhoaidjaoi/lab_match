@@ -2,25 +2,58 @@
   <div
     ref="landingRef"
     class="landing"
-    :class="{ ready: !booting }"
+    :class="{ ready: !booting, booting }"
     @scroll="onScroll"
     @wheel="onChapterWheel"
     @mousemove="onPointerMove"
   >
     <transition name="boot-exit">
       <aside v-if="booting" class="boot" aria-label="欢迎">
-        <div class="boot-panel">
-          <div class="boot-caption"><span aria-hidden="true">&lt;/&gt;</span> LAB MATCH</div>
-          <p class="boot-greeting" :aria-label="bootGreeting">
-            <span class="boot-measure" aria-hidden="true">{{ bootGreeting }}&nbsp;</span>
-            <span class="boot-typing" aria-hidden="true">{{ bootText }}<i></i></span>
-          </p>
-          <p class="boot-school">河北师范大学软件学院</p>
-          <button type="button" class="boot-skip" @click="finishBoot">跳过开场</button>
+        <div class="boot-backdrop" aria-hidden="true">
+          <span class="boot-glow glow-warm"></span>
+          <span class="boot-glow glow-pink"></span>
+          <span class="boot-grid"></span>
+          <span class="boot-scan"></span>
+          <!-- 时光塔：素材已在构建时调成淡剪影并三边羽化，页面侧只放一张图，零滤镜 -->
+          <img class="boot-tower" :src="bootTower" alt="" aria-hidden="true" decoding="async" />
+          <span class="boot-ghost">01</span>
+          <span class="boot-tick tick-a">+</span>
+          <span class="boot-tick tick-b">+</span>
+          <span class="boot-tick tick-c">+</span>
+          <span class="boot-tick tick-d">+</span>
+        </div>
+
+        <div class="boot-frame">
+          <header class="boot-top">
+            <span class="boot-chip"><i aria-hidden="true">&lt;/&gt;</i> LAB MATCH</span>
+            <span class="boot-meta">SOFTWARE COLLEGE · 2026</span>
+          </header>
+
+          <div class="boot-core">
+            <p class="boot-kicker"><b>00</b> WELCOME</p>
+            <h1 class="boot-title" :aria-label="bootGreeting">
+              <span class="boot-line"><span class="boot-word word-en">Hello<i class="boot-dot">.</i></span></span>
+              <span class="boot-line"><span class="boot-word word-zh">软件人</span></span>
+            </h1>
+            <div class="boot-rule" aria-hidden="true"><i></i></div>
+            <p class="boot-sub">河北师范大学软件学院 · 实训室双向选拔与统筹调剂平台</p>
+          </div>
+
+          <footer class="boot-foot">
+            <span class="boot-progress" aria-hidden="true">
+              <span class="boot-progress-label">BOOTING WORKSPACE</span>
+              <span class="boot-progress-track"><i></i></span>
+            </span>
+            <button type="button" class="boot-skip" @click="finishBoot">
+              跳过开场 <span aria-hidden="true">→</span>
+            </button>
+          </footer>
         </div>
       </aside>
     </transition>
 
+    <!-- 校园实景背景：黄昏中的时光塔。虚化已在构建时烘焙进图片，页面侧零滤镜。 -->
+    <div class="campus-bg" aria-hidden="true"></div>
     <div class="grid-bg" aria-hidden="true"></div>
     <div class="spotlight" aria-hidden="true"></div>
 
@@ -121,7 +154,7 @@
           </div>
 
           <div class="hero-visual">
-            <div class="visual-frame">
+            <div class="visual-frame" :class="{ 'bubble-on': bubbleVisible }">
               <svg class="software-blueprint" viewBox="0 0 560 560" fill="none" aria-hidden="true" focusable="false">
                 <!-- 静态版本分支与代码符号，作为机器人背后的专业纹理。 -->
                 <path class="blueprint-path" d="M34 120V282C34 310 78 310 78 338V448H180M34 216C34 244 114 244 114 272V304M392 62H470C496 62 510 76 510 102V190M400 492H492V378" />
@@ -137,10 +170,16 @@
               </svg>
               <div class="ring ring-a" aria-hidden="true"></div>
               <div class="ring ring-b" aria-hidden="true"></div>
-              <RobotScene class="robot-3d" />
-              <div class="float-tag tag-a">名额实时约束</div>
-              <div class="float-tag tag-b">时间窗自动锁定</div>
-              <div class="float-tag tag-c">调剂去重校验</div>
+              <div class="frame-stage">
+                <RobotScene ref="robotRef" class="robot-3d" @poke="onPoke" />
+              </div>
+              <!-- 点击 E宝 时在头顶冒一朵云，再点换一句 -->
+              <transition name="eba-cloud">
+                <div v-if="bubbleVisible" class="eba-cloud" role="status" aria-live="polite">
+                  <p :key="greetingIndex">{{ greeting }}</p>
+                  <span class="cloud-tail" aria-hidden="true"></span>
+                </div>
+              </transition>
             </div>
             <div class="visual-caption">
               <span>08 STAGES</span>
@@ -258,8 +297,6 @@
       </section>
     </main>
 
-    <div class="scroll-progress" :style="{ transform: `scaleX(${scrollProgress})` }" aria-hidden="true"></div>
-
     <nav class="section-rail" aria-label="页面章节导航">
       <button
         v-for="item in railSections"
@@ -289,7 +326,6 @@
           <img class="school-logo dialog-school-logo" :src="schoolLogo" width="4206" height="650" alt="河北师范大学软件学院" />
           <p class="kicker">SIGN IN</p>
           <h2>统一登录</h2>
-          <p class="dialog-sub">学生、导师、组长与学院负责人使用同一入口</p>
         </div>
       </template>
 
@@ -311,14 +347,12 @@
           {{ auth.loading ? '登录中…' : '登录' }}
         </button>
       </el-form>
-
-      <p class="tip">学生和教师使用初始密码登录时须修改密码。账号异常请联系学院管理员。</p>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules, InputInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
@@ -328,16 +362,45 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
-const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.jpg`
+const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.png`
+/* 开场页右侧的时光塔。窄屏换小图，解码像素只有六成。 */
+const bootTower = window.innerWidth < 900
+  ? `${import.meta.env.BASE_URL}images/tower-boot-sm.webp`
+  : `${import.meta.env.BASE_URL}images/tower-boot.webp`
 const loginError = ref('')
 
 const landingRef = ref<HTMLElement | null>(null)
+const robotRef = ref<InstanceType<typeof RobotScene> | null>(null)
 const heroRef = ref<HTMLElement | null>(null)
 const statsRef = ref<HTMLElement | null>(null)
 const booting = ref(!window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 const bootGreeting = 'Hello 软件人'
-const bootText = ref('')
 let bootTimer = 0
+
+/* ---------------- E宝 云朵问好 ----------------
+   首页不做问答：点一下冒一句招呼，再点换一句。
+   文案固定、无网络请求，纯交互氛围，别在这里接业务逻辑。 */
+const GREETINGS = [
+  '你好呀，我是 E宝 👋 欢迎来到软件学院！',
+  '想进实训室？先去「八阶段流程」看看时间线吧～',
+  '最多能填 3 个平行志愿，名额有限，别浪费哦',
+  '面试结束后记得回来确认拟录取，逾期会释放名额',
+  '没被录取也别慌，还有两轮补录和全院调剂',
+  '点我一下，换句话给你听～'
+]
+const greetingIndex = ref(-1)
+const bubbleVisible = ref(false)
+const greeting = computed(() => GREETINGS[(greetingIndex.value + GREETINGS.length) % GREETINGS.length])
+let bubbleTimer = 0
+
+/* 每次点击先做小动作再换一句；云朵 5 秒后自动收起 */
+function onPoke() {
+  greetingIndex.value = (greetingIndex.value + 1) % GREETINGS.length
+  bubbleVisible.value = true
+  robotRef.value?.react()
+  if (bubbleTimer) window.clearTimeout(bubbleTimer)
+  bubbleTimer = window.setTimeout(() => { bubbleVisible.value = false }, 5000)
+}
 const formRef = ref<FormInstance>()
 const accountRef = ref<InputInstance>()
 
@@ -449,7 +512,6 @@ const rules: FormRules = {
 const loginVisible = ref(false)
 const scrolled = ref(false)
 const activeSection = ref('top')
-const scrollProgress = ref(0)
 
 const railSections = [
   { id: 'top', label: 'HOME' },
@@ -578,8 +640,6 @@ function updateScrollState() {
   const scrollTop = el.scrollTop
   scrolled.value = scrollTop > 12
 
-  const maxScroll = el.scrollHeight - el.clientHeight
-  scrollProgress.value = maxScroll > 0 ? Math.min(scrollTop / maxScroll, 1) : 0
   // 章节高亮：取最后一个已越过视口上沿 40% 的区块
   const containerTop = el.getBoundingClientRect().top
   const line = scrollTop + el.clientHeight * 0.4
@@ -604,9 +664,11 @@ function onPointerMove(event: MouseEvent) {
     const el = landingRef.value
     const target = lastPointer
     if (!el || !target) return
-    const rect = el.getBoundingClientRect()
-    el.style.setProperty('--mx', `${target.clientX - rect.left}px`)
-    el.style.setProperty('--my', `${target.clientY - rect.top}px`)
+    /* 不再每帧 getBoundingClientRect()：.landing 自身就是视口尺寸的滚动容器，
+       左上角恒在 (0,0)，直接取 client 坐标即可。原来的写法每帧强制一次布局，
+       和滚动抢同一帧，是鼠标划过时掉帧的来源。 */
+    el.style.setProperty('--mx', `${target.clientX}px`)
+    el.style.setProperty('--my', `${target.clientY}px`)
   })
 }
 
@@ -649,15 +711,8 @@ function finishBoot() {
 
 function runBoot() {
   if (!booting.value) return
-  let length = 0
-  function typeGreeting() {
-    length += 1
-    bootText.value = bootGreeting.slice(0, length)
-    bootTimer = length < bootGreeting.length
-      ? window.setTimeout(typeGreeting, 90)
-      : window.setTimeout(finishBoot, 300)
-  }
-  bootTimer = window.setTimeout(typeGreeting, 140)
+  // 开场为整屏大字入场动画，进度条走完即自动进入首页。
+  bootTimer = window.setTimeout(finishBoot, 2000)
 }
 
 onMounted(() => {
@@ -681,6 +736,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (typeTimer) window.clearTimeout(typeTimer)
   window.clearTimeout(bootTimer)
+  if (bubbleTimer) window.clearTimeout(bubbleTimer)
   window.cancelAnimationFrame(scrollFrame)
   revealObserver?.disconnect()
 })
@@ -694,7 +750,9 @@ onBeforeUnmount(() => {
   --ink: #14161a;
   --muted: #6b6862;
   --line: rgba(20, 22, 26, 0.14);
-  --accent: #ff5f9e;
+  /* 强调色收归品牌橙。这里原本是 #ea580c 品红，与工作台的 --workspace-accent
+     (#ea580c) 是两套色系，登录页与内页放在一起看会像两个产品。 */
+  --accent: #ea580c;
   --accent-warm: #ffb26b;
 
   position: relative;
@@ -726,75 +784,467 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 90;
-  display: grid;
-  place-items: center;
-  padding: 18px;
-  background:
-    radial-gradient(ellipse at 72% 77%, #f3ded7, transparent 58%),
-    #f4f0e9;
+  isolation: isolate;
+  overflow: hidden;
+  background: #f4f0e9;
+  color: #14161a;
+  font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
 }
-.boot-panel {
+
+.boot-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.boot-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(72px);
+  animation: bootFloat 16s ease-in-out infinite;
+}
+
+.glow-warm {
+  top: -18%;
+  right: -8%;
+  width: min(46vw, 700px);
+  height: min(46vw, 700px);
+  background: radial-gradient(circle, rgba(255, 178, 107, 0.52), transparent 70%);
+}
+
+.glow-pink {
+  bottom: -20%;
+  left: -10%;
+  width: min(42vw, 620px);
+  height: min(42vw, 620px);
+  background: radial-gradient(circle, rgba(255, 95, 158, 0.28), transparent 70%);
+  animation-delay: -7s;
+}
+
+@keyframes bootFloat {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(24px, -18px, 0); }
+}
+
+/* 细网格：只在中间区域显影，避免满屏颗粒感 */
+.boot-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(20, 22, 26, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(20, 22, 26, 0.07) 1px, transparent 1px);
+  background-size: 76px 76px;
+  -webkit-mask-image: radial-gradient(115% 85% at 46% 46%, #000 18%, transparent 76%);
+  mask-image: radial-gradient(115% 85% at 46% 46%, #000 18%, transparent 76%);
+  animation: bootFade 1.6s ease both;
+}
+
+/* 一次性扫光，强化"开场"仪式感 */
+.boot-scan {
+  position: absolute;
+  top: -10%;
+  bottom: -10%;
+  left: 0;
+  width: 42vw;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.62), transparent);
+  transform: translateX(-55vw) skewX(-14deg);
+  animation: bootScan 2.1s cubic-bezier(0.4, 0, 0.2, 1) 0.15s both;
+}
+
+@keyframes bootScan {
+  to { transform: translateX(125vw) skewX(-14deg); }
+}
+
+/* 时光塔：开场页右半边的视觉锚点。
+   素材 tower-boot.webp 已在构建时调成淡剪影、三边羽化并带 alpha，
+   所以这里只是一个普通 <img> —— 没有 filter、没有 backdrop-filter，
+   开场页的合成层数量不因为多了它而变化。底边齐平视口，塔像从纸里长出来。 */
+.boot-tower {
+  position: absolute;
+  right: clamp(18px, 6vw, 120px);
+  bottom: 0;
+  height: min(86vh, 820px);
+  width: auto;
+  max-width: 42vw;
+  object-fit: contain;
+  object-position: bottom right;
+  opacity: 0.84;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  animation: bootTowerIn 1.6s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+}
+
+@keyframes bootTowerIn {
+  from { opacity: 0; transform: translate3d(0, 30px, 0) scale(0.985); }
+  to { opacity: 0.84; transform: none; }
+}
+
+/* 巨型描边序号，撑住右下角留白 */
+.boot-ghost {
+  position: absolute;
+  right: -1.5vw;
+  bottom: -9vh;
+  font-size: min(50vw, 600px);
+  font-weight: 800;
+  line-height: 0.76;
+  letter-spacing: -0.06em;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(20, 22, 26, 0.075);
+  animation: bootGhost 2.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes bootGhost {
+  from { opacity: 0; transform: translate3d(28px, 22px, 0) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+.boot-tick {
+  position: absolute;
+  font: 400 15px/1 ui-monospace, Consolas, monospace;
+  color: rgba(255, 95, 158, 0.55);
+  animation: bootTwinkle 4.2s ease-in-out infinite;
+}
+
+.tick-a { top: 16%; left: 8%; }
+.tick-b { top: 26%; right: 16%; animation-delay: -1.1s; }
+.tick-c { bottom: 22%; left: 14%; animation-delay: -2.2s; }
+.tick-d { bottom: 30%; right: 8%; animation-delay: -3.1s; }
+
+@keyframes bootTwinkle {
+  0%, 100% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 0.95; transform: scale(1.12); }
+}
+
+.boot-frame {
   position: relative;
-  width: min(100%, 650px);
-  padding: clamp(24px, 6vw, 68px);
-  border: 1px solid #dfd4cb;
-  border-radius: 20px;
-  background:
-    linear-gradient(90deg, #98725a12 1px, transparent 1px),
-    linear-gradient(#98725a12 1px, transparent 1px),
-    #fffaf5;
-  background-size: 32px 32px;
-  box-shadow: 0 24px 72px #51352d16;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: clamp(18px, 3.2vh, 38px) clamp(20px, 5vw, 76px) clamp(16px, 2.8vh, 32px);
 }
-.boot-caption {
+
+.boot-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: #7a4437;
-  font: 600 13px var(--workspace-mono, Consolas, monospace);
-  letter-spacing: .14em;
+  justify-content: space-between;
+  gap: 16px;
+  animation: bootFade 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.05s both;
 }
-.boot-caption span {
+
+.boot-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 8px;
+  border: 1px solid #e2d5c9;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+  color: #7a4437;
+  font: 600 11px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.18em;
+}
+
+.boot-chip i {
   padding: 4px 6px;
-  border: 1px solid #e7d3c8;
   border-radius: 5px;
   background: #faeae0;
+  color: #a4402a;
+  font-style: normal;
+  letter-spacing: 0.02em;
 }
-.boot-greeting {
-  display: inline-grid;
-  margin: 18px 0 8px;
-  color: #292321;
-  font: 750 clamp(26px, 6vw, 63px)/1.18 Consolas, "Microsoft YaHei", monospace;
-  letter-spacing: -.045em;
+
+.boot-meta {
+  font-family: var(--font-grotesk);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.28em;
+  color: #8a8781;
   white-space: nowrap;
 }
-.boot-greeting > span { grid-area: 1 / 1; }
-.boot-measure { visibility: hidden; }
-.boot-typing i {
-  display: inline-block;
-  width: .09em;
-  height: .82em;
-  margin-inline-start: .15em;
-  vertical-align: -.03em;
-  border-radius: 1px;
-  background: #a4402a;
+
+.boot-core {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
 }
-.boot-school { margin: 0; color: #64534a; font-size: 13px; letter-spacing: .06em; }
-.boot-skip {
+
+.boot-kicker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 clamp(12px, 2.6vh, 26px);
+  font-family: var(--font-grotesk);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.32em;
+  color: #8a8781;
+  animation: bootFade 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.boot-kicker b {
+  color: #ea580c;
+  font-weight: 700;
+}
+
+.boot-title {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+/* 逐行遮罩上浮，制造"压上来"的视觉冲击。
+   padding 加到 0.14em 再负 margin 抵消：宋体的撇、捺、勾会伸出字身框，
+   overflow: hidden 只留 0.04em 时「软」的捺脚会被直接切平。 */
+.boot-line {
   display: block;
-  margin: 20px 0 0 auto;
-  padding: 7px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: #7a4437;
-  cursor: pointer;
-  font: inherit;
+  overflow: hidden;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.1em;
 }
-.boot-skip:hover, .boot-skip:focus-visible { background: #faeae0; }
-.boot-skip:focus-visible { outline: 2px solid #a4402a; outline-offset: 2px; }
-.boot-exit-leave-active { transition: opacity .26s ease; pointer-events: none; }
-.boot-exit-leave-to { opacity: 0; }
+
+.boot-word {
+  display: block;
+  animation: bootRise 1.15s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 「Hello.」用几何无衬线：字腔小、笔画略怪，和下面的宋体形成明确对比。
+   如果把两行塞进同一种字体，这四行字就会糊成一整块，失去节奏。 */
+.word-en {
+  font-family: var(--font-grotesk);
+  font-size: clamp(64px, min(15.5vw, 23vh), 196px);
+  font-weight: 700;
+  line-height: 0.88;
+  letter-spacing: -0.045em;
+  animation-delay: 0.26s;
+}
+
+.word-en .boot-dot {
+  color: #ea580c;
+  font-style: normal;
+}
+
+/* 「软件人」用宋体：横细竖粗 + 收笔的锋芒，是大字号下唯一能撑住「质感」的字形。
+   配色改成一路上行的暖墨渐变（近黑褐 → 焦糖 → 品牌橙），比纯渐变彩字更像
+   印刷品上的烫印，也仍然落在品牌的暖色系里。 */
+.word-zh {
+  font-family: var(--font-display);
+  font-size: clamp(72px, min(18.5vw, 27vh), 236px);
+  font-weight: 900;
+  /* 宋体的撇捺会向下出格，0.96 的行高会被 .boot-line 的 overflow 裁掉笔画 */
+  line-height: 1.08;
+  letter-spacing: 0.05em;
+  background: linear-gradient(172deg, #17130f 0%, #6d3510 46%, #ea580c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation-delay: 0.4s;
+}
+
+@keyframes bootRise {
+  from { opacity: 0; transform: translateY(112%); }
+  to { opacity: 1; transform: none; }
+}
+
+.boot-rule {
+  position: relative;
+  height: 1px;
+  max-width: min(760px, 82vw);
+  margin: clamp(18px, 3.4vh, 34px) 0 0;
+  background: rgba(20, 22, 26, 0.14);
+  transform-origin: left center;
+  animation: bootRule 1s cubic-bezier(0.22, 1, 0.36, 1) 0.62s both;
+}
+
+.boot-rule i {
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: clamp(72px, 9vw, 132px);
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ffb26b, #ea580c);
+}
+
+@keyframes bootRule {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.boot-sub {
+  margin: 16px 0 0;
+  font-size: clamp(12.5px, 1.15vw, 15px);
+  letter-spacing: 0.1em;
+  color: #6b6862;
+  animation: bootFade 1s cubic-bezier(0.22, 1, 0.36, 1) 0.78s both;
+}
+
+.boot-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-top: clamp(12px, 2vh, 20px);
+  border-top: 1px solid rgba(20, 22, 26, 0.1);
+  animation: bootFade 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.9s both;
+}
+
+.boot-progress {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  max-width: min(760px, 62vw);
+}
+
+.boot-progress-label {
+  font: 600 10px/1 ui-monospace, Consolas, monospace;
+  letter-spacing: 0.24em;
+  color: #8a8781;
+  white-space: nowrap;
+}
+
+.boot-progress-track {
+  position: relative;
+  flex: 1;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(20, 22, 26, 0.12);
+  overflow: hidden;
+}
+
+.boot-progress-track i {
+  position: absolute;
+  inset: 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ffb26b, #ea580c);
+  transform-origin: left center;
+  animation: bootBar 1.85s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes bootBar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.boot-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: 1px solid rgba(20, 22, 26, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #3b3a37;
+  font: inherit;
+  font-size: 12.5px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+
+.boot-skip span {
+  color: #ea580c;
+  transition: color 0.25s ease;
+}
+
+.boot-skip:hover,
+.boot-skip:focus-visible {
+  background: #14161a;
+  border-color: #14161a;
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.boot-skip:hover span,
+.boot-skip:focus-visible span {
+  color: #ffb26b;
+}
+
+.boot-skip:focus-visible {
+  outline: 2px solid #ea580c;
+  outline-offset: 3px;
+}
+
+@keyframes bootFade {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.boot-exit-leave-active { transition: opacity 0.34s ease, transform 0.34s ease; pointer-events: none; }
+.boot-exit-leave-to { opacity: 0; transform: scale(1.015); }
+
+/* 开场期间不渲染首屏 3D，避免画布盖到开场层之上 */
+.landing.booting .hero-visual { opacity: 0; }
+
+@media (max-width: 720px) {
+  /* 窄屏两栏变一栏，右下的塔会顶到标题上，直接收起 */
+  .boot-tower { display: none; }
+  .boot-meta { display: none; }
+  .boot-ghost { opacity: 0.6; }
+  .boot-progress { max-width: none; }
+  .boot-progress-label { display: none; }
+  .boot-foot { justify-content: flex-end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-scan { display: none; }
+}
+
+/* 校园实景背景：黄昏 + 时光塔。
+   虚化已在 .screenshots/tools/make-tower-bg.py 里烘焙进 JPEG（塔保持 60% 高度、
+   落在水平 67% 处，四周是同图的高斯虚化）。页面侧只用一张固定图片：
+   没有 filter、没有 backdrop-filter，轮播时这张图不会被重算，成本近乎为零。
+   translateZ 把它提成独立合成层，正文滚动或换章都不会带着它一起重绘。 */
+.campus-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url('/images/campus-tower-sm.jpg');
+  background-position: 50% 50%;
+  background-size: cover;
+  background-repeat: no-repeat;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* 大屏才换 1920 版。1280 版只有 19KB、约 92 万像素要解码，是全尺寸版的四成；
+   背景本来就做过高斯虚化，放大 1.25 倍看不出差别，但首帧解码省下的时间很实在。 */
+@media (min-width: 1600px) {
+  .campus-bg {
+    background-image: url('/images/campus-tower.jpg');
+  }
+}
+
+/* 遮罩：左侧压到 95% 白度保证文案可读，40% 之后迅速让开，把塔露出来。
+   渐变在 42%~56% 之间刻意压陡 —— 文案实际排到 40% 左右，再往右就可以大胆透，
+   这样塔既能看清，也不会有一片灰色糊到标题上。 */
+.campus-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(100deg,
+      rgba(247, 244, 239, 0.95) 0%,
+      rgba(247, 244, 239, 0.88) 30%,
+      rgba(247, 244, 239, 0.64) 42%,
+      rgba(247, 244, 239, 0.3) 56%,
+      rgba(247, 244, 239, 0.16) 74%,
+      rgba(247, 244, 239, 0.1) 100%),
+    linear-gradient(180deg,
+      rgba(247, 244, 239, 0.56) 0%,
+      rgba(247, 244, 239, 0.04) 24%,
+      rgba(247, 244, 239, 0.02) 70%,
+      rgba(247, 244, 239, 0.68) 100%);
+}
 
 .grid-bg {
   position: fixed;
@@ -802,13 +1252,12 @@ onBeforeUnmount(() => {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, rgba(20, 22, 26, 0.055) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(20, 22, 26, 0.055) 1px, transparent 1px),
-    radial-gradient(120% 80% at 50% -12%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0) 62%),
-    radial-gradient(58% 52% at 86% 6%, rgba(255, 178, 107, 0.22), transparent 66%),
-    radial-gradient(52% 55% at 8% 22%, rgba(255, 95, 158, 0.13), transparent 64%);
+    linear-gradient(to right, rgba(20, 22, 26, 0.032) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(20, 22, 26, 0.032) 1px, transparent 1px),
+    radial-gradient(120% 80% at 50% -12%, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0) 62%),
+    radial-gradient(58% 52% at 86% 6%, rgba(255, 178, 107, 0.18), transparent 66%),
+    radial-gradient(52% 55% at 8% 22%, rgba(234, 88, 12, 0.08), transparent 64%);
   background-size: 96px 96px, 96px 96px, 100% 100%, 100% 100%, 100% 100%;
-  will-change: transform;
 }
 
 .spotlight {
@@ -816,7 +1265,7 @@ onBeforeUnmount(() => {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background: radial-gradient(560px circle at var(--mx) var(--my), rgba(255, 95, 158, 0.1), transparent 62%);
+  background: radial-gradient(560px circle at var(--mx) var(--my), rgba(234, 88, 12, 0.08), transparent 62%);
 }
 
 .ticker,
@@ -828,13 +1277,20 @@ onBeforeUnmount(() => {
 }
 
 /* ---------- 顶部通告 ---------- */
+/* 顶部通告：和导航连成同一条玻璃带，只是更薄 */
 .ticker {
   display: flex;
   align-items: center;
   height: var(--ticker-height);
   overflow: hidden;
-  border-bottom: 1px solid var(--line);
-  background: rgba(241, 239, 233, 0.9);
+  border-bottom: 0;
+  background-color: rgba(255, 255, 255, 0.3);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.08));
+  -webkit-backdrop-filter: blur(18px) saturate(175%);
+  backdrop-filter: blur(18px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .ticker-track {
@@ -922,7 +1378,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
   letter-spacing: 0.06em;
   color: #fff;
-  background: linear-gradient(135deg, #ff8a5c, #ff5f9e);
+  background: linear-gradient(135deg, #ff8a5c, #ea580c);
   box-shadow: 0 6px 18px rgba(255, 95, 158, 0.35);
 }
 
@@ -1039,6 +1495,10 @@ onBeforeUnmount(() => {
 
 /* ---------- Hero ---------- */
 .main {
+  /* 抬到背景层之上：.campus-bg / .grid-bg / .spotlight 都是 z-index:0 的固定层，
+     普通流的 section 会被它们盖住，这里显式声明层级，避免依赖 DOM 顺序的巧合。 */
+  position: relative;
+  z-index: 1;
   max-width: none;
   margin: 0 auto;
   padding: 0 clamp(24px, 4.5vw, 96px);
@@ -1067,10 +1527,12 @@ onBeforeUnmount(() => {
   margin: 0 auto;
 }
 
+/* 光斑本身就是 radial-gradient，边缘已经软了，不需要再叠 filter: blur()。
+   blur(60px) 作用在 320px 的元素上会拖出一大块需要每帧重新栅格化的区域，
+   而这层只是装饰——把渐变的透明截止从 70% 拉到 90% 就能得到同样的弥散感。 */
 .hero-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(60px);
   pointer-events: none;
   z-index: 0;
   opacity: 0.55;
@@ -1082,7 +1544,8 @@ onBeforeUnmount(() => {
   height: 320px;
   top: -70px;
   right: 16%;
-  background: radial-gradient(circle, rgba(255, 178, 107, 0.55), transparent 70%);
+  background: radial-gradient(circle,
+    rgba(255, 178, 107, 0.55) 0%, rgba(255, 178, 107, 0.28) 45%, rgba(255, 178, 107, 0) 90%);
 }
 
 .orb-pink {
@@ -1090,7 +1553,8 @@ onBeforeUnmount(() => {
   height: 260px;
   bottom: 4%;
   left: -50px;
-  background: radial-gradient(circle, rgba(255, 95, 158, 0.4), transparent 70%);
+  background: radial-gradient(circle,
+    rgba(234, 88, 12, 0.4) 0%, rgba(234, 88, 12, 0.2) 45%, rgba(234, 88, 12, 0) 90%);
   animation-delay: -6s;
 }
 
@@ -1211,34 +1675,44 @@ onBeforeUnmount(() => {
 
 .kicker {
   margin: 0 0 18px;
-  font-family: ui-monospace, "JetBrains Mono", Consolas, monospace;
+  font-family: var(--font-grotesk);
   font-size: 11px;
-  letter-spacing: 0.24em;
+  font-weight: 700;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
+/* 主标题用宋体：这里是整页的第一视觉落点，黑体在这个字号下会显得"平"。
+   行高从 1.02 放到 1.16 —— 宋体的字身框比黑体高，行高太紧会让上下两行撞在一起。 */
 .hero-title {
+  font-family: var(--font-display);
   margin: 0;
-  font-size: clamp(46px, 6.4vw, 88px);
-  line-height: 1.02;
-  font-weight: 700;
-  letter-spacing: -0.03em;
+  font-size: clamp(44px, 6vw, 82px);
+  line-height: 1.16;
+  font-weight: 900;
+  letter-spacing: 0.01em;
 }
 
 .hero-title .line {
   display: block;
 }
 
+/* 方框改用双线：外粗内细，是印刷版面上"强调框"的做法，
+   比单根 1px 边线更像一个被认真排过的标题，而不是随手加的边框。 */
 .boxed {
   display: inline-block;
-  padding: 0 16px 6px;
-  border: 1px solid var(--ink);
-  border-radius: 4px;
+  padding: 0.02em 0.24em 0.1em;
+  border: 1px solid rgba(29, 26, 23, 0.78);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 10px 26px -18px rgba(58, 41, 28, 0.6);
 }
 
+/* 关键词去掉原来的品红渐变（那是早期留下的色），收进品牌橙的明暗区间 */
 .grad {
-  background: linear-gradient(100deg, #ff8a5c 0%, #ff5f9e 70%);
+  background: linear-gradient(96deg, #f97316 0%, #ea580c 48%, #b8420a 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1342,6 +1816,7 @@ onBeforeUnmount(() => {
 .hero-visual {
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   gap: 14px;
 }
 
@@ -1360,11 +1835,110 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
+/* 舞台层：包住 3D 画布，保持独立定位上下文 */
+.frame-stage {
+  position: absolute;
+  inset: 0;
+}
+
 .robot-3d {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.software-blueprint,
+.ring {
+  transition: opacity 0.34s ease;
+}
+
+/* ---------- E宝 头顶的云朵问好 ---------- */
+.eba-cloud {
+  position: absolute;
+  left: 50%;
+  /* 压在头顶、但不盖脸：E宝 立绘顶部约占画框 17.5%，云朵底边停在 20% 处 */
+  bottom: 80%;
+  z-index: 4;
+  width: max-content;
+  max-width: 74%;
+  padding: 13px 18px 14px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbf8f3 100%);
+  box-shadow:
+    0 20px 40px -18px rgba(20, 22, 26, 0.34),
+    0 2px 0 rgba(255, 255, 255, 0.9) inset;
+  transform: translateX(-50%);
+  /* 点云朵等于点 E宝，继续换下一句 */
+  pointer-events: none;
+}
+
+/* 两个圆鼓包把矩形撑成云；底边压在 E宝 头顶，靠投影和头部拉开层次 */
+.eba-cloud::before,
+.eba-cloud::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.eba-cloud::before {
+  left: 18px;
+  top: -17px;
+  width: 42px;
+  height: 42px;
+}
+
+.eba-cloud::after {
+  right: 24px;
+  top: -13px;
+  width: 30px;
+  height: 30px;
+}
+
+.eba-cloud p {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  letter-spacing: 0.01em;
+  color: #2c2b28;
+  text-align: center;
+  /* 换句时文字重新入场（p 带 key，会被重建，动画自然重播） */
+  animation: cloudTextIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes cloudTextIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* 指向头顶的小尾巴 */
+.cloud-tail {
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 15px;
+  height: 15px;
+  margin-left: -7.5px;
+  border-radius: 2px;
+  background: #fff;
+  transform: rotate(45deg);
+}
+
+.eba-cloud-enter-active {
+  transition: opacity 0.26s ease, transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.eba-cloud-leave-active {
+  transition: opacity 0.24s ease, transform 0.24s ease;
+}
+
+.eba-cloud-enter-from,
+.eba-cloud-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(12px) scale(0.82);
 }
 
 .ring {
@@ -1385,40 +1959,6 @@ onBeforeUnmount(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
-}
-
-.float-tag {
-  position: absolute;
-  padding: 7px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  color: #3b3a37;
-  animation: floaty 5s ease-in-out infinite;
-}
-
-.tag-a {
-  top: 9%;
-  left: 6%;
-}
-
-.tag-b {
-  top: 24%;
-  right: 4%;
-  animation-delay: 1.2s;
-}
-
-.tag-c {
-  bottom: 12%;
-  left: 10%;
-  animation-delay: 2.4s;
-}
-
-@keyframes floaty {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
 }
 
 .visual-caption {
@@ -1488,12 +2028,15 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
 }
 
+/* 区块标题同样走宋体，与 hero 形成同一套排版语言。
+   负字距在这里反而有害：宋体的横画细，挤在一起会失去呼吸感。 */
 .section-title {
+  font-family: var(--font-display);
   margin: 0;
-  font-size: clamp(32px, 3.2vw, 52px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  font-size: clamp(30px, 3vw, 46px);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
 }
 
 .section-desc {
@@ -1580,8 +2123,10 @@ onBeforeUnmount(() => {
 }
 
 .stage-card:hover {
-  background: #fff;
-  transform: translateY(-3px);
+  background-color: rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 18px 40px -26px rgba(58, 41, 28, 0.5);
 }
 
 .stage-head {
@@ -1635,9 +2180,10 @@ onBeforeUnmount(() => {
 }
 
 .role-card:hover {
-  transform: translateY(-4px);
-  background: #fff;
-  box-shadow: 0 16px 36px rgba(20, 22, 26, 0.08);
+  background-color: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    0 20px 44px -28px rgba(58, 41, 28, 0.5);
 }
 
 .role-code {
@@ -1682,11 +2228,12 @@ onBeforeUnmount(() => {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ffb26b, #ff5f9e);
+  background: linear-gradient(135deg, #ffb26b, #ea580c);
 }
 
 /* ---------- FAQ ---------- */
 .faq-screen {
+  --faq-reserve: calc(14px * 1.9 + 24px); /* 一条答案的高度：行高 + 下内边距 */
   display: grid;
   grid-template-columns: minmax(220px, 0.6fr) minmax(380px, 1.4fr);
   gap: clamp(36px, 5vw, 96px);
@@ -1694,8 +2241,17 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
+/* FAQ 是满屏停靠的一屏，内容按中线居中。点击问题时列表会变高，居中算法就会让它
+   上下同时撑开（上沿往上跑、下沿往下跑），看起来像整个框在「变形」。
+   这里常驻一条答案高度的留白，展开时用 :has 收掉它 —— 列表总高度不变，
+   外框上下沿都不动，只有下面的条目整体下移，正好填进原来的留白。 */
 .faq-list {
+  padding-bottom: var(--faq-reserve);
   border-top: 1px solid var(--line);
+}
+
+.faq-list:has(.faq-item[open]) {
+  padding-bottom: 0;
 }
 
 .faq-item {
@@ -1826,10 +2382,12 @@ onBeforeUnmount(() => {
 }
 
 .cta-band h2 {
+  font-family: var(--font-display);
   margin: 0 0 14px;
-  font-size: clamp(30px, 3.6vw, 54px);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: clamp(30px, 3.4vw, 50px);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  line-height: 1.28;
 }
 
 .cta-band p {
@@ -1863,19 +2421,7 @@ onBeforeUnmount(() => {
   letter-spacing: 0.06em;
 }
 
-/* ---------- 滚动指引 ---------- */
-.scroll-progress {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  z-index: 60;
-  pointer-events: none;
-  transform-origin: 0 50%;
-  background: linear-gradient(90deg, #ffb26b, #ff5f9e 55%, #2f6fed);
-}
-
+/* ---------- 章节导轨 ---------- */
 .section-rail {
   position: fixed;
   right: 22px;
@@ -1930,7 +2476,7 @@ onBeforeUnmount(() => {
 
 .rail-item.active .rail-dot {
   height: 22px;
-  background: linear-gradient(180deg, #ffb26b, #ff5f9e);
+  background: linear-gradient(180deg, #ffb26b, #ea580c);
 }
 
 /* ---------- 章节渐显，保持滚动停靠位置固定 ---------- */
@@ -1976,16 +2522,19 @@ onBeforeUnmount(() => {
   animation: softRise 1.15s cubic-bezier(0.22, 1, 0.36, 1) 0.24s both;
 }
 
+/* 入场不再做模糊渐显。
+   原因：fill-mode: both 会把结束态永久留在元素上，而 filter 列表的插值规则里
+   none 与 blur() 互算都会落在 blur(0)，浏览器照样为每个元素单独开一层离屏合成。
+   首屏 hero-copy 有六七个这样的子元素，全是白开的图层。
+   改成位移 + 轻微缩放，观感更接近「抬上来」，也不再产生任何滤镜。 */
 @keyframes softRise {
   from {
     opacity: 0;
-    transform: translateY(28px);
-    filter: blur(9px);
+    transform: translateY(28px) scale(0.985);
   }
   to {
     opacity: 1;
     transform: none;
-    filter: blur(0);
   }
 }
 
@@ -1999,16 +2548,12 @@ onBeforeUnmount(() => {
 }
 
 .dialog-head h2 {
+  font-family: var(--font-display);
   margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
   color: #14161a;
-}
-
-.dialog-sub {
-  margin: 0;
-  font-size: 12.5px;
-  color: #8a8781;
 }
 
 .dialog-submit {
@@ -2017,29 +2562,33 @@ onBeforeUnmount(() => {
   margin-top: 4px;
 }
 
-.tip {
-  margin: 18px 0 0;
-  font-size: 11.5px;
-  color: #a5a19a;
-  line-height: 1.7;
-}
-
 /* 弹窗外壳（teleport 到 body，需全局选择器） */
 :global(.login-modal) {
-  background: linear-gradient(
-    158deg,
-    rgba(241, 239, 233, 0.86) 0%,
-    rgba(250, 236, 224, 0.7) 46%,
-    rgba(255, 95, 158, 0.26) 100%
-  );
+  background:
+    radial-gradient(circle at 78% 8%, rgba(255, 178, 107, 0.22), transparent 58%),
+    rgba(42, 32, 26, 0.24);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
 }
 
 :global(.login-dialog) {
-  border-radius: 18px;
+  border-radius: 28px;
   overflow: hidden;
   max-width: calc(100vw - 32px);
-  background: linear-gradient(165deg, #fffdfa 0%, #ffffff 46%, #fdf4ee 100%);
-  box-shadow: 0 32px 90px rgba(20, 22, 26, 0.2);
+  border: 0;
+  background-color: rgba(255, 255, 255, 0.6);
+  background-image:
+    radial-gradient(120% 100% at 10% -12%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0) 54%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12) 60%, rgba(255, 255, 255, 0.32));
+  -webkit-backdrop-filter: blur(24px) saturate(175%);
+  backdrop-filter: blur(24px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 1px 0 0 rgba(255, 255, 255, 0.5),
+    inset -1px 0 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.68),
+    0 2px 6px rgba(58, 41, 28, 0.06),
+    var(--lg-shadow-float);
 }
 
 :global(.login-dialog .el-dialog__header) {
@@ -2284,6 +2833,10 @@ onBeforeUnmount(() => {
     margin-bottom: 10px;
   }
 
+  .faq-screen {
+    --faq-reserve: calc(12.5px * 1.75 + 14px); /* 矮屏下答案行高同步变小，留白跟着收 */
+  }
+
   .faq-item p {
     padding-bottom: 14px;
     font-size: 12.5px;
@@ -2296,7 +2849,6 @@ onBeforeUnmount(() => {
   display: block;
   height: auto;
   object-fit: contain;
-  mix-blend-mode: multiply;
 }
 
 .nav-school-logo {
@@ -2447,30 +2999,267 @@ onBeforeUnmount(() => {
 }
 
 :global(.login-dialog) {
-  border-top: 3px solid #ff9862;
-  background: linear-gradient(160deg, #fffaf6, #fff 48%, #fff1eb);
+  border-top: 0;
 }
 
 .dialog-head .kicker { color: #a75437; }
 .dialog-head h2 { font-size: 26px; }
-.dialog-sub { color: #6f625d; }
 .dialog-submit { background: linear-gradient(110deg, #a4402a, #a53660); }
 .login-error {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border-radius: 8px;
-  background: #fcece8;
+  border-radius: 12px;
+  background: rgba(255, 226, 222, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
   color: #8e3027;
   font-size: 13px;
 }
 
 :global(.login-dialog .el-input__wrapper) { border-radius: 9px; }
 :global(.login-dialog .el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #bf694f inset;
+  box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.5) inset, 0 0 0 4px rgba(234, 88, 12, 0.14);
+}
+
+/* 浏览器自动填充（以及「记住的账号密码」）会把输入框涂成 #e8f0fe 的亮蓝色，
+   和这套米白+橙的玻璃完全不搭，而且覆盖了聚焦态的橙色描边。
+   Chrome 只认内阴影这一种改法：把内阴影铺满整块，等于重新上一次底色；
+   再加一条超长 transition 压掉它的淡入，否则会先闪一下蓝再变回来。 */
+:global(.login-dialog .el-input__inner:-webkit-autofill),
+:global(.login-dialog .el-input__inner:-webkit-autofill:hover),
+:global(.login-dialog .el-input__inner:-webkit-autofill:focus) {
+  -webkit-text-fill-color: #14161a !important;
+  caret-color: #14161a;
+  border-radius: inherit;
+  -webkit-box-shadow: 0 0 0 1000px #fbf3ec inset !important;
+  box-shadow: 0 0 0 1000px #fbf3ec inset !important;
+  transition: background-color 100000s ease-in-out 0s;
 }
 
 @media (max-width: 860px) {
   .engineering-watermark { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+
+/* ============================================================================
+   液态玻璃覆盖层（Landing）
+   首页保留米白纸感，但所有浮起来的东西都变成玻璃：导航胶囊、E宝 画框、阶段卡、
+   角色卡、弹窗。底色里补四团柔光，玻璃才有可折射的内容。
+   ========================================================================== */
+.landing {
+  background:
+    radial-gradient(ellipse 62% 44% at 10% 4%, rgba(255, 208, 171, 0.34), transparent 62%),
+    radial-gradient(ellipse 46% 38% at 94% 2%, rgba(255, 194, 210, 0.3), transparent 64%),
+    radial-gradient(ellipse 64% 46% at 84% 96%, rgba(185, 212, 240, 0.32), transparent 60%),
+    radial-gradient(ellipse 52% 40% at 4% 88%, rgba(255, 226, 196, 0.5), transparent 62%),
+    var(--cream);
+}
+
+/* 导航：通栏覆盖式液态玻璃带
+   上一版把它收成了悬浮胶囊，但整站是通栏排版，胶囊反而把上沿切成碎块。
+   现在回到「一整条铺满」的形态：贴边、无圆角、无缝盖住页面顶部，
+   材质仍走液态玻璃 —— 上下各一道高光描边，中间有一道缓慢游走的折光。 */
+.nav {
+  height: var(--nav-height);
+  margin: 0;
+  padding: 0 clamp(20px, 5vw, 64px);
+  border: 0;
+  border-radius: 0;
+  /* 让折光带被裁在条内，不会溢出到页面 */
+  overflow: hidden;
+  background-color: rgba(255, 255, 255, 0.14);
+  background-image:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.44) 0%,
+      rgba(255, 255, 255, 0.02) 52%,
+      rgba(255, 255, 255, 0.2) 100%);
+  -webkit-backdrop-filter: blur(24px) saturate(185%);
+  backdrop-filter: blur(24px) saturate(185%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 1px 0 0 rgba(255, 255, 255, 0.4),
+    inset -1px 0 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.62),
+    0 10px 26px -20px rgba(58, 44, 30, 0.3);
+  transition: box-shadow 0.45s var(--lg-ease), background-color 0.45s var(--lg-ease);
+}
+
+.nav.scrolled {
+  background-color: rgba(255, 255, 255, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    inset 1px 0 0 rgba(255, 255, 255, 0.48),
+    inset -1px 0 0 rgba(255, 255, 255, 0.48),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.72),
+    0 12px 28px -18px rgba(58, 44, 30, 0.34);
+}
+
+/* 导航内容必须压在折光之上，否则光带扫过时文字会被冲淡 */
+.brand,
+.nav-links,
+.nav-actions {
+  position: relative;
+  z-index: 1;
+}
+
+/* 游走的折光带：只做 transform，全程走合成层，不触发重绘 */
+.nav::before {
+  content: "";
+  position: absolute;
+  top: -60%;
+  bottom: -60%;
+  left: 0;
+  z-index: 0;
+  width: 40%;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.5) 40%,
+    rgba(255, 214, 176, 0.36) 56%,
+    rgba(255, 255, 255, 0) 100%);
+  transform: translate3d(-120%, 0, 0) skewX(-12deg);
+  animation: navLiquid 16s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes navLiquid {
+  0%, 10% { transform: translate3d(-120%, 0, 0) skewX(-12deg); }
+  66%, 100% { transform: translate3d(360%, 0, 0) skewX(-12deg); }
+}
+
+/* 顶部主反光 + 底沿一道液态光缝（原先右下的点阵纹理已被这条光缝取代） */
+.nav::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  width: auto;
+  height: auto;
+  pointer-events: none;
+  opacity: 1;
+  background-image:
+    radial-gradient(44% 128% at 13% 0%, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0) 66%),
+    linear-gradient(90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.85) 16%,
+      rgba(96, 74, 52, 0.16) 34%,
+      rgba(234, 88, 12, 0.34) 52%,
+      rgba(96, 74, 52, 0.16) 70%,
+      rgba(255, 255, 255, 0.85) 86%,
+      rgba(255, 255, 255, 0) 100%);
+  background-size: 100% 100%, 100% 1px;
+  background-position: 0 0, 0 100%;
+  background-repeat: no-repeat;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.nav-status {
+  border: 0;
+  background-color: rgba(255, 255, 255, 0.55);
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.24));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.62);
+}
+
+/* E宝 展台：什么都不留
+   原来是一块玻璃卡，后来拆成「只留一圈白色柔光」，但那圈白光仍然在浅色背景上
+   显出一个柔和的白团，像垫了张纸。现在底色、渐变、投影、描边全部撤掉 ——
+   E宝 自己带着模型的投影，直接站在校园背景前面，周围没有任何容器。 */
+.visual-frame {
+  width: 100%;
+  /* 原来 560 见方：E宝 本身只占其中 57%，四周全是空地，看起来像浮在半空。
+     收到 486 并靠右对齐，右边缘与页面内容边线对齐，视觉上才「站」在版面里。 */
+  max-width: 486px;
+  margin: 0 0 0 auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* 首屏的 E宝 坐低一档：画布里模型本来是上下居中（头顶留 91px、脚下留 105px），
+   落到页面上就是「浮在半空」。这里把画布整体下移 13.4%（约 65px），
+   脚下只剩 40px，正好踩到 caption 那条线附近。
+   只作用于首屏，StageRobotTrack 里的同一组件不受影响。 */
+.visual-frame .robot-3d {
+  transform: translateY(13.4%);
+}
+
+/* 接地投影：场景里的 ShadowMaterial 只收模型自投影，落在脚正下方，
+   从正面几乎看不见（实测脚底以下 4 级以上差异为 0）。E宝 因此看起来是「浮」的。
+   这里补一颗贴地的柔光椭圆，压在画布之下（::before 排在 .frame-stage 之前），
+   脚底正好踩在它的上沿，人才站得住。纯径向渐变，不产生滤镜层。 */
+.visual-frame::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 3.6%;
+  width: 34%;
+  height: 7.4%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side,
+    rgba(56, 42, 30, 0.19) 0%,
+    rgba(56, 42, 30, 0.09) 52%,
+    rgba(56, 42, 30, 0) 100%);
+  pointer-events: none;
+}
+
+/* 撤掉画框后，背后的蓝图线条和圆环成为唯一的「框」，
+   淡化一档，让它们退成纹理而不是边界。 */
+.visual-frame .software-blueprint,
+.visual-frame .ring {
+  opacity: 0.55;
+}
+
+/* 八阶段卡 / 四角色卡
+   这些卡片不再做 backdrop-filter：它们背后的背景图已经是高斯虚化过的色块，
+   再模糊一遍得到的还是同一片色块，肉眼分辨不出，却要每张卡各开一个采样层。
+   八张阶段卡 + 四张角色卡在同一个章节里，一次性就是 12 个 —— 这是轮播换页时
+   最集中的一笔开销。用提高染色不透明度来补足厚度，观感一致。 */
+.stage-card {
+  border-color: rgba(255, 255, 255, 0.7);
+  background-color: rgba(255, 255, 255, 0.52);
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.64), rgba(255, 255, 255, 0.14));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.55),
+    0 10px 26px -20px rgba(58, 41, 28, 0.22);
+  transition: box-shadow 0.42s var(--lg-ease), background-color 0.42s var(--lg-ease);
+}
+
+.role-card {
+  border: 0;
+  border-radius: 20px;
+  background-color: rgba(255, 255, 255, 0.54);
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.14));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 1px 0 0 rgba(255, 255, 255, 0.45),
+    inset -1px 0 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.58),
+    var(--lg-shadow);
+  transition: box-shadow 0.42s var(--lg-ease), background-color 0.42s var(--lg-ease);
+}
+
+.boot-chip {
+  border: 0;
+  background-color: rgba(255, 255, 255, 0.6);
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.3));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.boot-chip i {
+  background: color-mix(in srgb, #ea580c 16%, rgba(255, 255, 255, 0.5));
+  color: #a4402a;
+  border-radius: 999px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2479,7 +3268,6 @@ onBeforeUnmount(() => {
   }
 
   .ticker-track,
-  .float-tag,
   .ring,
   .caret {
     animation: none;
@@ -2489,6 +3277,53 @@ onBeforeUnmount(() => {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+
+  .eba-cloud-enter-active,
+  .eba-cloud-leave-active,
+  .eba-cloud p {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* 云朵在小画框里要缩小，否则会压到 E宝 脸上 */
+@media (max-width: 1080px) {
+  .eba-cloud {
+    bottom: 81%;
+    max-width: 84%;
+    padding: 11px 15px 12px;
+    border-radius: 19px;
+  }
+
+  .eba-cloud p {
+    font-size: 12.5px;
+  }
+}
+
+@media (max-width: 600px) {
+  .eba-cloud {
+    bottom: 82%;
+    max-width: 90%;
+    padding: 10px 13px 11px;
+  }
+
+  .eba-cloud p {
+    font-size: 12px;
+    line-height: 1.55;
+  }
+
+  .eba-cloud::before {
+    left: 12px;
+    top: -14px;
+    width: 34px;
+    height: 34px;
+  }
+
+  .eba-cloud::after {
+    right: 16px;
+    width: 24px;
+    height: 24px;
   }
 }
 </style>

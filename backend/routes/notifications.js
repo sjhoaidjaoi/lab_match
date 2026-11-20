@@ -14,12 +14,17 @@ const NoticeSchema = z.object({
   content: z.string().optional().default('')
 })
 
+function canReadNotice(req, notice) {
+  return (!notice.visibleAt || Date.parse(notice.visibleAt) <= Date.now()) &&
+    (notice.targetUserId === req.user.uid ||
+      (!notice.targetUserId && (!notice.targetRole || notice.targetRole === req.user.activeRole)))
+}
+
 // 给自己的消息
 router.get('/my', requireAuth, (req, res) => {
   const store = getStore()
   const list = store.notices
-    .filter((n) => n.targetUserId === req.user.uid ||
-      (!n.targetUserId && (!n.targetRole || n.targetRole === req.user.activeRole)))
+    .filter(n => canReadNotice(req, n) && (!n.batchId || n.batchId === currentBatch(store)?.id))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
   res.json(ok(list))
 })
@@ -45,8 +50,7 @@ router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN, ROLES.LAB_LEADER,
 
 router.post('/:id/read', requireAuth, (req, res) => {
   const store = getStore()
-  const idx = store.notices.findIndex(n => n.id === Number(req.params.id) && (n.targetUserId === req.user.uid ||
-    (!n.targetUserId && (!n.targetRole || n.targetRole === req.user.activeRole))))
+  const idx = store.notices.findIndex(n => n.id === Number(req.params.id) && canReadNotice(req, n))
   if (idx < 0) return res.status(404).json({ code: 'NOT_FOUND', message: '消息不存在', data: null })
   store.notices[idx].read = true; persistStore(store)
   res.json(ok(store.notices[idx]))

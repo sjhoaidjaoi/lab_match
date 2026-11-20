@@ -71,6 +71,7 @@ async function main() {
     env: {
       ...process.env, DB_DRIVER: 'file', PORT: String(PORT),
       LAB_STORE_FILE: TEST_STORE, LAB_SEED_DEMO: 'true', LAB_RESUME_DIR: RESUME_DIR,
+      LAB_RATE_LIMIT: 'off',
       LAB_BRIEFING_DIR: path.join(RESUME_DIR, 'briefing')
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -158,7 +159,6 @@ async function main() {
     const labContent = await request('PUT', '/laboratories/1', {
       token: leader,
       body: {
-        briefingText: '组长发布的实训室简介',
         briefingVideoUrl: 'https://example.com/briefing.mp4',
         briefingVideoType: 'MP4',
         tourVideoUrl: 'https://example.com/tour.mp4',
@@ -167,7 +167,6 @@ async function main() {
     })
     const publicLab = await request('GET', '/laboratories/1', { token: student })
     check('学生可分别读取本室宣讲和开放日资源', labContent.status === 200 &&
-      publicLab.body?.data?.briefingText === '组长发布的实训室简介' &&
       publicLab.body?.data?.briefingVideoUrl?.endsWith('/briefing.mp4') &&
       publicLab.body?.data?.tourVideoUrl?.endsWith('/tour.mp4'))
     const foreignLab = await request('PUT', '/laboratories/2', {
@@ -175,36 +174,31 @@ async function main() {
     })
     check('组长不能发布其他实训室的云游视频', foreignLab.status === 403)
 
+    // 实训室资料统一管理：基础资料与招生名额由学院维护，组长只读
     const labProfile = await request('PUT', '/laboratories/1', {
-      token: leader,
-      body: { description: '组长维护的基本简介', projectDirection: '软件工程', technologyStack: 'Vue / Express',
+      token: admin,
+      body: { description: '学院维护的基本简介', projectDirection: '软件工程', technologyStack: 'Vue / Express',
         recruitmentQuota: 7 }
     })
     const updatedProfile = await request('GET', '/laboratories/1', { token: student })
-    check('组长可维护本室基本资料，学生可读取该资料',
-      labProfile.status === 200 && updatedProfile.body?.data?.description === '组长维护的基本简介' &&
+    check('学院可维护本室基本资料，学生可读取该资料',
+      labProfile.status === 200 && updatedProfile.body?.data?.description === '学院维护的基本简介' &&
       updatedProfile.body?.data?.projectDirection === '软件工程' && updatedProfile.body?.data?.technologyStack === 'Vue / Express')
-    check('组长可改招生名额并保留宣讲资料及组长绑定',
+    check('学院可调整招生名额并保留宣讲资料及组长绑定',
       updatedProfile.body?.data?.recruitmentQuota === 7 &&
       updatedProfile.body?.data?.leaderId === publicLab.body?.data?.leaderId &&
-      updatedProfile.body?.data?.status === publicLab.body?.data?.status &&
-      updatedProfile.body?.data?.briefingText === publicLab.body?.data?.briefingText &&
+      updatedProfile.body?.data?.briefingVideoUrl === publicLab.body?.data?.briefingVideoUrl &&
       updatedProfile.body?.data?.tourVideoUrl === publicLab.body?.data?.tourVideoUrl)
-    check('组长不得降低名额至低于已占用人数，也不能改组长归属',
-      (await request('PUT', '/laboratories/1', { token: leader, body: { recruitmentQuota: 0 } })).status === 409 &&
+    check('组长不能修改基础资料与招生名额',
+      (await request('PUT', '/laboratories/1', { token: leader, body: { description: '组长越权修改' } })).status === 403 &&
+      (await request('PUT', '/laboratories/1', { token: leader, body: { recruitmentQuota: 12 } })).status === 403)
+    check('组长不能改组长归属',
       (await request('PUT', '/laboratories/1', { token: leader, body: { leaderId: null } })).status === 403)
-    await request('PUT', '/laboratories/1', { token: leader, body: { recruitmentQuota: publicLab.body.data.recruitmentQuota } })
-    check('学院只读各室业务资料，不能修改名额、教师或全景资源',
-      (await request('PUT', '/laboratories/1', { token: admin, body: { recruitmentQuota: 8 } })).status === 403 &&
-      (await request('PUT', `/users/${newTeacher.body.data.id}`, { token: admin, body: { realName: '越权' } })).status === 403 &&
+    check('学院不能修改全景资源归属',
       (await request('PUT', '/media/admin/panoramas/1', { token: admin, body: { name: '越权' } })).status === 403)
     const teacherEdit = await request('PUT', '/laboratories/1', { token: teacher, body: { name: '改名' } })
     check('普通教师不能编辑实训室基本资料', teacherEdit.status === 403)
     check('普通教师不能发布宣讲文档', (await request('POST', '/media/labs/1/materials', { token: teacher })).status === 403)
-    await request('PUT', '/laboratories/1', { token: admin, body: { leaderId: null } })
-    const boundLeaderEdit = await request('PUT', '/laboratories/1', { token: leader, body: { description: '已绑定组长维护的简介' } })
-    await request('PUT', '/laboratories/1', { token: admin, body: { leaderId: publicLab.body?.data?.leaderId } })
-    check('已绑定本室的组长在未填写负责人时仍可编辑基本资料', boundLeaderEdit.status === 200)
 
     // 打开阶段三时间窗
     const stages = await request('GET', '/batches/1/stages', { token: admin })
@@ -326,6 +320,63 @@ async function main() {
     await request('PUT', '/batches/1/stages/' + stage5.id, { token: admin, body: { stageStatus: 'NOT_STARTED' } })
     const viewed = await request('GET', '/batches/current')
     check('读取阶段不会提前开启拟录取', viewed.body?.data?.stages?.find(item => item.stageNumber === 5)?.stageStatus === 'NOT_STARTED')
+
+    // 提前开始 / 提前结束：学院可对单个阶段加速推进
+    const earlyStarted = await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin, body: { stageStatus: 'STARTED' }
+    })
+    check('学院可提前开始尚未到时间的阶段',
+      earlyStarted.status === 200 &&
+      earlyStarted.body?.data?.stageStatus === 'IN_PROGRESS' &&
+      earlyStarted.body?.data?.statusOverride === 'STARTED',
+      `status=${earlyStarted.status} body=${JSON.stringify(earlyStarted.body?.data?.stageStatus)}`)
+    const afterEarlyStart = (await request('GET', '/batches/1/stages', { token: admin }))
+      .body?.data?.find(item => item.stageNumber === 5)
+    check('提前开始的阶段实时状态为进行中', afterEarlyStart?.stageStatus === 'IN_PROGRESS')
+    const resumed = await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin, body: { stageStatus: 'IN_PROGRESS' }
+    })
+    check('恢复自动流转后回到未开始（原定时间未到）', resumed.body?.data?.stageStatus === 'NOT_STARTED')
+    // 「立即开始」= 进入该阶段：排在后面的、被提前开始的阶段要退回按时间自动流转，
+    // 否则后面的「进行中」会被误判成「首轮已结束」，把第 5 阶段的发送邀请关掉
+    const stageSixNext = stages.body.data.find(item => item.stageNumber === 6)
+    const stageSevenNext = stages.body.data.find(item => item.stageNumber === 7)
+    await request('PUT', `/batches/1/stages/${stageSevenNext.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
+    const enter5 = await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin, body: { stageStatus: 'STARTED' }
+    })
+    check('立即开始会退回后面已提前开始的阶段',
+      enter5.status === 200 && JSON.stringify(enter5.body?.data?.revertedStages) === '[7]',
+      `status=${enter5.status} reverted=${JSON.stringify(enter5.body?.data?.revertedStages)}`)
+    const afterEnter = (await request('GET', '/batches/1/stages', { token: admin })).body?.data || []
+    check('被退回的后续阶段恢复按时间自动判定',
+      afterEnter.find(item => item.stageNumber === 7)?.statusOverride == null &&
+      afterEnter.find(item => item.stageNumber === 7)?.stageStatus === 'NOT_STARTED')
+    const inviteOpen = await request('GET', '/admissions/teacher-invitations', { token: leader, role: 'LAB_TEACHER' })
+    check('立即开始第 5 阶段后首轮邀请保持开放', inviteOpen.body?.data?.open === true,
+      `open=${inviteOpen.body?.data?.open}`)
+    // 真正推进到调剂阶段时，首轮邀请要自动关闭
+    await request('PUT', `/batches/1/stages/${stageSixNext.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
+    const inviteClosed = await request('GET', '/admissions/teacher-invitations', { token: leader, role: 'LAB_TEACHER' })
+    check('进入调剂阶段后首轮邀请自动关闭', inviteClosed.body?.data?.open === false)
+    await request('PUT', `/batches/1/stages/${stageSixNext.id}`, { token: admin, body: { stageStatus: 'IN_PROGRESS' } })
+    // 构造「开始时间早于现在、结束时间也已过」的阶段，验证不能再提前开始
+    const expiredStart = await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin,
+      body: {
+        startTime: new Date(Date.now() - 30_000).toISOString(),
+        endTime: new Date(Date.now() - 10_000).toISOString(),
+        stageStatus: 'STARTED'
+      }
+    })
+    check('结束时间已过的阶段不能提前开始', expiredStart.status === 400, `status=${expiredStart.status}`)
+    // 还原阶段五时间窗，避免影响后续用例
+    await request('PUT', `/batches/1/stages/${stage5.id}`, {
+      token: admin, body: { startTime: stage5.startTime, endTime: stage5.endTime, stageStatus: 'NOT_STARTED' }
+    })
+    check('提前开始的异常请求不会污染阶段时间窗',
+      (await request('GET', '/batches/1/stages', { token: admin })).body?.data
+        ?.find(item => item.stageNumber === 5)?.stageStatus === 'NOT_STARTED')
     const teacher2 = await login('T1002')
     const leaderAsTeacher = await request('GET', '/preferences/lab/1', { token: leader, role: 'LAB_TEACHER' })
     const own = await request('GET', '/preferences/lab/1', { token: teacher })
@@ -354,7 +405,7 @@ async function main() {
         const forbidden = await request('POST', '/interviews/' + record.id + '/score', { token: leader, role: 'LAB_TEACHER', body: score })
         check('同室未选导师不可评分', forbidden.status === 403)
       }
-      const scheduleBody = { studentId: 17, laboratoryId: labId, interviewTime: new Date(Date.now() + labId * 3600000).toISOString(), location: '实训室', instructions: '请准备项目介绍' }
+      const scheduleBody = { studentId: 17, laboratoryId: labId, interviewTime: new Date(Date.now() - (4 - labId) * 3600000).toISOString(), location: '实训室', instructions: '请准备项目介绍' }
       if (labId === 1) {
         check('组长不能向选择其他导师的本室学生安排面试或发通知',
           (await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: scheduleBody })).status === 403 &&
@@ -374,11 +425,30 @@ async function main() {
       check('所选导师可以评分', (await request('POST', '/interviews/' + record.id + '/score', { token: staff, body: score })).status === 200)
     }
     const asTeacher = { token: leader, role: 'LAB_TEACHER' }
+
+    // 并发一致性：同一教师对同一场面试并发重复提交相同评价，只应留下一条评分记录
+    // （写入经服务端串行队列，且内容相同的重复提交走幂等去重）
+    const scoredRecord = (await request('GET', '/interviews/lab/1', { token: teacher })).body?.data
+      ?.find(item => item.studentId === 17)
+    if (scoredRecord) {
+      const repeatBody = { attitudeScore: 88, logicScore: 85, programmingScore: 90, timeCommitmentScore: 92,
+        comprehensiveScore: 89, evaluation: '表现优秀', recommendation: 'INTENDED' }
+      const repeats = await Promise.all([1, 2, 3, 4].map(() =>
+        request('POST', '/interviews/' + scoredRecord.id + '/score', { token: teacher, body: repeatBody })))
+      const allAccepted = repeats.every(item => item.status === 200)
+      const history = (await request('GET', '/interviews/' + scoredRecord.id + '/evaluation', { token: teacher }))
+        .body?.data?.history || []
+      check('并发重复提交同一评价不产生重复评分记录',
+        allAccepted && history.length === 1, `status=${repeats.map(r => r.status).join(',')} 记录数=${history.length}`)
+    } else {
+      check('并发重复评分用例可定位面试记录', false, '未找到学生 17 的面试记录')
+    }
+
     check('面试未通过时不能发送邀请，也不能邀请选择其他导师的学生',
       (await request('POST', '/admissions/teacher-invitations', { ...asTeacher, body: { studentId: ownStudentId } })).status === 409 &&
       (await request('POST', '/admissions/teacher-invitations', { ...asTeacher, body: { studentId: 17 } })).status === 403)
     const leaderInterview = await request('POST', '/interviews/schedule', { ...asTeacher, body: {
-      studentId: ownStudentId, laboratoryId: 1, interviewTime: new Date(Date.now() + 6 * 3600000).toISOString(), location: '本室'
+      studentId: ownStudentId, laboratoryId: 1, interviewTime: new Date(Date.now() - 3600000).toISOString(), location: '本室'
     } })
     check('组长可以安排并评分明确选择本人的学生',
       leaderInterview.status === 200 && (await request('POST', `/interviews/${leaderInterview.body.data.id}/score`, {
@@ -413,10 +483,10 @@ async function main() {
       declineReserved.body?.data?.occupied === declineBefore.body?.data?.occupied + 1 &&
       declineAfter.body?.data?.occupied === declineBefore.body?.data?.occupied &&
       declineAfter.body?.data?.invitations.some(item => item.id === invitationToDecline.body.data.id && item.status === 'REJECTED'))
-    await request('PUT', '/laboratories/1/teachers/1', { token: leader, body: { recruitmentQuota: 0 } })
+    await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: 0 } })
     check('导师名额不足时不能发出入组邀请',
       (await request('POST', inviteRoute, { ...asTeacher, body: { studentId: ownStudentId } })).status === 409)
-    await request('PUT', '/laboratories/1/teachers/1', { token: leader, body: { recruitmentQuota: null } })
+    await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: null } })
     const invited = await request('POST', inviteRoute, { ...asTeacher, body: { studentId: ownStudentId } })
     const sentAgain = await request('POST', inviteRoute, { ...asTeacher, body: { studentId: ownStudentId } })
     const received = await request('GET', '/admissions/my', { token: ownStudent })
@@ -447,19 +517,16 @@ async function main() {
     await request('POST', '/recruitment-reviews/teacher', { token: teacher, body: { entries, submit: true } })
     const confirmedEntry = { studentId: ownStudentId, type: 'INTENDED', reason: '本人已经接受邀请' }
     const labReview = await request('POST', '/recruitment-reviews/lab', { token: leader, body: { entries: [...entries, confirmedEntry] } })
-    check('组长可报送学院', labReview.status === 200)
-    const reviewPath = '/recruitment-reviews/lab/' + labReview.body?.data?.id + '/review'
-    check('学院不能提前发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 409)
+    check('组长报送名单即生效，不再经过学院审核',
+      labReview.status === 200 && labReview.body?.data?.status === 'APPROVED' && labReview.body?.data?.autoPublished === true)
+    check('名单生效后学生立即可见拟录取记录',
+      (await request('GET', '/admissions/my', { token: student })).body?.data?.some(item => item.laboratoryId === 1))
     await openStage(5)
-    await request('PUT', '/laboratories/1/teachers/2', { token: leader, body: { recruitmentQuota: 0 } })
-    check('导师零名额时不能发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 409)
-    await request('PUT', '/laboratories/1/teachers/2', { token: leader, body: { recruitmentQuota: null } })
-    check('学院在阶段五发布', (await request('POST', reviewPath, { token: admin, body: { approve: true } })).status === 200)
     check('已接受的教师邀请随本室名单报送时不会生成重复录取',
       (await request('GET', '/admissions/my', { token: ownStudent })).body?.data?.length === 1)
     const offers = await request('GET', '/admissions/my', { token: student })
     const offer = offers.body?.data?.find(item => item.laboratoryId === 1)
-    check('发布后学生才能确认', (await request('POST', '/admissions/' + offer?.id + '/confirm', { token: student, body: { confirmed: true } })).status === 200)
+    check('学生可确认拟录取', (await request('POST', '/admissions/' + offer?.id + '/confirm', { token: student, body: { confirmed: true } })).status === 200)
 
     console.log('\n== 4. 调剂规则 ==')
     const stage6 = stages.body?.data?.find(s => s.stageNumber === 6)
@@ -485,12 +552,12 @@ async function main() {
     check('已确认录取学生进入调剂池被拒绝', alreadyPlaced.status === 400, JSON.stringify(alreadyPlaced.body))
 
     if (eligible) {
-      await request('PUT', '/laboratories/1/teachers/1', { token: leader, body: { recruitmentQuota: 0 } })
+      await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: 0 } })
       const full = await request('POST', '/adjustments/internal', {
         token: leader, body: { studentId: eligible.studentId, targetLaboratoryId: 1, targetLabTeacherId: 1, reason: '导师名额校验' }
       })
       check('内部调剂不能占用已满导师名额', full.status === 400 && full.body?.message?.includes('导师招生名额'))
-      await request('PUT', '/laboratories/1/teachers/1', { token: leader, body: { recruitmentQuota: null } })
+      await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: null } })
       const [first, second] = await Promise.all([
         request('POST', '/adjustments/internal', {
           token: leader, body: { studentId: eligible.studentId, targetLaboratoryId: 1, targetLabTeacherId: 1, sourceLaboratoryId: 1, reason: '并发测试A' }
@@ -517,6 +584,9 @@ async function main() {
     })).body?.data?.status === 'APPROVED')
 
     console.log('\n== 5. 最终名单与公示 ==')
+    // 阶段顺序校验要求第 8 阶段开始时间不早于第 7 阶段，先推进第 7 阶段时间窗
+    await openStage(7)
+    await openStage(8)
     const merge = await request('POST', '/final/merge', { token: admin })
     check('生成最终名单成功', merge.status === 200, JSON.stringify(merge.body))
     const unpublished = await request('GET', '/final/my', { token: student })
@@ -584,7 +654,7 @@ async function main() {
     )
 
     const mentorCreate = await request('POST', '/laboratories/1/teachers', {
-      token: leader, body: { name: '测试导师', title: '讲师', direction: '测试方向', intro: '冒烟测试', userId: newTeacher.body.data.id }
+      token: admin, body: { name: '测试导师', title: '讲师', direction: '测试方向', intro: '冒烟测试', userId: newTeacher.body.data.id }
     })
     check('新增实训室导师成功', mentorCreate.status === 200, JSON.stringify(mentorCreate.body))
     const mentorId = mentorCreate.body?.data?.id
@@ -595,15 +665,15 @@ async function main() {
         labDetail.body.data.teachers.some((t) => t.id === mentorId)
     )
     const mentorUpdate = await request('PUT', `/laboratories/1/teachers/${mentorId}`, {
-      token: leader, body: { title: '副教授' }
+      token: admin, body: { title: '副教授' }
     })
     check('修改实训室导师成功', mentorUpdate.status === 200 && mentorUpdate.body?.data?.title === '副教授')
-    const mentorDelete = await request('DELETE', `/laboratories/1/teachers/${mentorId}`, { token: leader })
+    const mentorDelete = await request('DELETE', `/laboratories/1/teachers/${mentorId}`, { token: admin })
     check('删除实训室导师成功', mentorDelete.status === 200)
     const mentorForbidden = await request('POST', '/laboratories/2/teachers', {
       token: leader, body: { name: '越权导师' }
     })
-    check('组长不能维护其他实训室导师团队', mentorForbidden.status === 403)
+    check('组长不能维护导师团队（由学院统一维护）', mentorForbidden.status === 403)
 
     const document = new FormData()
     document.append('file', new Blob(['%PDF-1.4\n%%EOF'], { type: 'application/pdf' }), 'briefing.pdf')
@@ -635,6 +705,67 @@ async function main() {
       method: 'POST', headers: { Authorization: `Bearer ${student}` }, body: form
     })
     check('学生无文件上传权限', uploadForbidden.status === 403)
+
+    console.log('\n== 7. 面试阶段提前开始后的排期约束 ==')
+    const lateStages = (await request('GET', '/batches/1/stages', { token: admin })).body?.data || []
+    const stage4 = lateStages.find((s) => s.stageNumber === 4)
+    const onlineBody = {
+      studentId: ownStudentId, laboratoryId: 1, mode: 'LIVEKIT', durationMinutes: 30, interviewStatus: 'SCHEDULED',
+      interviewTime: new Date(Date.now() + 3600000).toISOString()
+    }
+    // 原定开始时间在未来、还没提前开始 → 拒绝，并说清怎么解
+    await request('PUT', `/batches/1/stages/${stage4.id}`, { token: admin, body: {
+      startTime: new Date(Date.now() + 3 * 86400000).toISOString(),
+      endTime: new Date(Date.now() + 4 * 86400000).toISOString(),
+      stageStatus: 'NOT_STARTED'
+    } })
+    const closedStage = await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: onlineBody })
+    check('面试阶段还没开放时提示去学院端「提前开始」',
+      closedStage.status === 409 && /尚未开始/.test(closedStage.body?.message || ''),
+      `status=${closedStage.status} msg=${closedStage.body?.message}`)
+    // 学院端点「提前开始」：原定开始时间仍在未来，但阶段已对业务开放。
+    // 该学生在本套用例里面试已完成，这里只断言「阶段闸门已放行」——不再返回阶段时间窗类错误。
+    await request('PUT', `/batches/1/stages/${stage4.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
+    const earlyStage = await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: onlineBody })
+    check('提前开始的面试阶段不再用原定开始时间卡排期',
+      !/尚未开始|未开放|阶段开始时间|已暂停|已结束/.test(earlyStage.body?.message || ''),
+      `status=${earlyStage.status} msg=${earlyStage.body?.message}`)
+
+    console.log('\n== 8. 重新开始（整条时间窗回到第 1 阶段） ==')
+    const restartDenied = await request('POST', '/batches/1/stages/restart', { token: leader, body: {} })
+    check('组长不能重新开始选拔批次', restartDenied.status === 403, `status=${restartDenied.status}`)
+    const restarted = await request('POST', '/batches/1/stages/restart', {
+      token: admin, body: { mode: 'UNIFORM', stageDays: 1 }
+    })
+    const restartedStages = restarted.body?.data?.stages || []
+    check('重新开始后第 1 阶段立即进行中',
+      restarted.status === 200 && restartedStages.find((s) => s.stageNumber === 1)?.stageStatus === 'IN_PROGRESS',
+      `status=${restarted.status} body=${JSON.stringify(restarted.body?.data?.stages?.[0]?.stageStatus)}`)
+    check('重新开始后其余阶段回到未开始',
+      restartedStages.filter((s) => s.stageNumber > 1).length === 7 &&
+      restartedStages.filter((s) => s.stageNumber > 1).every((s) => s.stageStatus === 'NOT_STARTED'))
+    check('重新开始会清除暂停/提前开始/提前结束的人工干预',
+      restartedStages.every((s) => !s.statusOverride))
+    check('重新开始后八阶段首尾相接且整段约 8 天',
+      restartedStages.every((s, i) => i === 0 ||
+        Date.parse(s.startTime) === Date.parse(restartedStages[i - 1].endTime)) &&
+      Math.abs(Date.parse(restartedStages[7].endTime) - Date.parse(restartedStages[0].startTime) - 8 * 86400000) < 1000)
+    const switchedBatch = await request('GET', '/batches/current', { token: admin })
+    check('重新开始后批次状态回到进行中',
+      switchedBatch.body?.data?.status === 'IN_PROGRESS',
+      `status=${switchedBatch.body?.data?.status}`)
+    // 指定起点 + 沿用原时长：应保留各阶段 1 天的长度
+    const anchor = new Date(Date.now() + 2 * 86400000).toISOString()
+    const keptRestart = await request('POST', '/batches/1/stages/restart', {
+      token: admin, body: { mode: 'KEEP', startTime: anchor }
+    })
+    const keptStages = keptRestart.body?.data?.stages || []
+    check('可按指定起点沿用原各阶段时长',
+      keptRestart.status === 200 && keptRestart.body?.data?.mode === 'KEEP' &&
+      Math.abs(Date.parse(keptStages[0]?.startTime) - Date.parse(anchor)) < 60000 &&
+      Math.abs(Date.parse(keptStages[0]?.endTime) - Date.parse(keptStages[0]?.startTime) - 86400000) < 1000)
+    check('起点在未来时八阶段全部未开始',
+      keptStages.every((s) => s.stageStatus === 'NOT_STARTED'))
   } finally {
     fs.rmSync(RESUME_DIR, { recursive: true, force: true })
     child.kill()

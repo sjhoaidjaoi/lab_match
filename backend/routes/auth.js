@@ -15,27 +15,36 @@ const { requireAuth, requireAccountAuth, ROLES, allowedRolesOf } = require('../m
 const { BusinessError } = require('../middleware/error')
 const { logOperation } = require('../utils/audit')
 const { INITIAL_PASSWORD, isManagedAccount } = require('../utils/accountCredentials')
+const {
+  loginThrottle,
+  recordLoginFailure,
+  clearLoginFailure
+} = require('../middleware/rateLimit')
 
 const LoginSchema = z.object({
   username: z.string().trim().min(1, '请输入账号'),
   password: z.string().min(1, '请输入密码')
 })
 
-router.post('/login', (req, res) => {
+router.post('/login', loginThrottle, (req, res) => {
   const { username, password } = LoginSchema.parse(req.body || {})
   const store = getStore()
   const user = store.users.find((u) => u.username === username || u.studentNumber === username)
   if (!user) {
+    recordLoginFailure(req)
     throw new BusinessError('账号或密码错误', ResultCode.UNAUTHORIZED, 401)
   }
   if (user.status !== 'ACTIVE') {
+    recordLoginFailure(req)
     throw new BusinessError('账号已停用，请联系学院管理员', ResultCode.UNAUTHORIZED, 401)
   }
   const verified = bcrypt.compareSync(password, user.passwordHash)
   if (!verified) {
+    recordLoginFailure(req)
     throw new BusinessError('账号或密码错误', ResultCode.UNAUTHORIZED, 401)
   }
 
+  clearLoginFailure(req)
   res.json(ok(sessionFor(user, user.role)))
 })
 

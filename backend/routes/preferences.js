@@ -12,7 +12,9 @@ const { getStore, commitStore, nextId } = require('../data/seed')
 const { logOperation } = require('../utils/audit')
 const { requireAuth, requireRole, ROLES, guardLab } = require('../middleware/auth')
 const { ownsChoice } = require('../utils/applicationScope')
+const { currentBatch, stageOf, batchWritableError } = require('../utils/recruitment')
 const { router: resumes, resumeFile, resumeView } = require('./resumes')
+const { latestInterviews, appointmentStatus } = require('../services/interviewSelection')
 const fs = require('fs')
 
 router.use('/resumes', resumes)
@@ -29,22 +31,16 @@ const SubmitSchema = z.object({
 
 // 取当前批次
 function activeBatchOf(store) {
-  return store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  return currentBatch(store)
 }
 
-// 判断意向填报阶段是否开放（阶段驱动 + 时间窗双重校验）
+// 判断意向填报阶段是否开放（阶段有效状态由时间窗实时推导）
 function preferenceWindowError(store, batch) {
-  const stage = store.recruitmentStages.find((s) => s.batchId === batch.id && s.stageNumber === 3)
+  const stage = stageOf(store, batch.id, 3)
   if (!stage) return '当前批次未配置意向填报阶段'
-  const nowTs = Date.now()
-  if (stage.stageStatus === 'COMPLETED' || stage.stageStatus === 'PAUSED') {
-    return '意向填报阶段已结束或暂停，志愿已锁定'
-  }
-  if (stage.stageStatus !== 'IN_PROGRESS') {
-    return '意向填报阶段尚未开始'
-  }
-  if (stage.startTime && new Date(stage.startTime).getTime() > nowTs) return '意向填报尚未开始'
-  if (stage.endTime && new Date(stage.endTime).getTime() < nowTs) return '意向填报已截止，志愿已锁定'
+  if (stage.stageStatus === 'PAUSED') return '意向填报阶段已暂停，志愿已锁定'
+  if (stage.stageStatus === 'COMPLETED') return '意向填报阶段已结束，志愿已锁定'
+  if (stage.stageStatus !== 'IN_PROGRESS') return '意向填报阶段尚未开始'
   return null
 }
 
@@ -55,6 +51,8 @@ router.post('/submit', requireAuth, requireRole(ROLES.STUDENT), async (req, res,
     const store = structuredClone(getStore())
     const activeBatch = activeBatchOf(store)
     if (!activeBatch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '当前没有活跃的选拔批次', data: null })
+    const stopError = batchWritableError(activeBatch)
+    if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
     if (store.studentPreferences.some(p => p.studentId === req.user.uid && p.batchId === activeBatch.id && p.status === 'SUBMITTED')) {
       return res.status(409).json({ code: 'BUSINESS_ERROR', message: '本批次志愿已提交，请查看提交回执', data: null })
     }
@@ -96,8 +94,9 @@ router.post('/submit', requireAuth, requireRole(ROLES.STUDENT), async (req, res,
     const submittedAt = new Date().toISOString()
     resume.submittedAt = submittedAt
     body.choices.forEach(({ laboratoryId: labId, labTeacherId }) => {
+      const preferenceId = nextId(store.studentPreferences)
       store.studentPreferences.push({
-        id: nextId(store.studentPreferences),
+        id: preferenceId,
         batchId: activeBatch.id, studentId: req.user.uid, laboratoryId: labId,
         labTeacherId,
         obeyInternalAdjustment: body.obeyInternalAdjustment,
@@ -115,6 +114,7 @@ router.post('/submit', requireAuth, requireRole(ROLES.STUDENT), async (req, res,
           batchId: activeBatch.id,
           studentId: req.user.uid,
           laboratoryId: labId,
+          preferenceId, attemptNo: 1,
           interviewerId: mentor?.userId ?? null,
           interviewTime: null,
           interviewStatus: 'SCHEDULED',
@@ -139,7 +139,7 @@ router.post('/submit', requireAuth, requireRole(ROLES.STUDENT), async (req, res,
 // 学生查看自己的志愿
 router.get('/my', requireAuth, (req, res) => {
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = activeBatchOf(store)
   if (!activeBatch) return res.json(ok([]))
   const list = store.studentPreferences
     .filter((p) => p.studentId === req.user.uid && p.batchId === activeBatch.id)
@@ -162,16 +162,20 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.COLL
   if (!guardLab(req, res, labId)) return
 
   const activeBatch = activeBatchOf(store)
+  const latest = latestInterviews(store)
   const list = store.studentPreferences
     .filter((p) => p.laboratoryId === labId && p.batchId === activeBatch?.id && ownsChoice(store, req.user, p))
     .map((p) => {
       const student = store.users.find((u) => u.id === p.studentId)
       const resume = (store.applicationResumes || []).find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.submittedAt)
-      const interview = store.interviews.find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.laboratoryId === labId)
+      const interview = latest.find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.laboratoryId === labId)
       return {
         id: p.id, studentId: p.studentId, laboratoryId: labId,
         studentName: student?.realName || '', studentNumber: student?.studentNumber || '',
-        laboratoryName: lab.name, resume: resumeView(resume), interview,
+        laboratoryName: lab.name, resume: resumeView(resume),
+        interview: interview && { id: interview.id, interviewStatus: interview.interviewStatus, appointmentStatus: appointmentStatus(interview),
+          interviewTime: interview.interviewTime, evaluation: interview.evaluation, recommendation: interview.recommendation,
+          exceptionCode: interview.exceptionCode, online: Boolean(interview.onlineRoomName) },
         labTeacherId: p.labTeacherId,
         labTeacherName: store.labTeachers.find(t => t.id === p.labTeacherId && t.laboratoryId === labId)?.name,
         obeyInternalAdjustment: p.obeyInternalAdjustment,
@@ -185,7 +189,7 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.COLL
 // 学院端：全院志愿明细（含学生与实训室名称）
 router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = activeBatchOf(store)
   if (!activeBatch) return res.json(ok([]))
   const list = store.studentPreferences
     .filter((p) => p.batchId === activeBatch.id)
@@ -205,7 +209,7 @@ router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) =>
 // 学院端：全院志愿总览
 router.get('/overview', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) => {
   const store = getStore()
-  const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+  const activeBatch = activeBatchOf(store)
   if (!activeBatch) return res.json(ok({ totalStudents: 0, perLab: [] }))
   const prefs = store.studentPreferences.filter((p) => p.batchId === activeBatch.id && p.status === 'SUBMITTED')
   const perLab = store.laboratories.map((lab) => {

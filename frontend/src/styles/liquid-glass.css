@@ -1,0 +1,900 @@
+/* ============================================================================
+   Liquid Glass —— 苹果液态玻璃设计层
+   一层解决全站：令牌 → 环境光 → 玻璃原语 → Element Plus 全量覆盖
+   四层物理模型：Lens(折射) / Overlay(染色) / Specular(镜面聚光) / Content(内容)
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- 1. 令牌 */
+:root {
+  /* 玻璃厚度与半径 */
+  --lg-radius-xl: 28px;
+  --lg-radius: 20px;
+  --lg-radius-sm: 13px;
+  --lg-radius-pill: 999px;
+
+  /* 光学参数：模糊必须克制，过大糊成白板就失去折射 */
+  --lg-blur: 6px;
+  --lg-blur-deep: 18px;
+  --lg-saturate: 175%;
+
+  /* 镜面聚光 */
+  --lg-spec-strong: rgba(255, 255, 255, 0.92);
+  --lg-spec: rgba(255, 255, 255, 0.66);
+  --lg-spec-soft: rgba(255, 255, 255, 0.4);
+
+  /* 染色：20%~25% 高透法则，发灰就会变浑浊 */
+  --lg-tint: rgba(255, 255, 255, 0.18);
+  --lg-tint-deep: rgba(255, 255, 255, 0.52);
+
+  /* 墨色层级：激活浓、未选浅 */
+  --lg-ink: #14161a;
+  --lg-ink-2: #4d545e;
+  --lg-ink-3: #77808c;
+
+  /* 环境阴影：暖调中性，绝不死黑 */
+  --lg-shadow:
+    0 1px 1px rgba(58, 41, 28, 0.03),
+    0 10px 28px -16px rgba(58, 41, 28, 0.2),
+    0 26px 56px -34px rgba(58, 41, 28, 0.24);
+  --lg-shadow-hover:
+    0 1px 1px rgba(58, 41, 28, 0.04),
+    0 16px 34px -16px rgba(58, 41, 28, 0.26),
+    0 34px 66px -32px rgba(58, 41, 28, 0.3);
+  --lg-shadow-float:
+    0 2px 4px rgba(58, 41, 28, 0.04),
+    0 20px 44px -20px rgba(58, 41, 28, 0.3),
+    0 44px 84px -40px rgba(58, 41, 28, 0.32);
+
+  /* 统一动效曲线：无超调、无果冻 */
+  --lg-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --lg-ease-soft: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ------------------------------------------------------------ 2. 环境光层 */
+/* 玻璃必须有东西可折射。这一层是缓慢流动的暖色极光，被固定在最底层，
+   只做 transform 动画（合成层），不触发重绘。 */
+.lg-ambient {
+  position: fixed;
+  inset: 0;
+  /* 负层级：画在 body 底色之上、所有正文之下，无需给每个容器加 z-index */
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  /* 把这一层的布局/绘制彻底隔离出去：光斑在动时，浏览器只需重绘这块离屏内容，
+     不会因为它是 fixed 全屏层而牵连整页重排重绘。
+     不含 size —— size containment 会让 inset:0 的固定层尺寸塌成 0。 */
+  contain: layout paint style;
+  isolation: isolate;
+}
+
+/* 性能要点：这里**不能**用 filter: blur()。
+   光斑本身是 radial-gradient，多段色标已经足够柔和；而 filter 模糊作用在
+   58vw（≈1400px）的超大元素上，叠加 scale 动画后浏览器每帧都要重新栅格化
+   整块模糊位图 —— 这是登录页与工作台掉帧最大的单点开销。
+   改用「四段色标」模拟高斯衰减：核心实色 → 半透明过渡 → 长尾透明。 */
+.lg-ambient__blob {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  opacity: 0.86;
+  will-change: transform;
+}
+
+/* 环境光统一收敛为「浅橙 → 米白」暖调，与登录页橙白基调一致。
+   液态玻璃的雾透质感要求环境光是「若有若无的氛围色」，而不是明显的亮斑——
+   亮斑一浓、圆心一偏，滚动时就会在视口里形成「橙带 / 白带」的上下分层断层。
+   所以这里让四团光斑的圆心全部居中（50% 50%）、尺寸大到覆盖整个视口、
+   核心色 alpha 压到 0.2 上下、衰减拉长到 100%，叠出来是一层均匀的浅橙氛围，
+   任何高度看都是一致的，不再有「中间橙、上下白」的断层。 */
+.lg-ambient__blob--amber {
+  top: -30vw;
+  left: -30vw;
+  width: 120vw;
+  height: 120vw;
+  min-width: 1200px;
+  min-height: 1200px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 200, 158, 0.22) 0%, rgba(255, 200, 158, 0.1) 48%, rgba(255, 200, 158, 0.03) 78%, rgba(255, 200, 158, 0) 100%);
+  opacity: 0.8;
+  animation: lgDriftA 30s ease-in-out infinite;
+}
+
+.lg-ambient__blob--rose {
+  right: -30vw;
+  top: -30vw;
+  width: 120vw;
+  height: 120vw;
+  min-width: 1200px;
+  min-height: 1200px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 204, 170, 0.2) 0%, rgba(255, 204, 170, 0.09) 48%, rgba(255, 204, 170, 0.03) 78%, rgba(255, 204, 170, 0) 100%);
+  opacity: 0.8;
+  animation: lgDriftB 36s ease-in-out infinite;
+}
+
+.lg-ambient__blob--sky {
+  left: -10vw;
+  bottom: -40vw;
+  width: 140vw;
+  height: 110vw;
+  min-width: 1400px;
+  min-height: 1100px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 216, 184, 0.18) 0%, rgba(255, 216, 184, 0.08) 48%, rgba(255, 216, 184, 0.025) 78%, rgba(255, 216, 184, 0) 100%);
+  opacity: 0.8;
+  animation: lgDriftC 42s ease-in-out infinite;
+}
+
+.lg-ambient__blob--cream {
+  right: -18vw;
+  bottom: -26vw;
+  width: 100vw;
+  height: 100vw;
+  min-width: 1000px;
+  min-height: 1000px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 236, 210, 0.22) 0%, rgba(255, 236, 210, 0.1) 48%, rgba(255, 236, 210, 0.03) 78%, rgba(255, 236, 210, 0) 100%);
+  opacity: 0.75;
+  animation: lgDriftD 26s ease-in-out infinite;
+}
+
+/* 原冷色石板改为极浅杏米白，放在视口中央做均匀补光 */
+.lg-ambient__blob--slate {
+  left: -20vw;
+  top: 0;
+  width: 90vw;
+  height: 90vw;
+  min-width: 900px;
+  min-height: 900px;
+  background: radial-gradient(circle at 50% 50%,
+    rgba(255, 226, 198, 0.2) 0%, rgba(255, 226, 198, 0.09) 48%, rgba(255, 226, 198, 0.03) 78%, rgba(255, 226, 198, 0) 100%);
+  opacity: 0.75;
+  animation: lgDriftB 44s ease-in-out infinite reverse;
+}
+
+.lg-ambient__grain {
+  position: absolute;
+  inset: 0;
+  /* 不用 mix-blend-mode: multiply —— 它会把整个环境光层变成混合组，
+     下方的五团光斑每一次漂移都要连带把这一整屏颗粒重新混合一遍。
+     改用极低不透明度的直叠，颗粒感几乎等价，成本归零。 */
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 140px 140px;
+}
+
+/* 光斑漂移：只用 transform（合成器线程），且缩放幅度刻意压在 6% 以内。
+   缩放会触发纹理重采样，幅度越大越贵；6% 肉眼已足够「在呼吸」。 */
+@keyframes lgDriftA {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(6vw, 5vh, 0) scale(1.06); }
+}
+@keyframes lgDriftB {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.03); }
+  50% { transform: translate3d(-7vw, 7vh, 0) scale(0.96); }
+}
+@keyframes lgDriftC {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(0.98); }
+  50% { transform: translate3d(8vw, -6vh, 0) scale(1.05); }
+}
+@keyframes lgDriftD {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-5vw, -4vh, 0) scale(1.07); }
+}
+
+/* ---------------------------------------------------------- 3. 玻璃原语 */
+
+/* 3.1 玻璃面：单层 backdrop-filter + 多层内镜面 + 柔和环境阴影。
+       背景层做渐变高光，内容永远在其之上，不需要任何 z-index 配合。 */
+.lg-glass {
+  position: relative;
+  background-color: var(--lg-tint);
+  background-image:
+    radial-gradient(140% 130% at 12% -22%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 56%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.06) 44%, rgba(255, 255, 255, 0.26) 100%);
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-saturate));
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-saturate));
+  box-shadow:
+    inset 0 1px 0 var(--lg-spec-strong),
+    inset 1px 0 0 var(--lg-spec-soft),
+    inset -1px 0 0 var(--lg-spec-soft),
+    inset 0 -1px 0 var(--lg-spec),
+    inset 0 0 22px rgba(255, 255, 255, 0.3),
+    var(--lg-shadow);
+}
+
+/* 3.2 折射透镜层：真实凸透镜边缘位移。
+   两条性能纪律：
+   1) 这里不能再写 backdrop-filter —— 父容器已经是玻璃面、已经模糊过一次，
+      叠第二层属于重复采样，肉眼毫无差别却要多算一遍。
+   2) SVG 位移滤镜只在 .lg-lens--refract 上启用。顶栏、菜单条是 position:fixed
+      且随滚动不断更换身后的背景，挂滤镜会让浏览器每帧重跑一次高斯模糊，
+      滚动卡顿就是这么来的。 */
+.lg-lens {
+  position: absolute;
+  inset: 1px;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.75),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 0 34px rgba(255, 255, 255, 0.2);
+}
+
+/* 真折射：仅给「不随滚动刷新背景」的容器用（如桌宠面板） */
+.lg-lens--refract {
+  filter: url(#lgLensChrome) saturate(118%) brightness(1.04);
+}
+
+/* 透镜层之上必须有内容层，否则文字会被折射层盖住 */
+.lg-lens ~ * {
+  position: relative;
+  z-index: 1;
+}
+
+/* 3.3 流动感：背景高光缓慢巡游。用 background-position 而不是覆盖层，
+       既不会挡内容，也不会破坏 backdrop 采样。 */
+.lg-flow {
+  background-size: 100% 100%, 220% 220%;
+  animation: lgFlow 22s ease-in-out infinite;
+}
+
+@keyframes lgFlow {
+  0%, 100% { background-position: 0% 0%, 0% 0%; }
+  50% { background-position: 0% 0%, 100% 100%; }
+}
+
+/* 3.4 悬浮：只加深环境阴影，容器绝不缩放 */
+.lg-lift {
+  transition: box-shadow 0.42s var(--lg-ease), background-color 0.42s var(--lg-ease);
+}
+
+@media (hover: hover) {
+  .lg-lift:hover {
+    box-shadow:
+      inset 0 1px 0 var(--lg-spec-strong),
+      inset 1px 0 0 var(--lg-spec-soft),
+      inset -1px 0 0 var(--lg-spec-soft),
+      inset 0 -1px 0 var(--lg-spec),
+      inset 0 0 22px rgba(255, 255, 255, 0.34),
+      var(--lg-shadow-hover);
+  }
+}
+
+/* ------------------------------------------------- 4. Element Plus 全量覆盖 */
+/* 4.1 语义变量：把所有「实心白块」改成半透，组件不写死底色才能透光 */
+:root {
+  --el-bg-color: transparent;
+  --el-bg-color-page: transparent;
+  --el-bg-color-overlay: rgba(255, 255, 255, 0.74);
+  --el-fill-color-blank: transparent;
+  --el-fill-color: rgba(255, 255, 255, 0.34);
+  --el-fill-color-light: rgba(255, 255, 255, 0.42);
+  --el-fill-color-lighter: rgba(255, 255, 255, 0.3);
+  --el-fill-color-extra-light: rgba(255, 255, 255, 0.22);
+  --el-fill-color-dark: rgba(255, 255, 255, 0.5);
+  --el-fill-color-darker: rgba(255, 255, 255, 0.6);
+  --el-border-color: rgba(255, 255, 255, 0.72);
+  --el-border-color-light: rgba(255, 255, 255, 0.6);
+  --el-border-color-lighter: rgba(255, 255, 255, 0.5);
+  --el-border-color-extra-light: rgba(255, 255, 255, 0.38);
+  --el-border-color-darker: rgba(255, 255, 255, 0.8);
+  --el-text-color-primary: var(--lg-ink);
+  --el-text-color-regular: var(--lg-ink-2);
+  --el-text-color-secondary: var(--lg-ink-3);
+  --el-text-color-placeholder: #9aa2ad;
+  --el-box-shadow-light: 0 8px 24px -14px rgba(58, 41, 28, 0.2);
+  --el-box-shadow: 0 14px 40px -20px rgba(58, 41, 28, 0.24);
+  --el-box-shadow-dark: 0 24px 56px -24px rgba(58, 41, 28, 0.28);
+  --el-mask-color: rgba(38, 26, 18, 0.26);
+  --el-border-radius-base: 12px;
+  --el-border-radius-small: 9px;
+}
+
+/* 4.2 卡片 */
+.el-card {
+  position: relative;
+  border: 0;
+  border-radius: var(--lg-radius);
+  background-color: rgba(255, 255, 255, 0.18);
+  background-image:
+    radial-gradient(130% 120% at 10% -24%, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0) 44%),
+    linear-gradient(158deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.03) 46%, rgba(255, 255, 255, 0.14) 100%);
+  -webkit-backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-saturate));
+  backdrop-filter: blur(var(--lg-blur)) saturate(var(--lg-saturate));
+  box-shadow:
+    inset 0 1px 0 var(--lg-spec-strong),
+    inset 1px 0 0 var(--lg-spec-soft),
+    inset -1px 0 0 var(--lg-spec-soft),
+    inset 0 -1px 0 var(--lg-spec),
+    inset 0 0 24px rgba(255, 255, 255, 0.28),
+    var(--lg-shadow);
+  transition: box-shadow 0.42s var(--lg-ease), background-color 0.42s var(--lg-ease);
+}
+
+.el-card.is-always-shadow,
+.el-card.is-hover-shadow:hover {
+  box-shadow:
+    inset 0 1px 0 var(--lg-spec-strong),
+    inset 1px 0 0 var(--lg-spec-soft),
+    inset -1px 0 0 var(--lg-spec-soft),
+    inset 0 -1px 0 var(--lg-spec),
+    inset 0 0 24px rgba(255, 255, 255, 0.3),
+    var(--lg-shadow-hover);
+}
+
+.el-card__header {
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.06));
+  font-weight: 650;
+  color: var(--lg-ink);
+}
+
+.el-card__body { padding: 18px 20px; }
+
+/* 4.3 按钮：胶囊 + 内镜面，悬浮只加深阴影
+   注意：按钮**不做 backdrop-filter**。按钮是页面上数量最多的元素（表格行操作、
+   分页、工具栏），每个模糊层都要独立采样背景，几十个就足以让列表页掉帧。
+   小组件靠提高染色不透明度获得同样的「玻璃厚度」观感，视觉几乎无差。 */
+.el-button {
+  --el-button-bg-color: rgba(255, 255, 255, 0.52);
+  --el-button-border-color: transparent;
+  --el-button-hover-bg-color: rgba(255, 255, 255, 0.7);
+  --el-button-hover-border-color: transparent;
+  --el-button-active-bg-color: rgba(255, 255, 255, 0.6);
+  --el-button-text-color: var(--lg-ink);
+  border-radius: var(--lg-radius-pill);
+  border: 0;
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.5),
+    0 1px 2px rgba(58, 41, 28, 0.05),
+    0 6px 16px -12px rgba(58, 41, 28, 0.28);
+  transition: box-shadow 0.36s var(--lg-ease), background-color 0.3s var(--lg-ease), color 0.24s var(--lg-ease);
+}
+
+@media (hover: hover) {
+  .el-button:not(.is-disabled, .is-loading, .is-text, .is-link):hover {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.96),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+      0 2px 4px rgba(58, 41, 28, 0.05),
+      0 12px 24px -14px rgba(58, 41, 28, 0.34);
+  }
+}
+
+.el-button:not(.is-disabled, .is-loading, .is-text, .is-link):active {
+  box-shadow:
+    inset 0 2px 4px rgba(58, 41, 28, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* 主操作：橙色玻璃，保留品牌色但带内部通透感 */
+.el-button--primary:not(.is-text, .is-link, .is-plain) {
+  --el-button-text-color: #fff;
+  --el-button-hover-text-color: #fff;
+  --el-button-active-text-color: #fff;
+  background-image: linear-gradient(165deg, #fb8c46 0%, var(--el-color-primary) 52%, #d34a06 100%);
+  background-color: var(--el-color-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(120, 42, 0, 0.28),
+    0 2px 6px rgba(211, 74, 6, 0.2),
+    0 10px 22px -12px rgba(211, 74, 6, 0.55);
+}
+
+/* 以 <a> 渲染的按钮（el-button tag="router-link"）：外层若存在 `a { color: … }` 这类
+   通用链接配色，会以更高优先级把按钮文字染成品牌橙，主按钮就成了橙字压橙底。
+   这里统一把按钮自己的文字色抢回来，避免各处再踩同一个坑。 */
+a.el-button:is(.el-button--primary, .el-button--success, .el-button--warning, .el-button--danger, .el-button--info) {
+  color: var(--el-button-text-color);
+}
+
+a.el-button:is(.el-button--primary, .el-button--success, .el-button--warning, .el-button--danger, .el-button--info):hover {
+  color: var(--el-button-hover-text-color, var(--el-button-text-color));
+}
+
+@media (hover: hover) {
+  .el-button--primary:not(.is-text, .is-link, .is-plain, .is-disabled):hover {
+    background-image: linear-gradient(165deg, #ff9a5a 0%, #f2600f 52%, #dc4d06 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      inset 0 -1px 0 rgba(120, 42, 0, 0.3),
+      0 4px 10px rgba(211, 74, 6, 0.24),
+      0 16px 30px -14px rgba(211, 74, 6, 0.62);
+  }
+}
+
+.el-button--success:not(.is-text, .is-link, .is-plain) {
+  background-image: linear-gradient(165deg, #6fd39a, #35a56d 55%, #278456);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 10px 22px -14px rgba(39, 132, 86, 0.5);
+}
+
+.el-button--danger:not(.is-text, .is-link, .is-plain) {
+  background-image: linear-gradient(165deg, #ff8a80, #e25348 55%, #c33f36);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 10px 22px -14px rgba(195, 63, 54, 0.5);
+}
+
+.el-button--warning:not(.is-text, .is-link, .is-plain) {
+  background-image: linear-gradient(165deg, #ffc978, #eda03c 55%, #d1832a);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 10px 22px -14px rgba(209, 131, 42, 0.48);
+}
+
+.el-button--info:not(.is-text, .is-link, .is-plain) {
+  background-image: linear-gradient(165deg, #b7bdc7, #8a929e 55%, #727a86);
+}
+
+/* 文字/链接按钮：不参与玻璃厚度，只保留文字层级 */
+.el-button.is-text,
+.el-button.is-link {
+  box-shadow: none;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-radius: 10px;
+  font-weight: 550;
+  color: var(--el-color-primary);
+}
+
+@media (hover: hover) {
+  .el-button.is-text:hover,
+  .el-button.is-link:hover {
+    background: rgba(255, 255, 255, 0.42);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+}
+
+.el-button.is-circle { border-radius: 50%; }
+.el-button.is-disabled,
+.el-button.is-disabled:hover { opacity: 0.5; }
+
+/* 4.4 输入控件：向下凹陷的玻璃，靠内阴影表达厚度（同样不做模糊，理由同按钮） */
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper,
+.el-input-number,
+.el-date-editor.el-input__wrapper {
+  border-radius: 11px;
+  background-color: rgba(255, 255, 255, 0.58);
+  box-shadow:
+    inset 0 1px 1px rgba(58, 41, 28, 0.05),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.75),
+    0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: box-shadow 0.32s var(--lg-ease), background-color 0.32s var(--lg-ease);
+}
+
+.el-input__wrapper:hover,
+.el-textarea__inner:hover,
+.el-select__wrapper:hover,
+.el-date-editor.el-input__wrapper:hover {
+  background-color: rgba(255, 255, 255, 0.56);
+  box-shadow:
+    inset 0 1px 1px rgba(58, 41, 28, 0.05),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.85),
+    0 2px 8px -4px rgba(58, 41, 28, 0.16);
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus,
+.el-select__wrapper.is-focused,
+.el-date-editor.el-input__wrapper.is-focus {
+  background-color: rgba(255, 255, 255, 0.68);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--el-color-primary) 52%, transparent),
+    inset 0 1px 1px rgba(58, 41, 28, 0.04),
+    0 0 0 4px color-mix(in srgb, var(--el-color-primary) 14%, transparent),
+    0 4px 14px -8px rgba(58, 41, 28, 0.2);
+}
+
+.el-textarea__inner { padding: 8px 12px; }
+.el-input.is-disabled .el-input__wrapper,
+.el-textarea.is-disabled .el-textarea__inner { background-color: rgba(255, 255, 255, 0.2); }
+
+/* 4.5 表格：透明底 + 玻璃表头 + 极细发丝线 */
+.el-table {
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-expanded-cell-bg-color: transparent;
+  --el-table-border-color: rgba(255, 255, 255, 0.55);
+  --el-table-header-bg-color: rgba(255, 255, 255, 0.34);
+  --el-table-header-text-color: var(--lg-ink);
+  --el-table-text-color: var(--lg-ink-2);
+  --el-table-row-hover-bg-color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  border-radius: var(--lg-radius-sm);
+}
+
+.el-table th.el-table__cell {
+  background-color: rgba(255, 255, 255, 0.46);
+  font-weight: 650;
+  color: var(--lg-ink);
+}
+
+.el-table td.el-table__cell { border-bottom: 1px solid rgba(255, 255, 255, 0.44); }
+.el-table tr { background: transparent; }
+.el-table__inner-wrapper::before { display: none; }
+.el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell {
+  background-color: rgba(255, 255, 255, 0.46);
+}
+.el-table__body tr.current-row > td.el-table__cell {
+  background-color: color-mix(in srgb, var(--el-color-primary) 10%, rgba(255, 255, 255, 0.4));
+}
+.el-table__empty-block { background: transparent; }
+.el-table__empty-text { color: var(--lg-ink-3); }
+
+/* 固定列横向滚动时会盖住下方穿过来的内容，需要一层背景，但纯白在米色玻璃底上很突兀。
+   用 accent 色调的半透明玻璃 + backdrop-filter 模糊：既能挡住穿透内容，白度又和卡片玻璃一致。
+   sticky 固定列是逐单元格渲染，模糊层只有固定列那几格，不会拖累整表性能。 */
+.el-table:not(.is-scrolling-none) .el-table-fixed-column--left,
+.el-table:not(.is-scrolling-none) .el-table-fixed-column--right {
+  background-color: color-mix(in srgb, var(--el-color-primary, #ea580c) 7%, rgba(255, 255, 255, 0.55)) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
+}
+
+.el-table:not(.is-scrolling-none) th.el-table-fixed-column--left,
+.el-table:not(.is-scrolling-none) th.el-table-fixed-column--right {
+  background-color: color-mix(in srgb, var(--el-color-primary, #ea580c) 9%, rgba(255, 255, 255, 0.6)) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
+}
+
+.el-table:not(.is-scrolling-none) .el-table__body tr:hover > td.el-table-fixed-column--left,
+.el-table:not(.is-scrolling-none) .el-table__body tr:hover > td.el-table-fixed-column--right,
+.el-table:not(.is-scrolling-none) .el-table__body tr.current-row > td.el-table-fixed-column--left,
+.el-table:not(.is-scrolling-none) .el-table__body tr.current-row > td.el-table-fixed-column--right {
+  background-color: color-mix(in srgb, var(--el-color-primary, #ea580c) 7%, rgba(255, 255, 255, 0.72)) !important;
+}
+
+/* 4.6 表单与描述列表 */
+.el-form-item__label { color: var(--lg-ink-2); font-weight: 550; }
+.el-descriptions { background: transparent; }
+.el-descriptions__body { background: transparent; }
+.el-descriptions__label.el-descriptions__cell.is-bordered-label {
+  background: rgba(255, 255, 255, 0.34);
+  color: var(--lg-ink-2);
+  font-weight: 550;
+}
+.el-descriptions__cell.is-bordered-content { background: rgba(255, 255, 255, 0.16); }
+.el-descriptions__cell { border-color: rgba(255, 255, 255, 0.5); }
+
+/* 4.7 标签：玻璃胶囊（数量多，不做模糊，靠染色与内高光表达质感） */
+.el-tag {
+  border: 0;
+  border-radius: var(--lg-radius-pill);
+  background-color: rgba(255, 255, 255, 0.56);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.45);
+  font-weight: 600;
+  color: var(--lg-ink-2);
+}
+
+.el-tag--primary { background-color: color-mix(in srgb, var(--el-color-primary) 16%, rgba(255, 255, 255, 0.3)); color: #b0400a; }
+.el-tag--success { background-color: rgba(72, 168, 116, 0.16); color: #2c7550; }
+.el-tag--warning { background-color: rgba(226, 156, 56, 0.18); color: #96601a; }
+.el-tag--danger { background-color: rgba(214, 82, 72, 0.16); color: #a8382f; }
+.el-tag--info { background-color: rgba(255, 255, 255, 0.42); color: var(--lg-ink-2); }
+
+/* 4.8 分段控件（单选按钮组）：最像 iOS 的组件 */
+.el-radio-button__inner {
+  border: 0;
+  border-radius: 1px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--lg-ink-2);
+  font-weight: 550;
+  transition: color 0.24s var(--lg-ease), background-color 0.32s var(--lg-ease), box-shadow 0.32s var(--lg-ease);
+}
+
+/* 只有分段控件（radio-button）才套玻璃外壳；普通单选组保持无底 */
+.el-radio-group:has(> .el-radio-button) {
+  padding: 3px;
+  border-radius: var(--lg-radius-pill);
+  background: rgba(255, 255, 255, 0.34);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  backdrop-filter: blur(10px) saturate(150%);
+  box-shadow:
+    inset 0 1px 1px rgba(58, 41, 28, 0.05),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.7);
+  gap: 2px;
+}
+
+.el-radio-button:first-child .el-radio-button__inner,
+.el-radio-button:last-child .el-radio-button__inner { border-radius: var(--lg-radius-pill); }
+
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--el-color-primary);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 1px 3px rgba(58, 41, 28, 0.12),
+    0 6px 14px -8px rgba(58, 41, 28, 0.24);
+  font-weight: 650;
+  border: 0;
+}
+
+.el-radio-button__inner:hover { color: var(--lg-ink); }
+
+/* 4.9 选项卡：胶囊式，底部墨线改成滑块 */
+.el-tabs__header { margin-bottom: 14px; }
+.el-tabs__nav-wrap::after { display: none; }
+.el-tabs__item {
+  color: var(--lg-ink-3);
+  font-weight: 550;
+  border-radius: var(--lg-radius-pill);
+  transition: color 0.24s var(--lg-ease), background-color 0.3s var(--lg-ease);
+}
+.el-tabs__item:hover { color: var(--lg-ink); }
+.el-tabs__item.is-active { color: var(--el-color-primary); font-weight: 700; }
+.el-tabs__active-bar {
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--el-color-primary), transparent);
+}
+.el-tabs--border-card {
+  border: 0;
+  border-radius: var(--lg-radius);
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), var(--lg-shadow);
+}
+.el-tabs--border-card > .el-tabs__header {
+  background: rgba(255, 255, 255, 0.3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* 4.10 弹层：对话框、抽屉、气泡 —— 全部深沉玻璃 */
+.el-overlay {
+  background-color: var(--el-mask-color);
+  -webkit-backdrop-filter: blur(6px) saturate(120%);
+  backdrop-filter: blur(6px) saturate(120%);
+}
+
+.el-dialog {
+  border-radius: var(--lg-radius-xl);
+  padding: 0;
+  background-color: rgba(255, 255, 255, 0.62);
+  background-image:
+    radial-gradient(120% 100% at 8% -12%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0) 52%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.1));
+  -webkit-backdrop-filter: blur(var(--lg-blur-deep)) saturate(var(--lg-saturate));
+  backdrop-filter: blur(var(--lg-blur-deep)) saturate(var(--lg-saturate));
+  box-shadow:
+    inset 0 1px 0 var(--lg-spec-strong),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 0 40px rgba(255, 255, 255, 0.28),
+    var(--lg-shadow-float);
+  overflow: hidden;
+}
+
+.el-dialog__header {
+  padding: 20px 24px 14px;
+  margin: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.5);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0));
+}
+
+.el-dialog__title { font-weight: 680; color: var(--lg-ink); letter-spacing: -0.01em; }
+.el-dialog__body { padding: 18px 24px; color: var(--lg-ink-2); }
+.el-dialog__footer { padding: 12px 24px 20px; }
+.el-dialog__headerbtn .el-dialog__close { color: var(--lg-ink-2); }
+
+.el-drawer {
+  background-color: rgba(255, 255, 255, 0.66);
+  -webkit-backdrop-filter: blur(var(--lg-blur-deep)) saturate(var(--lg-saturate));
+  backdrop-filter: blur(var(--lg-blur-deep)) saturate(var(--lg-saturate));
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.85),
+    -24px 0 60px -30px rgba(58, 41, 28, 0.4);
+}
+
+.el-drawer__header { margin: 0; padding: 20px 22px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.5); color: var(--lg-ink); font-weight: 680; }
+.el-drawer__body { padding: 18px 22px; }
+
+/* 下拉 / 选择器 / 气泡：文字密集，用收敛的染色与更实的底，保证可读 */
+.el-popper.is-light,
+.el-dropdown__popper,
+.el-select__popper,
+.el-picker__popper {
+  border: 0 !important;
+  border-radius: 16px !important;
+  background: rgba(255, 255, 255, 0.76) !important;
+  -webkit-backdrop-filter: blur(22px) saturate(180%) !important;
+  backdrop-filter: blur(22px) saturate(180%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    0 2px 6px rgba(58, 41, 28, 0.06),
+    var(--lg-shadow-float) !important;
+}
+
+.el-popper.is-light > .el-popper__arrow::before,
+.el-dropdown__popper > .el-popper__arrow::before,
+.el-select__popper > .el-popper__arrow::before {
+  background: rgba(255, 255, 255, 0.78) !important;
+  border: 0 !important;
+}
+
+.el-dropdown-menu { padding: 6px; background: transparent; }
+.el-dropdown-menu__item {
+  border-radius: 10px;
+  padding: 7px 12px;
+  color: var(--lg-ink-2);
+  font-weight: 500;
+  transition: background-color 0.2s var(--lg-ease), color 0.2s var(--lg-ease);
+}
+.el-dropdown-menu__item:not(.is-disabled):hover,
+.el-dropdown-menu__item:not(.is-disabled):focus {
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--lg-ink);
+}
+.el-dropdown-menu__item--divided { border-top: 1px solid rgba(255, 255, 255, 0.6); margin-top: 4px; }
+
+.el-select-dropdown__item {
+  border-radius: 9px;
+  margin: 2px 6px;
+  color: var(--lg-ink-2);
+  transition: background-color 0.2s var(--lg-ease), color 0.2s var(--lg-ease);
+}
+.el-select-dropdown__item.is-hovering { background: rgba(255, 255, 255, 0.72); color: var(--lg-ink); }
+.el-select-dropdown__item.is-selected { color: var(--el-color-primary); font-weight: 650; }
+
+/* 4.11 菜单弹层（顶部导航下拉） */
+.el-menu--popup {
+  min-width: 168px;
+  padding: 6px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.76);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), var(--lg-shadow-float);
+}
+.el-menu--popup .el-menu-item {
+  height: 38px;
+  line-height: 38px;
+  border-radius: 10px;
+  color: var(--lg-ink-2);
+  font-weight: 500;
+}
+.el-menu--popup .el-menu-item:hover { background: rgba(255, 255, 255, 0.7); color: var(--lg-ink); }
+.el-menu--popup .el-menu-item.is-active { color: var(--el-color-primary); font-weight: 700; }
+
+/* 4.12 提示、消息、通知 */
+.el-alert {
+  border: 0;
+  border-radius: var(--lg-radius-sm);
+  background-color: rgba(255, 255, 255, 0.4);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 6px 18px -14px rgba(58, 41, 28, 0.22);
+}
+.el-alert--warning.is-light { background-color: rgba(255, 226, 184, 0.46); color: #8a5a12; }
+.el-alert--success.is-light { background-color: rgba(200, 236, 214, 0.44); color: #2c6e4c; }
+.el-alert--error.is-light { background-color: rgba(255, 210, 205, 0.46); color: #9c362d; }
+.el-alert--info.is-light { background-color: rgba(255, 255, 255, 0.42); color: var(--lg-ink-2); }
+
+.el-message {
+  border: 0;
+  border-radius: var(--lg-radius-pill);
+  background: rgba(255, 255, 255, 0.74);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), var(--lg-shadow-float);
+}
+
+.el-notification {
+  border: 0;
+  border-radius: var(--lg-radius);
+  background: rgba(255, 255, 255, 0.74);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), var(--lg-shadow-float);
+}
+
+.el-message-box {
+  border: 0;
+  border-radius: var(--lg-radius-xl);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(var(--lg-blur-deep)) saturate(var(--lg-saturate));
+  backdrop-filter: blur(var(--lg-blur-deep)) saturate(var(--lg-saturate));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95), var(--lg-shadow-float);
+}
+
+/* 4.13 分页、步骤条、空状态、时间线 */
+.el-pagination {
+  --el-pagination-bg-color: transparent;
+  --el-pagination-button-bg-color: rgba(255, 255, 255, 0.4);
+  --el-pagination-hover-color: var(--el-color-primary);
+  gap: 4px;
+}
+.el-pagination button,
+.el-pager li {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: background-color 0.24s var(--lg-ease), box-shadow 0.24s var(--lg-ease);
+}
+.el-pager li.is-active {
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--el-color-primary);
+  box-shadow: inset 0 1px 0 #fff, 0 4px 12px -8px rgba(58, 41, 28, 0.3);
+  font-weight: 700;
+}
+
+.el-empty__description p { color: var(--lg-ink-3); }
+
+.el-steps .el-step__title.is-process { color: var(--el-color-primary); font-weight: 680; }
+.el-step__icon.is-text { border-width: 1px; background: rgba(255, 255, 255, 0.6); }
+
+.el-timeline-item__node { box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.4); }
+.el-timeline-item__tail { border-left-color: rgba(255, 255, 255, 0.6); }
+
+.el-checkbox__inner,
+.el-radio__inner {
+  border-color: rgba(120, 108, 96, 0.42);
+  background: rgba(255, 255, 255, 0.6);
+}
+.el-checkbox__input.is-checked .el-checkbox__inner,
+.el-radio__input.is-checked .el-radio__inner {
+  background: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+  box-shadow: 0 2px 6px -2px rgba(211, 74, 6, 0.6);
+}
+
+.el-switch.is-checked .el-switch__core { background: var(--el-color-primary); border-color: transparent; }
+.el-switch__core { border-color: transparent; background: rgba(255, 255, 255, 0.5); box-shadow: inset 0 1px 2px rgba(58, 41, 28, 0.12); }
+
+.el-progress-bar__outer { background: rgba(255, 255, 255, 0.45); box-shadow: inset 0 1px 2px rgba(58, 41, 28, 0.08); }
+.el-progress-bar__inner { background-image: linear-gradient(90deg, #fb8c46, var(--el-color-primary)); }
+
+.el-upload-dragger {
+  border: 1px dashed rgba(255, 255, 255, 0.85);
+  border-radius: var(--lg-radius);
+  background: rgba(255, 255, 255, 0.3);
+}
+.el-upload-dragger:hover { border-color: var(--el-color-primary); background: rgba(255, 255, 255, 0.4); }
+
+.el-loading-mask {
+  background-color: rgba(255, 255, 255, 0.4);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* 滚动条：细、半透、圆角 */
+* {
+  scrollbar-color: rgba(120, 108, 96, 0.32) transparent;
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background-clip: content-box;
+  background-color: rgba(120, 108, 96, 0.28);
+}
+::-webkit-scrollbar-thumb:hover { background-color: rgba(120, 108, 96, 0.45); }
+
+/* ------------------------------------------------------------------ 5. 降级 */
+/* 不支持 backdrop-filter 的浏览器：退化为高不透明白玻璃，保证可读性不崩 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .el-card,
+  .el-dialog,
+  .el-drawer,
+  .el-popper.is-light,
+  .lg-glass {
+    background-color: rgba(255, 255, 255, 0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-ambient__blob { animation: none; }
+  .lg-flow { animation: none; }
+  .lg-lift,
+  .el-card,
+  .el-button,
+  .el-input__wrapper { transition: none; }
+}

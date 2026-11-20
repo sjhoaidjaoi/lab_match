@@ -1,4 +1,5 @@
 import { http } from './request'
+import type { MeetingStatus } from './interviewVideo'
 import type {
   AnnouncementItem, LabView, NoticeItem, OpenDaySchedule, PanoramaItem,
   PreferenceItem, PublicationInfo, StageInfo, VideoItem
@@ -45,6 +46,7 @@ export interface LabDetail extends LabView {
 }
 
 export interface StudentInterview {
+  online?: { status: MeetingStatus }
   durationMinutes?: number
   id: number
   batchId?: number
@@ -57,16 +59,13 @@ export interface StudentInterview {
   instructions?: string
   interviewTime?: string | null
   interviewStatus?: string
-  /** 后端暂未提供，缺失时页面显示占位 */
+  appointmentStatus?: string
+  acknowledgedAt?: string | null
+  rescheduledAt?: string | null
+  followUp?: boolean
+  canAcknowledge?: boolean
   location?: string | null
   interviewForm?: string | null
-  attitudeScore?: number | null
-  logicScore?: number | null
-  programmingScore?: number | null
-  timeCommitmentScore?: number | null
-  comprehensiveScore?: number | null
-  evaluation?: string
-  recommendation?: string
   createdAt?: string
 }
 

@@ -11,6 +11,7 @@ const { ok } = require('../utils/result')
 const { getStore, persistStore, nextId } = require('../data/seed')
 const { requireAuth, requireRole, ROLES, isLabLeader } = require('../middleware/auth')
 const { currentBatch } = require('../utils/applicationScope')
+const L = require('../utils/labProfile')
 const { logOperation } = require('../utils/audit')
 
 const videoAddress = z.string().trim().max(2048).refine(value => {
@@ -29,6 +30,18 @@ const LabSchema = z.object({
   technologyStack: z.string().trim().max(255).optional().default(''),
   recruitmentQuota: z.number().int().min(0).max(4294967295).optional().default(5),
   leaderId: z.number().int().optional().nullable(),
+  // 档案类字段：学院端维护，列表与详情都会展示。
+  // 注意：这些字段一律不写 .default()，避免 PUT（LabSchema.partial()）时被空串覆盖。
+  labCode: z.string().trim().max(64).optional(),
+  college: z.string().trim().max(64).optional(),
+  location: z.string().trim().max(128).optional(),
+  researchDirection: z.string().trim().max(255).optional(),
+  detail: z.string().trim().max(5000).optional(),
+  features: z.string().trim().max(5000).optional(),
+  achievements: z.string().trim().max(5000).optional(),
+  equipment: z.string().trim().max(5000).optional(),
+  contact: z.string().trim().max(128).optional(),
+  remark: z.string().trim().max(1000).optional(),
   // 集中宣讲：每个实训室的文字介绍 + 外部视频（教师线下宣讲录制）
   briefingText: z.string().optional().default(''),
   briefingVideoUrl: videoAddress.optional().nullable(),
@@ -42,12 +55,19 @@ const LabSchema = z.object({
 
 router.get('/', (req, res) => {
   const store = getStore()
+  const year = L.currentAcademicYear(store)
   const list = store.laboratories.filter((l) => l.status !== 'INACTIVE').map((l) => {
     const leader = store.users.find((u) => u.id === l.leaderId)
     return {
-      id: l.id, name: l.name, description: l.description,
+      id: l.id, name: l.name, displayName: L.displayName(l),
+      labCode: l.labCode || '', college: l.college || '', location: l.location || '',
+      researchDirection: l.researchDirection || '',
+      description: l.description,
+      detail: l.detail || '', features: l.features || '', achievements: l.achievements || '',
+      equipment: l.equipment || '', contact: l.contact || '', remark: l.remark || '',
       projectDirection: l.projectDirection, technologyStack: l.technologyStack,
-      recruitmentQuota: l.recruitmentQuota,
+      // 招生名额以「当前学年的学院统一计划」为准，避免各端口径不一致
+      recruitmentQuota: L.totalQuotaOf(store, l, year),
       leaderName: leader ? leader.realName : null,
       leaderId: l.leaderId,
       briefingText: l.briefingText || '',
@@ -65,7 +85,7 @@ router.get('/all', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) =>
   const store = getStore()
   const list = store.laboratories.map((l) => {
     const leader = store.users.find((u) => u.id === l.leaderId)
-    const activeBatch = store.recruitmentBatches.find((b) => b.status === 'IN_PROGRESS') || store.recruitmentBatches[0]
+    const activeBatch = currentBatch(store)
     const applicationCount = activeBatch
       ? store.studentPreferences.filter((p) => p.batchId === activeBatch.id && p.laboratoryId === l.id && p.status === 'SUBMITTED').length
       : 0
@@ -92,12 +112,31 @@ router.get('/:id', (req, res) => {
     .map(t => ({ ...t, acceptsPreferences: store.users.some(user => user.id === t.userId && user.laboratoryId === l.id &&
       user.status === 'ACTIVE' && [ROLES.LAB_TEACHER, ROLES.LAB_LEADER].includes(user.role)) }))
   const { briefingMaterials, ...detail } = l
-  res.json(ok({ ...detail, leaderName: leader?.realName || null, teachers, videos, panoramas }))
+  const year = L.currentAcademicYear(store)
+  res.json(ok({
+    ...detail,
+    displayName: L.displayName(l),
+    labCode: l.labCode || '',
+    college: l.college || '',
+    location: l.location || '',
+    researchDirection: l.researchDirection || '',
+    detail: l.detail || '',
+    features: l.features || '',
+    achievements: l.achievements || '',
+    equipment: l.equipment || '',
+    contact: l.contact || '',
+    remark: l.remark || '',
+    academicYear: year,
+    recruitmentQuota: L.totalQuotaOf(store, l, year),
+    leaderName: leader?.realName || null,
+    teachers,
+    videos,
+    panoramas
+  }))
 })
 
 router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
-  const { name } = LabSchema.pick({ name: true }).parse(req.body || {})
-  const body = LabSchema.parse({ name, recruitmentQuota: 0 })
+  const body = LabSchema.parse({ recruitmentQuota: 0, ...(req.body || {}) })
   const store = getStore()
   const id = nextId(store.laboratories)
   const lab = { id, ...body, createdAt: new Date().toISOString() }
@@ -121,18 +160,14 @@ router.put('/:id', requireAuth, (req, res) => {
     return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '无权限修改此实训室', data: null })
   }
 
-  const body = LabSchema.partial().parse(req.body || {})
+  const parsed = LabSchema.partial().parse(req.body || {})
+  // 只更新显式传入的字段，避免任何默认值把已有资料清空
+  const body = Object.fromEntries(Object.entries(parsed).filter(([, value]) => value !== undefined))
   if (role === ROLES.COLLEGE_ADMIN) {
-    if (Object.keys(body).some(key => key !== 'leaderId')) {
-      return res.status(403).json({ message: '实训室资料与名额由本室组长维护' })
-    }
+    // 学院管理员：可维护全部基础资料并指定组长
     if (body.leaderId != null && !store.users.some(user => user.id === body.leaderId &&
       user.role === ROLES.LAB_LEADER && user.laboratoryId === lab.id && user.status === 'ACTIVE')) {
       return res.status(400).json({ message: '请选择已绑定本室的有效组长账号' })
-    }
-  } else {
-    if (body.leaderId !== undefined && body.leaderId !== lab.leaderId) {
-      return res.status(403).json({ message: '组长账号由学院统筹绑定' })
     }
     if (body.recruitmentQuota !== undefined) {
       const planned = store.labTeachers.filter(item => item.laboratoryId === lab.id && item.status !== 'INACTIVE')
@@ -147,6 +182,20 @@ router.put('/:id', requireAuth, (req, res) => {
       if (body.recruitmentQuota < Math.max(planned, occupied)) {
         return res.status(409).json({ message: `计划名额不能少于已分配导师名额（${planned}）或已占用名额（${occupied}）` })
       }
+    }
+  } else {
+    // 组长：只能维护本室宣讲 / 云游媒体地址；基础资料、教师名单、招生名额由学院统一维护
+    const LEADER_MEDIA_FIELDS = [
+      'briefingVideoUrl', 'briefingVideoType', 'tourVideoUrl', 'tourVideoType',
+      'introductionVideo', 'panoramicResource'
+    ]
+    const illegal = Object.keys(body).filter(key => !LEADER_MEDIA_FIELDS.includes(key))
+    if (illegal.length) {
+      return res.status(403).json({
+        code: 'ROLE_FORBIDDEN',
+        message: '实训室基础资料、教师信息与招生名额由学院统一维护，组长仅可管理本室宣传资料',
+        data: null
+      })
     }
   }
   store.laboratories[idx] = { ...lab, ...body }
@@ -204,8 +253,8 @@ router.post('/:id/teachers', requireAuth, (req, res) => {
   const store = getStore()
   const lab = store.laboratories.find((l) => l.id === Number(req.params.id))
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
-  if (!isLabLeader(req, lab)) {
-    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '只能维护本人负责实训室的导师团队', data: null })
+  if (!req.user.roles.includes(ROLES.COLLEGE_ADMIN)) {
+    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '教师名单与教师资料由学院统一维护', data: null })
   }
   const body = TeacherSchema.parse(req.body || {})
   if (!store.labTeachers) store.labTeachers = []
@@ -230,8 +279,8 @@ router.put('/:id/teachers/:teacherId', requireAuth, (req, res) => {
   const store = getStore()
   const lab = store.laboratories.find((l) => l.id === Number(req.params.id))
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
-  if (!isLabLeader(req, lab)) {
-    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '只能维护本人负责实训室的导师团队', data: null })
+  if (!req.user.roles.includes(ROLES.COLLEGE_ADMIN)) {
+    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '教师名单与教师资料由学院统一维护', data: null })
   }
   const idx = (store.labTeachers || []).findIndex(
     (t) => t.id === Number(req.params.teacherId) && t.laboratoryId === lab.id
@@ -257,8 +306,8 @@ router.delete('/:id/teachers/:teacherId', requireAuth, (req, res) => {
   const store = getStore()
   const lab = store.laboratories.find((l) => l.id === Number(req.params.id))
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
-  if (!isLabLeader(req, lab)) {
-    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '只能维护本人负责实训室的导师团队', data: null })
+  if (!req.user.roles.includes(ROLES.COLLEGE_ADMIN)) {
+    return res.status(403).json({ code: 'ROLE_FORBIDDEN', message: '教师名单与教师资料由学院统一维护', data: null })
   }
   const before = (store.labTeachers || []).length
   if (store.studentPreferences.some(choice => choice.labTeacherId === Number(req.params.teacherId) && choice.laboratoryId === lab.id)) {

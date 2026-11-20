@@ -11,7 +11,8 @@ export const STAGE_STATUS_LABELS: Record<string, string> = {
   NOT_STARTED: '未开始',
   IN_PROGRESS: '进行中',
   COMPLETED: '已结束',
-  PAUSED: '已暂停'
+  PAUSED: '已暂停',
+  STARTED: '进行中'
 }
 
 export const INTERVIEW_STATUS_LABELS: Record<string, string> = {

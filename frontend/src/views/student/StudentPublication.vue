@@ -1,6 +1,7 @@
 <template>
-  <section v-loading="loading" class="student-page" aria-label="最终结果与公示">
-    <el-empty :image-size="88" v-if="!loading && !published" description="最终录取结果尚未公示" />
+  <section v-loading="loading" class="student-page">
+    <h1>最终结果与公示</h1>
+    <el-empty v-if="!loading && !published" description="最终录取结果尚未公示" />
     <template v-else>
       <el-card shadow="never">
         <h2>学院录取公示</h2>
@@ -19,7 +20,7 @@
           </dd>
           <dt>确认时间</dt><dd>{{ formatDateTime(finalResult.confirmedAt) }}</dd>
         </dl>
-        <el-empty :image-size="88" v-else description="本批次未查询到录取记录。如有疑问，请通过学院公布的渠道咨询。" />
+        <el-empty v-else description="本批次未查询到录取记录。如有疑问，请通过学院公布的渠道咨询。" />
         <div v-if="inPublicity" class="student-actions">
           <el-button type="primary" @click="openDialog">提交异议</el-button>
         </div>
@@ -27,7 +28,7 @@
       </el-card>
       <el-card shadow="never">
         <h2>我的异议</h2>
-        <el-empty :image-size="88" v-if="!objections.length" description="暂无异议记录" />
+        <el-empty v-if="!objections.length" description="暂无异议记录" />
         <div v-else class="student-grid">
           <el-card v-for="item in objections" :key="item.id" shadow="never">
             <h2>{{ objectionTypeLabel(item.type) }}</h2>

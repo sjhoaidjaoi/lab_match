@@ -1,7 +1,8 @@
 <template>
-  <section v-loading="loading" class="student-page" aria-label="拟录取确认">
+  <section v-loading="loading" class="student-page">
+    <h1>拟录取确认</h1>
     <p v-if="pendingList.length > 1">收到多个拟录取通知时，只能确认一个实训室；确认后其余待确认名额将自动释放。</p>
-    <el-empty :image-size="88" v-if="!loading && !intended.length" description="暂无拟录取通知" />
+    <el-empty v-if="!loading && !intended.length" description="暂无拟录取通知" />
     <div v-else class="student-grid">
       <el-card v-for="item in intended" :key="item.id" shadow="never">
         <h2>{{ item.laboratoryName || '实训室#' + item.laboratoryId }}</h2>

@@ -1,15 +1,16 @@
 <template>
-  <section v-loading="loading" class="student-page" aria-label="调剂与补录">
+  <section v-loading="loading" class="student-page">
+    <h1>调剂与补录</h1>
     <el-card shadow="never">
       <el-radio-group v-model="stage" aria-label="调剂阶段">
-        <el-radio-button :value="6">实训室内部调剂</el-radio-button>
-        <el-radio-button :value="7">学院统筹调剂</el-radio-button>
+        <el-radio-button :value="6">先 · 实训室内部调剂</el-radio-button>
+        <el-radio-button :value="7">后 · 学院统筹调剂</el-radio-button>
       </el-radio-group>
       <p v-if="preference">本阶段调剂意愿：{{ (stage === 6 ? preference.obeyInternalAdjustment : preference.obeyCollegeAdjustment) ? '服从' : '不服从' }}</p>
       <p v-if="currentStage">批次当前阶段：{{ currentStage }}</p>
     </el-card>
     <el-alert v-if="failed" title="调剂数据读取失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
-    <el-empty :image-size="88" v-if="!loading && !visible.length" description="暂无个人调剂通知" />
+    <el-empty v-if="!loading && !visible.length" description="暂无个人调剂通知" />
     <div v-else class="student-grid">
       <el-card v-for="item in visible" :key="item.id" shadow="never">
         <h2>{{ item.targetLabName || '实训室#' + item.targetLaboratoryId }}</h2>

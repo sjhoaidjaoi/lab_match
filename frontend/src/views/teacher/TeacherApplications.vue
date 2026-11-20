@@ -52,7 +52,13 @@
         <el-table-column label="提交时间" width="180">
           <template #default="{ row }">{{ formatTime(row.submittedAt) }}</template>
         </el-table-column>
-        <el-table-column label="详情" width="85" fixed="right"><template #default="{row}"><el-button link type="primary" @click="selected = row">查看</el-button></template></el-table-column>
+        <el-table-column label="操作" width="195" fixed="right"><template #default="{row}">
+          <el-button link type="primary" @click="selected = row">查看报名</el-button>
+          <router-link :to="{ path: '/teacher/interviews', query: row.interview?.interviewTime
+            ? { interviewId: row.interview.id } : { preferenceId: row.id } }">
+            {{ row.interview?.interviewTime ? '管理面试' : '发起线上面试' }}
+          </router-link>
+        </template></el-table-column>
       </el-table>
     </el-card>
     <el-dialog :model-value="Boolean(selected)" title="报名详情" width="min(520px, 94vw)" @close="selected = null">
@@ -61,6 +67,10 @@
         <p>{{ selected.laboratoryName }} · {{ selected.labTeacherName || '未记录导师' }}</p>
         <p>提交时间：{{ formatTime(selected.submittedAt) }}</p>
         <p>面试评价：{{ selected.interview?.evaluation || '暂无' }}</p>
+        <p v-if="selected.interview?.online">
+          <router-link :to="`/meeting/${selected.interview.id}`">查看会议</router-link> ·
+          <router-link :to="{ path: '/teacher/interview-archives', query: { interviewId: selected.interview.id } }">查看档案</router-link>
+        </p>
         <el-button v-if="selected.resume" type="primary" plain @click="download(selected.resume)">{{ selected.resume.name }} · 下载</el-button>
         <p v-else>简历未上传</p>
       </template>

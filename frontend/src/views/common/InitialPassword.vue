@@ -87,10 +87,16 @@ function exit() {
 .activation-card {
   width: min(100%, 460px);
   padding: clamp(20px, 5vw, 36px);
-  border: 1px solid #e9ded5;
-  border-radius: 22px;
-  background: #fffcf9;
-  box-shadow: 0 20px 56px #492b2520;
+  border: 0;
+  background-color: var(--workspace-paper, rgba(255, 255, 255, 0.46));
+  background-image: linear-gradient(152deg, rgba(255, 255, 255, 0.52), rgba(255, 255, 255, 0.08) 62%);
+  -webkit-backdrop-filter: blur(6px) saturate(175%);
+  backdrop-filter: blur(6px) saturate(175%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
+    var(--lg-shadow);
+  border-radius: 26px;
 }
 .activation-brand {
   margin: 0 0 12px;
