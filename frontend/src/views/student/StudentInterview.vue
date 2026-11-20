@@ -1,16 +1,8 @@
 <template>
-  <section v-loading="loading" class="student-page">
-    <header>
-      <h1>我的面试</h1>
-      <p>按志愿查看面试安排。拟录取通知与最终公示会在对应阶段发布。</p>
-      <div class="interview-actions">
-        <router-link to="/student/admission-confirmation">拟录取确认 →</router-link>
-        <router-link to="/student/result">最终结果 →</router-link>
-      </div>
-    </header>
+  <section v-loading="loading" class="student-page" aria-label="面试安排">
     <el-alert v-if="failed" title="面试安排加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
-    <el-empty v-if="!loading && !interviews.length" description="暂无面试安排" />
-    <div v-else class="student-page">
+    <el-empty v-if="!loading && !failed && !interviews.length" :image-size="88" description="暂无面试安排" />
+    <div v-else class="student-grid">
       <el-card v-for="item in interviews" :id="'interview-' + item.id" :key="item.id"
         :class="{ 'linked-interview': String(item.id) === route.query.interviewId }" shadow="never">
         <h2>{{ item.laboratoryName || '实训室#' + item.laboratoryId }}</h2>
@@ -76,7 +68,7 @@ async function acknowledge(item: StudentInterview) {
 watch([() => route.query.interviewId, interviews], async ([id]) => {
   if (!id) return
   await nextTick()
-  document.getElementById('interview-' + id)?.scrollIntoView({ block: 'nearest' })
+  document.getElementById('interview-' + id)?.scrollIntoView({ block: 'center' })
 })
 onMounted(load)
 </script>

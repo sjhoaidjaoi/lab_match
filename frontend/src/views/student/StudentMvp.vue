@@ -1,11 +1,12 @@
 <template>
-  <section v-loading="loading" class="student-page" aria-live="polite">
-    <h1>{{ title }}</h1>
+  <section v-loading="loading" class="student-page" aria-live="polite" :aria-label="title">
+    <h1 v-if="['dashboard', 'labs', 'lab-detail'].includes(page)">{{ title }}</h1>
     <el-alert v-if="failed" type="error" show-icon :closable="false" title="暂时无法读取选拔数据" />
     <el-button v-if="failed" @click="load">重试</el-button>
     <template v-if="workspace && !failed">
       <el-card v-if="page === 'dashboard'" shadow="never">
         <h2>我的选拔进度</h2>
+        <p><RouterLink to="/student/labs">实训室列表</RouterLink></p>
         <p><RouterLink to="/student/application">意向填报</RouterLink> · {{ receipt.length ? '已提交' : '未提交' }}</p>
         <p><RouterLink to="/student/interview">面试安排</RouterLink> · {{ workspace.interviews.length }} 条</p>
         <p><RouterLink to="/student/admission-confirmation">拟录取</RouterLink> · {{ workspace.offers.length }} 条</p>
@@ -13,7 +14,6 @@
       </el-card>
 
       <template v-if="page === 'labs' || page === 'lab-detail'">
-        <RouterLink v-if="page === 'lab-detail'" to="/student/labs">返回实训室列表</RouterLink>
         <el-empty v-if="!displayLabs.length" description="暂无实训室信息" />
         <div v-else class="student-grid">
           <el-card v-for="lab in displayLabs" :key="lab.id" shadow="never">
