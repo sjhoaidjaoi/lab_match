@@ -1,45 +1,30 @@
 .student-shell { min-height: 100vh; }
 
-/* 学生端顶栏：与教师/学院端同构的悬浮玻璃胶囊 */
 .student-top {
-  position: sticky;
-  top: 12px;
-  z-index: 8;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 16px;
+  min-height: 72px;
+  max-width: 1920px;
+  margin-inline: auto;
+  padding: 10px var(--workspace-gutter) 0;
+}
+.student-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  max-width: 100%;
+  min-height: 44px;
+}
+.student-brand .workspace-logo { width: clamp(104px, 22vw, 220px); max-width: 100%; }
+.student-account {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 4px 14px;
-  min-height: 60px;
-  margin: 14px var(--workspace-gutter) 0;
-  padding: 7px 14px 7px 8px;
-  border-radius: 999px;
-  overflow: visible;
-  background-color: rgba(255, 255, 255, 0.3);
-  background-image:
-    radial-gradient(120% 200% at 3% -60%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 62%),
-    linear-gradient(148deg, rgba(255, 255, 255, 0.44), rgba(255, 255, 255, 0.1) 52%, rgba(255, 255, 255, 0.3));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.96),
-    inset 1px 0 0 rgba(255, 255, 255, 0.5),
-    inset -1px 0 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.7),
-    var(--lg-shadow);
-}
-.student-top .lg-lens { border-radius: 999px; }
-.student-account { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 6px; }
-
-@media (max-width: 720px) {
-  .student-top {
-    flex-wrap: wrap;
-    border-radius: 24px;
-    top: 8px;
-    margin-top: 10px;
-    padding: 8px 10px;
-    gap: 6px;
-  }
-  .student-nav { border-radius: 20px; padding: 4px 7px; }
-  .student-frame { min-height: calc(100svh - 120px); }
+  justify-content: flex-end;
+  gap: 2px 4px;
+  font-size: 14px;
 }
 .student-account .workspace-account {
   padding: 6px 12px;
@@ -48,9 +33,63 @@
   font-weight: 550;
   transition: background-color 0.26s var(--lg-ease), color 0.26s var(--lg-ease);
 }
-.student-account .el-button { margin: 0; }
-.student-user { padding-inline-end: 7px; color: var(--workspace-muted); font: 12px var(--workspace-mono); }
-.student-brand { display: inline-flex; padding: 5px 8px; border-radius: 999px; }
+.student-account .el-button { margin: 0; padding-inline: 8px; font-size: inherit; }
+.student-user {
+  max-width: 8ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--workspace-muted);
+  font: inherit;
+  font-family: var(--workspace-mono);
+}
+.student-account .student-notifications {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 18px;
+}
+.student-notification-dot {
+  position: absolute;
+  inset: 5px 5px auto auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--el-color-danger);
+  box-shadow: 0 0 0 2px var(--workspace-paper);
+}
+.student-shell .student-help {
+  position: fixed;
+  left: max(24px, env(safe-area-inset-left));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  z-index: 1199;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  gap: 0;
+  padding: 0 12px;
+  border-radius: 999px;
+}
+.student-help .el-icon { font-size: 20px; }
+.student-help-label { max-width: 0; overflow: hidden; opacity: 0; white-space: nowrap; }
+.student-help:is(:hover, :focus-visible) .student-help-label {
+  max-width: 4em;
+  margin-inline-start: 6px;
+  opacity: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .student-help-label { transition: max-width .2s ease, margin .2s ease, opacity .2s ease; }
+}
+@media (max-width: 600px) {
+  .student-shell .student-help { left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); }
+  .student-top { min-height: 60px; gap: 8px; }
+  .student-user { display: none; }
+  .student-account { font-size: 13px; }
+  .student-account .el-button, .student-account .workspace-account:not(.student-notifications) { padding-inline: 6px; }
+}
 .student-demo-note { color: #4f6078; font-size: 13px; margin: 0 0 20px; }
 .student-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 .student-page h1, .student-page h2, .student-page h3 { margin: 0; }
@@ -58,7 +97,7 @@
 /* 普通链接用品牌橙；但以 <a> 渲染的按钮（el-button tag="router-link"）必须保留自己的文字色，
    否则「进入会议」这类主按钮会变成橙字压橙底，字完全看不见 */
 .student-page a:not(.el-button), .student-top a:not(.el-button) { color: var(--workspace-accent); }
-.student-page a.el-button, .student-top a.el-button { color: var(--el-button-text-color, #fff); }
+.student-page a.el-button { color: var(--el-button-text-color, #fff); }
 .student-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); }
 .student-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .student-actions .el-button + .el-button { margin-left: 0; }
@@ -79,68 +118,39 @@
 .student-frame {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto 1fr;
   gap: clamp(14px, 1.6vw, 22px);
   width: 100%;
-  min-height: calc(100svh - 96px);
+  min-height: calc(100svh - 72px);
   align-content: start;
   max-width: 1920px;
   margin-inline: auto;
   padding: clamp(14px, 1.7vw, 22px) var(--workspace-gutter) 0;
 }
-.student-nav {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.26);
-  background-image:
-    radial-gradient(100% 220% at 0% -80%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 60%),
-    linear-gradient(148deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.62),
-    var(--lg-shadow);
-}
-.student-nav::-webkit-scrollbar { height: 0; }
-.student-nav section { display: flex; flex: none; align-items: center; gap: 3px; }
-.student-nav section + section { padding-inline-start: 10px; border-inline-start: 1px solid rgba(255, 255, 255, 0.6); }
-.student-nav p { margin: 0 5px; color: var(--workspace-muted); font-size: 10.5px; letter-spacing: 0.06em; opacity: .8; }
-.student-nav a {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 36px;
-  padding: 7px clamp(9px, .8vw, 14px);
-  border-radius: 999px;
-  color: var(--workspace-muted);
-  font-weight: 550;
-  white-space: nowrap;
-}
-.student-nav .student-nav-active {
-  color: var(--workspace-accent);
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.98),
-    0 1px 3px rgba(58, 41, 28, 0.1),
-    0 6px 16px -10px rgba(58, 41, 28, 0.3);
-  font-weight: 700;
-}
 @media (hover: hover) {
-  .student-nav a:hover, .student-account .workspace-account:hover {
+  .student-account .workspace-account:hover {
     color: var(--workspace-ink);
     background: rgba(255, 255, 255, 0.46);
   }
 }
 .student-main { width: 100%; min-width: 0; }
+.student-main .student-back { min-height: 36px; margin-bottom: 14px; }
 .student-page h1 { font-size: clamp(23px, 3vw, 35px); letter-spacing: -.025em; }
 .student-page h2 { font-size: 18px; }
-.student-lab-list { display: grid; min-width: 0; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.student-lab-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  grid-auto-rows: 1fr;
+  min-width: 0;
+  gap: 14px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.student-lab-list li { min-width: 0; }
+.student-lab-search { max-width: 600px; }
 .student-page .student-lab-link {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   min-height: 72px;
@@ -167,11 +177,12 @@
     var(--lg-shadow-hover);
 }
 .student-lab-summary { min-width: 0; overflow-wrap: anywhere; }
-.student-lab-summary h2 { font-size: clamp(15px, 2vw, 18px); }
+.student-lab-summary h2 { display: flex; align-items: center; gap: 9px; font-size: clamp(15px, 2vw, 18px); }
+.student-lab-summary .el-icon { flex: none; }
+.student-lab-list .student-lab-link { min-height: 96px; height: 100%; }
 .student-page .student-lab-summary p { margin: 3px 0 0; color: var(--workspace-muted); font-size: 13px; }
-.student-lab-action { color: var(--workspace-accent); font-weight: 650; font-size: 13px; white-space: nowrap; }
 @media (max-width: 480px) {
-  .student-page .student-lab-link { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .student-page .student-lab-link { gap: 6px; }
 }
 .student-welcome {
   position: relative;
@@ -268,7 +279,6 @@
 .student-blackboard small { display: block; color: var(--workspace-muted); margin: 5px 0 0 14px; }
 .student-blackboard a { display: inline-block; margin-top: 14px; color: var(--workspace-accent); }
 .student-blackboard a:hover { text-decoration: underline; }
-.student-personal { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .student-preference {
   min-width: 0;
   display: grid;
@@ -283,4 +293,13 @@
 }
 .student-preference legend { color: var(--workspace-accent); padding: 0 6px; font-weight: 600; }
 @media (max-width: 950px) { .student-home-grid { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 460px) { .student-personal { grid-template-columns: minmax(0, 1fr); } }
+
+.student-application { grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr); align-items: start; }
+.student-application > :is(p, .el-alert) { grid-column: 1 / -1; }
+.student-application-submitted { grid-template-columns: minmax(0, 1fr); }
+.student-application input[type="file"] { width: 100%; font: inherit; }
+.student-notice-unread { border-inline-start: 3px solid var(--workspace-accent); }
+.student-notice-card .notice-time { color: var(--workspace-muted); font-size: 12px; }
+@media (max-width: 960px) {
+  .student-application { grid-template-columns: minmax(0, 1fr); }
+}

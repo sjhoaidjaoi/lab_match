@@ -1,8 +1,5 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <RouterLink :to="openDay ? '/student/labs' : '/student/announcement'">
-      ← 返回{{ openDay ? '实训室开放日' : '集中宣讲' }}
-    </RouterLink>
     <el-alert v-if="failed" title="实训室资料加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
     <template v-else-if="lab">
       <header class="student-welcome">
@@ -55,7 +52,7 @@
         <a v-if="video?.videoType === 'LINK' && /^https?:\/\//i.test(video.videoUrl)"
           :href="video.videoUrl" target="_blank" rel="noopener noreferrer">在新窗口观看{{ openDay ? '云游视频' : '介绍视频' }} ↗</a>
         <VideoPlayer v-else-if="video" :item="video" />
-        <el-empty v-else :description="openDay ? '组长尚未发布云游视频' : '组长尚未发布介绍视频'" />
+        <el-empty v-else :image-size="88" :description="openDay ? '组长尚未发布云游视频' : '组长尚未发布介绍视频'" />
         <p v-if="openDay && lab.panoramicResource && /^https?:\/\//i.test(lab.panoramicResource)">
           <a :href="lab.panoramicResource" target="_blank" rel="noopener noreferrer">打开空间全景 ↗</a>
         </p>

@@ -1,6 +1,5 @@
 <template>
-  <section v-loading="loading" class="student-page">
-    <h1>补录志愿填报</h1>
+  <section v-loading="loading" class="student-page" aria-label="补录志愿填报">
 
     <el-card shadow="never" class="round-card">
       <div class="round-head">
@@ -47,7 +46,7 @@
           </el-card>
         </el-col>
       </el-row>
-      <el-empty v-if="!surplusLabs.length" description="目前没有仍有余量的实训室" />
+      <el-empty :image-size="88" v-if="!surplusLabs.length" description="目前没有仍有余量的实训室" />
 
       <el-card v-if="!submitted" shadow="never" class="form-card">
         <h2 class="form-title">填报志愿（最多 3 个）</h2>

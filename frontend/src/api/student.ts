@@ -163,7 +163,7 @@ export const studentApi = {
   submitObjection: (payload: ObjectionSubmitPayload) =>
     http.post<PublicationObjection>('/final/objections/student', payload),
   myObjections: () => http.get<PublicationObjection[]>('/final/objections/my'),
-  myNotices: () => http.get<NoticeItem[]>('/notifications/my'),
+  myNotices: (config?: { silent?: boolean }) => http.get<NoticeItem[]>('/notifications/my', undefined, config),
   readNotice: (id: number) => http.post<NoticeItem>(`/notifications/${id}/read`)
 }
 

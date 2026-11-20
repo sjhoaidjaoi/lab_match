@@ -91,8 +91,7 @@
 }
 
 /* 顶栏与导航岛的玻璃外观由各自布局组件定义（含透镜层与让位动画），这里只保证不冲突 */
-.workspace-theme .topbar,
-.workspace-theme .student-top {
+.workspace-theme .topbar {
   border-bottom-color: transparent;
 }
 
@@ -227,7 +226,7 @@
 .workspace-theme .el-dropdown__popper { --el-dropdown-menuItem-hover-fill: var(--workspace-tint); }
 
 /* 链接、主操作及菜单由同一组 hover / focus / pressed 状态区分。 */
-.workspace-theme :is(.workspace-action, .student-lab-link, .student-nav a, .workspace-account, .el-button),
+.workspace-theme :is(.workspace-action, .student-lab-link, .workspace-account, .el-button),
 .workspace-popover :is(.el-menu-item, .el-dropdown-menu__item) {
   transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, color .16s ease, transform .16s ease;
 }
@@ -243,7 +242,7 @@
   outline: 2px solid var(--workspace-accent, #594779);
   outline-offset: 2px;
 }
-.workspace-theme :is(.workspace-action, .student-lab-link, .student-nav a, .workspace-account, .el-button:not(.is-disabled, .is-loading)):active {
+.workspace-theme :is(.workspace-action, .student-lab-link, .workspace-account, .el-button:not(.is-disabled, .is-loading)):active {
   transform: translateY(1px);
 }
 
@@ -312,7 +311,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-theme :is(.workspace-action, .student-lab-link, .student-nav a, .workspace-account, .el-button, [role="menuitem"]),
+  .workspace-theme :is(.workspace-action, .student-lab-link, .workspace-account, .el-button, [role="menuitem"]),
   .workspace-popover :is(.el-menu-item, .el-dropdown-menu__item) {
     transition: none;
     transform: none;
