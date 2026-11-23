@@ -231,7 +231,7 @@ async function main() {
     const leaderCross = await request('POST', '/adjustments/internal', {
       token: leader, body: { studentId: 8, targetLaboratoryId: 2, sourceLaboratoryId: 2, reason: '越权测试' }
     })
-    check('组长对其他实训室提交内部调剂被拒绝', leaderCross.status === 403, `status=${leaderCross.status}`)
+    check('组长对其他实训室提交内部调剂被拒绝', leaderCross.status === 410, `status=${leaderCross.status}`)
 
     console.log('\n== 2. 志愿填报规则 ==')
     const choices = [{ laboratoryId: 1, labTeacherId: 2 }, { laboratoryId: 2, labTeacherId: 3 }, { laboratoryId: 3, labTeacherId: 4 }]
@@ -355,10 +355,13 @@ async function main() {
     const inviteOpen = await request('GET', '/admissions/teacher-invitations', { token: leader, role: 'LAB_TEACHER' })
     check('立即开始第 5 阶段后首轮邀请保持开放', inviteOpen.body?.data?.open === true,
       `open=${inviteOpen.body?.data?.open}`)
-    // 真正推进到调剂阶段时，首轮邀请要自动关闭
     await request('PUT', `/batches/1/stages/${stageSixNext.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
+    check('重叠的后续时间窗不会提前关闭首轮', (await request('GET', '/admissions/teacher-invitations',
+      { token: leader, role: 'LAB_TEACHER' })).body?.data?.open === true)
+    await request('PUT', `/batches/1/stages/${stage5.id}`, { token: admin, body: { stageStatus: 'COMPLETED' } })
     const inviteClosed = await request('GET', '/admissions/teacher-invitations', { token: leader, role: 'LAB_TEACHER' })
-    check('进入调剂阶段后首轮邀请自动关闭', inviteClosed.body?.data?.open === false)
+    check('拟录取确认结束后关闭首轮邀请', inviteClosed.body?.data?.open === false)
+    await request('PUT', `/batches/1/stages/${stage5.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
     await request('PUT', `/batches/1/stages/${stageSixNext.id}`, { token: admin, body: { stageStatus: 'IN_PROGRESS' } })
     // 构造「开始时间早于现在、结束时间也已过」的阶段，验证不能再提前开始
     const expiredStart = await request('PUT', `/batches/1/stages/${stage5.id}`, {
@@ -529,69 +532,68 @@ async function main() {
     check('学生可确认拟录取', (await request('POST', '/admissions/' + offer?.id + '/confirm', { token: student, body: { confirmed: true } })).status === 200)
 
     console.log('\n== 4. 调剂规则 ==')
+    console.log('\n== 7. 面试阶段提前开始后的排期约束 ==')
+    const lateStages = (await request('GET', '/batches/1/stages', { token: admin })).body?.data || []
+    const stage4 = lateStages.find((s) => s.stageNumber === 4)
+    const onlineBody = {
+      studentId: ownStudentId, laboratoryId: 1, mode: 'LIVEKIT', durationMinutes: 30, interviewStatus: 'SCHEDULED',
+      interviewTime: new Date(Date.now() + 3600000).toISOString()
+    }
+    // 原定开始时间在未来、还没提前开始 → 拒绝，并说清怎么解
+    await request('PUT', `/batches/1/stages/${stage4.id}`, { token: admin, body: {
+      startTime: new Date(Date.now() + 3 * 86400000).toISOString(),
+      endTime: new Date(Date.now() + 4 * 86400000).toISOString(),
+      stageStatus: 'NOT_STARTED'
+    } })
+    const closedStage = await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: onlineBody })
+    check('面试阶段还没开放时提示去学院端「提前开始」',
+      closedStage.status === 409 && /尚未开始/.test(closedStage.body?.message || ''),
+      `status=${closedStage.status} msg=${closedStage.body?.message}`)
+    // 学院端点「提前开始」：原定开始时间仍在未来，但阶段已对业务开放。
+    // 该学生在本套用例里面试已完成，这里只断言「阶段闸门已放行」——不再返回阶段时间窗类错误。
+    await request('PUT', `/batches/1/stages/${stage4.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
+    const earlyStage = await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: onlineBody })
+    check('提前开始的面试阶段不再用原定开始时间卡排期',
+      !/尚未开始|未开放|阶段开始时间|已暂停|已结束/.test(earlyStage.body?.message || ''),
+      `status=${earlyStage.status} msg=${earlyStage.body?.message}`)
+
+    await openStage(4)
+    await openStage(5)
     const stage6 = stages.body?.data?.find(s => s.stageNumber === 6)
     await request('PUT', `/batches/1/stages/${stage6.id}`, {
       token: admin, body: { startTime: new Date(Date.now() - 60_000).toISOString(), endTime: new Date(Date.now() + 3600_000).toISOString(), stageStatus: 'IN_PROGRESS' }
     })
-    const earlyAdjustment = await request('POST', '/adjustments/internal', {
-      token: leader, body: { studentId: 16, targetLaboratoryId: 1, targetLabTeacherId: 1, reason: '首轮尚未关闭' }
-    })
-    check('首轮没有结束时内部调剂不可办理', earlyAdjustment.status === 409)
-    for (const number of [4, 5]) {
-      const finishedStage = stages.body.data.find(item => item.stageNumber === number)
-      await request('PUT', `/batches/1/stages/${finishedStage.id}`, { token: admin, body: { stageStatus: 'COMPLETED' } })
-    }
-    const candidates = await request('GET', '/statistics/lab/1/candidates', { token: leader })
-    const eligible = (candidates.body?.data || []).find((c) => c.eligible)
-    check('内部调剂候选接口可用', candidates.status === 200)
-
-    const alreadyPlaced = await request('POST', '/adjustments/internal', {
-      token: leader,
-      body: { studentId: 17, targetLaboratoryId: 1, sourceLaboratoryId: 1, reason: '已录取学生再次调剂' }
-    })
-    check('已确认录取学生进入调剂池被拒绝', alreadyPlaced.status === 400, JSON.stringify(alreadyPlaced.body))
-
-    if (eligible) {
-      await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: 0 } })
-      const full = await request('POST', '/adjustments/internal', {
-        token: leader, body: { studentId: eligible.studentId, targetLaboratoryId: 1, targetLabTeacherId: 1, reason: '导师名额校验' }
-      })
-      check('内部调剂不能占用已满导师名额', full.status === 400 && full.body?.message?.includes('导师招生名额'))
-      await request('PUT', '/laboratories/1/teachers/1', { token: admin, body: { recruitmentQuota: null } })
-      const [first, second] = await Promise.all([
-        request('POST', '/adjustments/internal', {
-          token: leader, body: { studentId: eligible.studentId, targetLaboratoryId: 1, targetLabTeacherId: 1, sourceLaboratoryId: 1, reason: '并发测试A' }
-        }),
-        request('POST', '/adjustments/internal', {
-          token: leader, body: { studentId: eligible.studentId, targetLaboratoryId: 1, targetLabTeacherId: 1, sourceLaboratoryId: 1, reason: '并发测试B' }
-        })
-      ])
-      const okCount = [first, second].filter((r) => r.status === 200).length
-      check('并发提交同一学生只成功一次', okCount === 1, `ok=${okCount}`)
-      const adjustment = [first, second].find(result => result.status === 200)?.body?.data
-      const candidateToken = await login('2022011')
-      check('学生可在阶段内确认本人内部调剂', (await request('POST', '/adjustments/' + adjustment?.id + '/confirm', {
-        token: candidateToken, body: { confirmed: true }
-      })).status === 200)
-    } else {
-      check('存在可内部调剂的候选学生', false, '种子数据中没有 eligible 候选')
-    }
-    await request('PUT', '/batches/1/stages/' + stage6.id, { token: admin, body: { stageStatus: 'COMPLETED' } })
-    const internal = await request('POST', '/recruitment-reviews/internal', { token: leader })
-    check('内部调剂结束后可报送学院', internal.body?.data?.status === 'SUBMITTED')
-    check('学院可审核内部调剂版本', (await request('POST', '/recruitment-reviews/internal/' + internal.body?.data?.id + '/review', {
-      token: admin, body: { approve: true }
-    })).body?.data?.status === 'APPROVED')
+    const retired = await request('POST', '/adjustments/internal', { token: leader, body: { studentId: 16, targetLaboratoryId: 1 } })
+    check('室内调剂统一由学院调剂池办理', retired.status === 410)
+    const earlyPool = await request('POST', '/allocation/pool/confirm', { token: admin, body: { studentId: 16, targetLaboratoryId: 1 } })
+    check('三轮结束前学院不能安排调剂', earlyPool.status === 409)
 
     console.log('\n== 5. 最终名单与公示 ==')
     // 阶段顺序校验要求第 8 阶段开始时间不早于第 7 阶段，先推进第 7 阶段时间窗
+    const finishStage = number => request('PUT', '/batches/1/stages/' + stages.body.data.find(row => row.stageNumber === number).id,
+      { token: admin, body: { stageStatus: 'COMPLETED' } })
+    await finishStage(5)
+    await openStage(6)
+    await request('POST', '/allocation/rounds/1/close', { token: admin })
+    for (const round of [2, 3]) {
+      await request('POST', '/allocation/rounds/open', { token: admin, body: { round } })
+      await request('POST', '/allocation/rounds/' + round + '/close', { token: admin })
+    }
+    await finishStage(6)
     await openStage(7)
+    await finishStage(7)
     await openStage(8)
     const merge = await request('POST', '/final/merge', { token: admin })
     check('生成最终名单成功', merge.status === 200, JSON.stringify(merge.body))
     const unpublished = await request('GET', '/final/my', { token: student })
     check('公示前不返回个人录取结果', unpublished.status === 200 && unpublished.body?.data === null)
     const unreviewed = await request('GET', '/final/list', { token: admin })
+    const rosterPreview = unreviewed.body?.data?.roster || []
+    const population = await request('GET', '/users?role=STUDENT&page=1&pageSize=5', { token: admin })
+    check('全院预览每位学生一行，未落实学生排在末尾',
+      rosterPreview.length === population.body?.data?.total && new Set(rosterPreview.map(row => row.studentId)).size === rosterPreview.length &&
+      rosterPreview.at(-1)?.finalStatus === 'UNPLACED' && rosterPreview[0]?.laboratoryId != null)
+    check('公示前学生看不到全院名单', (await request('GET', '/final/published-roster', { token: student })).body?.data === null)
     const entry = unreviewed.body?.data?.perLab?.find(item => item.laboratoryId === 1)?.students?.find(item => item.studentId === 17)
     check('组长不能在学院审核、公示前办理入组', Boolean(entry) &&
       (await request('POST', '/final/' + entry.id + '/enroll', { token: leader })).status === 409)
@@ -602,25 +604,72 @@ async function main() {
     const review = await request('POST', '/final/review', { token: admin, body: { status: 'APPROVED', note: '测试审核通过' } })
     check('最终名单审核通过', review.status === 200)
 
+    check('通过审核但尚未公示时不得批量入组',
+      (await request('POST', '/final/enroll-all', { token: admin })).status === 409)
     const publish = await request('POST', '/final/publicity', {
       token: admin,
       body: {
         title: '2026 届实训室选拔结果公示',
-        content: '公示期 3 天',
+        content: '公示期 1 天',
         startAt: new Date(Date.now() - 60_000).toISOString(),
-        endAt: new Date(Date.now() + 3600_000).toISOString()
+        endAt: new Date(Date.now() + 86400_000).toISOString()
       }
     })
     check('公示发布成功', publish.status === 200, JSON.stringify(publish.body))
+
+    const publishedRoster = await request('GET', '/final/published-roster', { token: student })
+    const publicRows = rosterPreview.map(({ studentName, laboratoryName, teacherName, finalStatus }) =>
+      ({ studentName, laboratoryName, teacherName, finalStatus }))
+    check('公示顺序和学院预览相同，仅展示公示字段', publishedRoster.status === 200 &&
+      JSON.stringify(publishedRoster.body?.data) === JSON.stringify(publicRows))
+    check('公开的公示说明不包含学生名单', !Object.hasOwn((await request('GET', '/final/publication')).body?.data || {}, 'roster'))
 
     const objection = await request('POST', '/final/objections/student', {
       token: student, body: { type: '成绩异议', content: '对面试成绩有疑问' }
     })
     check('学生在公示期间可提交异议', objection.status === 200, JSON.stringify(objection.body))
 
-    const enrollAll = await request('POST', '/final/enroll-all', { token: admin, body: { force: true } })
+    const firstVersion = publish.body.data.version
+    check('学生异议记录绑定提交时的批次和公示版本',
+      objection.body.data.batchId === 1 && objection.body.data.publicationVersion === firstVersion)
+    const adminObjection = await request('POST', '/final/objections', {
+      token: admin, body: { studentId: 17, type: '信息错误', content: '登记测试', publicationVersion: firstVersion }
+    })
+    check('学院登记异议关联同一公示', adminObjection.body?.data?.publicationVersion === firstVersion)
+    check('公示期内单人、批量入组均被阻止',
+      (await request('POST', '/final/' + entry.id + '/enroll', { token: admin })).status === 409 &&
+      (await request('POST', '/final/enroll-all', { token: admin, body: { force: true } })).status === 409)
+    const tooShort = await request('POST', '/final/publicity', { token: admin, body: {
+      title: '过短公示', startAt: new Date().toISOString(), endAt: new Date(Date.now() + 3600000).toISOString()
+    } })
+    check('禁止缩短一天的公示期', tooShort.status === 400)
+    const closed = await request('POST', '/final/publicity', { token: admin, body: {
+      title: '复核公示', startAt: new Date(Date.now() - 60000).toISOString(), endAt: new Date(Date.now() + 86400000).toISOString()
+    } })
+    check('再次发布产生新版本', !!closed.body?.data?.version && closed.body.data.version !== firstVersion)
+    // Advance just the isolated test publication to the end of its full review period.
+    const snapshot = JSON.parse(fs.readFileSync(TEST_STORE, 'utf8'))
+    snapshot.publication.startAt = new Date(Date.now() - 86460000).toISOString()
+    snapshot.publication.createdAt = snapshot.publication.startAt
+    snapshot.publication.endAt = new Date(Date.now() - 60000).toISOString()
+    fs.writeFileSync(TEST_STORE, JSON.stringify(snapshot))
+    check('尚有待办异议时公示期满也不能入组', (await request('POST', '/final/enroll-all', { token: admin })).status === 409)
+    for (const pending of [objection, adminObjection]) {
+      await request('PUT', '/final/objections/' + pending.body.data.id, { token: admin, body: { status: 'REJECTED', handlingNote: '已核对测试资料' } })
+    }
+    const stale = await request('POST', '/final/objections', {
+      token: admin, body: { studentId: 17, type: '信息错误', content: '过期表单', publicationVersion: firstVersion }
+    })
+    check('旧公示表单不能登记到新版本', stale.status === 409)
+    check('公示期结束后学生不能新建异议', (await request('POST', '/final/objections/student', {
+      token: student, body: { type: '其他', content: '过期提交' }
+    })).status === 409)
+    check('公示结束后允许单人入组', (await request('POST', '/final/' + entry.id + '/enroll', { token: admin })).status === 200)
+    const enrollAll = await request('POST', '/final/enroll-all', { token: admin })
     check('批量正式入组成功', enrollAll.status === 200, JSON.stringify(enrollAll.body))
 
+    check('办理入组后原公示保留发布时状态',
+      JSON.stringify((await request('GET', '/final/published-roster', { token: student })).body?.data) === JSON.stringify(publicRows))
     const finalList = await request('GET', '/final/list', { token: admin })
     const perLab = finalList.body?.data?.perLab || []
     const over = perLab.filter((l) => l.students.length > l.quota)
@@ -706,31 +755,6 @@ async function main() {
     })
     check('学生无文件上传权限', uploadForbidden.status === 403)
 
-    console.log('\n== 7. 面试阶段提前开始后的排期约束 ==')
-    const lateStages = (await request('GET', '/batches/1/stages', { token: admin })).body?.data || []
-    const stage4 = lateStages.find((s) => s.stageNumber === 4)
-    const onlineBody = {
-      studentId: ownStudentId, laboratoryId: 1, mode: 'LIVEKIT', durationMinutes: 30, interviewStatus: 'SCHEDULED',
-      interviewTime: new Date(Date.now() + 3600000).toISOString()
-    }
-    // 原定开始时间在未来、还没提前开始 → 拒绝，并说清怎么解
-    await request('PUT', `/batches/1/stages/${stage4.id}`, { token: admin, body: {
-      startTime: new Date(Date.now() + 3 * 86400000).toISOString(),
-      endTime: new Date(Date.now() + 4 * 86400000).toISOString(),
-      stageStatus: 'NOT_STARTED'
-    } })
-    const closedStage = await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: onlineBody })
-    check('面试阶段还没开放时提示去学院端「提前开始」',
-      closedStage.status === 409 && /尚未开始/.test(closedStage.body?.message || ''),
-      `status=${closedStage.status} msg=${closedStage.body?.message}`)
-    // 学院端点「提前开始」：原定开始时间仍在未来，但阶段已对业务开放。
-    // 该学生在本套用例里面试已完成，这里只断言「阶段闸门已放行」——不再返回阶段时间窗类错误。
-    await request('PUT', `/batches/1/stages/${stage4.id}`, { token: admin, body: { stageStatus: 'STARTED' } })
-    const earlyStage = await request('POST', '/interviews/schedule', { token: leader, role: 'LAB_TEACHER', body: onlineBody })
-    check('提前开始的面试阶段不再用原定开始时间卡排期',
-      !/尚未开始|未开放|阶段开始时间|已暂停|已结束/.test(earlyStage.body?.message || ''),
-      `status=${earlyStage.status} msg=${earlyStage.body?.message}`)
-
     console.log('\n== 8. 重新开始（整条时间窗回到第 1 阶段） ==')
     const restartDenied = await request('POST', '/batches/1/stages/restart', { token: leader, body: {} })
     check('组长不能重新开始选拔批次', restartDenied.status === 403, `status=${restartDenied.status}`)
@@ -766,6 +790,12 @@ async function main() {
       Math.abs(Date.parse(keptStages[0]?.endTime) - Date.parse(keptStages[0]?.startTime) - 86400000) < 1000)
     check('起点在未来时八阶段全部未开始',
       keptStages.every((s) => s.stageStatus === 'NOT_STARTED'))
+    const nextBatch = await request('POST', '/batches', { token: admin, body: { batchName: '下一批次', academicYear: '2027-2028' } })
+    const currentObjections = await request('GET', '/final/objections', { token: admin })
+    const archive = await request('GET', '/final/objections?scope=all', { token: admin })
+    check('换批后默认只看本批，历史仍可追溯到原公示', nextBatch.status === 200 &&
+      currentObjections.body.data.length === 0 && archive.body.data.some(row => row.id === objection.body.data.id &&
+      row.batchId === 1 && row.publicationVersion === firstVersion && row.publicationTitle === publish.body.data.title))
   } finally {
     fs.rmSync(RESUME_DIR, { recursive: true, force: true })
     child.kill()

@@ -12,19 +12,18 @@
               <span>报名 {{ progress.applications }}</span><span>已预约 / 进行中 {{ progress.scheduled }}</span>
               <span>已完成 {{ progress.completed }}</span><span>待评价 {{ progress.pendingEvaluation }}</span>
               <span>已评价 {{ progress.evaluated }}</span><span>异常 {{ progress.abnormal }}</span>
-              <router-link to="/leader/internal-allocation">内部调剂 · {{ progress.pendingAdjustment }} 条待确认 →</router-link>
             </div>
           </el-card>
           <div class="group-actions"><span>教师按姓氏拼音排列</span><el-button :loading="loading" @click="loadGroups">刷新</el-button></div>
           <div class="group-filters">
-            <el-input v-model="search" clearable placeholder="搜索姓名、学号、导师或方向" />
-            <el-select v-model="state" clearable placeholder="全部面试状态">
+            <el-input v-model="search" clearable aria-label="搜索姓名、学号、导师或方向" placeholder="搜索姓名、学号、导师或方向" />
+            <el-select v-model="state" clearable placeholder="全部面试状态" aria-label="筛选面试状态">
               <el-option v-for="(label, key) in appointments" :key="key" :label="label" :value="key" />
             </el-select>
             <el-input-number v-model="minimum" :min="0" :max="100" :controls="false" placeholder="最低汇总分" aria-label="最低汇总分" />
           </div>
           <el-alert v-if="failed" type="error" title="学生汇总加载失败" :closable="false" />
-          <el-empty v-else-if="!loading && !filtered.length" description="没有匹配的教师学生名单" />
+          <el-empty v-else-if="!loading && !filtered.length" :description="groups.length ? '没有符合条件的名单，请调整关键词、面试状态或最低汇总分' : '当前批次暂无本室学生汇总记录'" />
           <el-card v-for="group in filtered.slice((page - 1) * 8, page * 8)" :key="group.key" shadow="never">
             <template #header>{{ group.teacherName }} · {{ group.students.length }} 名学生</template>
             <el-table :data="group.students.slice(((studentPages[group.key] || 1) - 1) * 15, (studentPages[group.key] || 1) * 15)" row-key="studentId" empty-text="暂无学生报名">

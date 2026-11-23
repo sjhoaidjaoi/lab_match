@@ -1,8 +1,9 @@
+const rounds = require('../utils/rounds')
 const { createHash, randomUUID } = require('node:crypto')
 const { AccessToken, RoomServiceClient, DataPacket_Kind } = require('livekit-server-sdk')
 const { BusinessError } = require('../middleware/error')
 const { ROLES, isLabLeader } = require('../middleware/auth')
-const { currentBatch, stageOpen, stageOf } = require('../utils/recruitment')
+const { currentBatch, stageOf } = require('../utils/recruitment')
 
 const EARLY_JOIN_MS = 10 * 60_000
 const TOKEN_TTL_SECONDS = 30
@@ -45,8 +46,8 @@ function windowFor(interview) {
 function scheduledEnd(store, interview, now = Date.now()) {
   const { closesAt } = windowFor(interview)
   if (!interview.onlineStartedAt && now >= closesAt) return closesAt
-  if (currentBatch(store, now)?.id !== interview.batchId || !stageOpen(store, interview.batchId, 4, now)) {
-    const stageEnd = Date.parse(stageOf(store, interview.batchId, 4, now)?.endTime)
+  if (currentBatch(store, now)?.id !== interview.batchId || !rounds.interviewOpen(store, interview, now)) {
+    const stageEnd = Date.parse(stageOf(store, interview.batchId, rounds.roundOf(interview) === 1 ? 4 : 6, now)?.endTime)
     return Number.isFinite(stageEnd) && stageEnd < now ? stageEnd : now
   }
   return null

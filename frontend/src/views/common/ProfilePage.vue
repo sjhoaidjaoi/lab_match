@@ -1,9 +1,7 @@
 <template>
   <section class="profile-page">
+    <header class="page-header"><h1>个人信息</h1></header>
     <el-card shadow="never" class="profile-card">
-      <template #header>
-        <div class="card-title">个人信息</div>
-      </template>
       <el-descriptions :column="2" border>
         <el-descriptions-item label="姓名">{{ auth.user?.realName }}</el-descriptions-item>
         <el-descriptions-item label="账号">{{ auth.user?.username }}</el-descriptions-item>

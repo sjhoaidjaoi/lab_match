@@ -1,47 +1,33 @@
 <template>
-  <div class="page">
+  <div class="portal-home page">
     <div class="page-header">
       <div class="header-row">
         <div>
-          <h2 class="page-title">{{ stats?.lab?.name || '教师工作台' }}</h2>
-          <p class="page-desc">你的报名学生、面试与入组邀请进度。</p>
+          <h2 class="page-title">教师工作台</h2>
+          <p class="page-desc">{{ stats?.lab?.name || '实训室选拔' }}</p>
         </div>
         <el-button :loading="loading" @click="load">刷新</el-button>
       </div>
     </div>
 
+    <WorkspaceShortcuts title="教师业务" :items="shortcuts" />
     <el-card v-if="!labId" shadow="never">
       <el-empty description="未绑定实训室" />
     </el-card>
 
     <div v-else v-loading="loading">
-      <el-row v-if="stats" :gutter="14" class="stat-row">
-        <el-col v-for="card in statCards" :key="card.label" :xs="12" :sm="6" :lg="3">
-          <div class="stat-card">
-            <div class="stat-label">{{ card.label }}</div>
-            <div class="stat-value">
-              {{ card.value }}<span v-if="card.unit" class="stat-unit">{{ card.unit }}</span>
-            </div>
-          </div>
-        </el-col>
-      </el-row>
-      <el-empty v-else-if="!loading" description="暂无统计数据" />
-
-      <el-card shadow="never">
-        <template #header><span>快捷入口</span></template>
-        <WorkspaceShortcuts :items="shortcuts" />
-      </el-card>
+      <el-alert v-if="failed" type="warning" title="部分工作台数据暂未读取" :closable="false">
+        <el-button text @click="load">重新读取</el-button>
+      </el-alert>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { labApi, type TeacherInvitationProgress, type LabStats } from '@/api/lab'
 import { useAuthStore } from '@/stores/auth'
 import WorkspaceShortcuts from '@/components/WorkspaceShortcuts.vue'
-import { menus } from '@/router/menus'
 
 const auth = useAuthStore()
 const labId = computed(() => auth.user?.laboratoryId ?? null)
@@ -49,28 +35,26 @@ const labId = computed(() => auth.user?.laboratoryId ?? null)
 const stats = ref<LabStats | null>(null)
 const progress = ref<TeacherInvitationProgress>()
 const loading = ref(false)
+const failed = ref(false)
 
-const statCards = computed(() => [
-  { label: '我的报名', value: stats.value?.applicationCount ?? 0, unit: '人' },
-  { label: '待面试', value: stats.value?.pendingInterview ?? 0, unit: '人' },
-  { label: '已面试', value: stats.value?.interviewed ?? 0, unit: '人' },
-  { label: '待回复', value: progress.value?.invitations.filter(item => item.status === 'PENDING').length ?? 0, unit: '人' },
-  { label: '已同意', value: progress.value?.invitations.filter(item => item.status === 'CONFIRMED').length ?? 0, unit: '人' },
-  { label: '已放弃', value: progress.value?.invitations.filter(item => item.status === 'REJECTED').length ?? 0, unit: '人' }
-])
-
-const shortcuts = menus.LAB_TEACHER.filter(item => !['/teacher/dashboard', '/teacher/help'].includes(item.path))
+const shortcuts = computed(() => {
+  const invitations = progress.value?.invitations
+  const count = (status: string) => invitations?.filter(item => item.status === status).length ?? '—'
+  return [
+    { path: '/teacher/applications', title: '查看报名学生', icon: 'User', detail: `我的报名 ${stats.value?.applicationCount ?? '—'} 人` },
+    { path: '/teacher/interviews', title: '安排与评价面试', icon: 'Calendar', detail: `已排期待面试 ${stats.value?.pendingInterview ?? '—'} 人 · 已面试 ${stats.value?.interviewed ?? '—'} 人` },
+    { path: '/teacher/confirmation-status', title: '跟进入组邀请', icon: 'CircleCheck', detail: `待回复 ${count('PENDING')} · 已同意 ${count('CONFIRMED')} · 已放弃 ${count('REJECTED')}` }
+  ]
+})
 
 async function load() {
-  if (!labId.value) return
+  if (!labId.value || loading.value) return
   loading.value = true
   try {
-    const [s, a] = await Promise.all([labApi.stats(labId.value), labApi.teacherInvitations()])
-    stats.value = s
-    progress.value = a
-  } catch (err) {
-    console.error('教师工作台数据加载失败', err)
-    ElMessage.error('工作台数据加载失败')
+    const [summary, invitations] = await Promise.allSettled([labApi.stats(labId.value), labApi.teacherInvitations()])
+    stats.value = summary.status === 'fulfilled' ? summary.value : null
+    progress.value = invitations.status === 'fulfilled' ? invitations.value : undefined
+    failed.value = summary.status === 'rejected' || invitations.status === 'rejected'
   } finally {
     loading.value = false
   }
@@ -81,9 +65,4 @@ onMounted(load)
 
 <style scoped>
 .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.stat-row { margin-bottom: 14px; }
-.stat-card { padding: 14px 16px; margin-bottom: 12px; }
-.stat-label { color: var(--lm-text-secondary); font-size: 12.5px; }
-.stat-value { font-size: 24px; font-weight: 600; margin-top: 6px; color: #1f2937; }
-.stat-unit { font-size: 12px; font-weight: 400; color: var(--lm-text-secondary); margin-left: 3px; }
 </style>

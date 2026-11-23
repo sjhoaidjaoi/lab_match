@@ -55,6 +55,8 @@ export interface RoundView {
   current: number
   max: number
   open: number | null
+  canClose: boolean
+  supplementActive: boolean
   canOpenNext: boolean
   rounds: RoundItem[]
 }
@@ -68,6 +70,8 @@ export interface PoolRow {
   obeyInternalAdjustment: boolean
   obeyCollegeAdjustment: boolean
   preferredLabs: Array<{ laboratoryId: number; laboratoryName: string }>
+  pendingProposal: boolean
+  eligibleLaboratoryIds: number[]
   suggestedLaboratoryId: number | null
   suggestedLaboratoryName: string
   suggestedLabTeacherId: number | null
@@ -75,6 +79,7 @@ export interface PoolRow {
 }
 
 export interface PoolView {
+  blocker?: string
   rows: PoolRow[]
   summary: { pending: number; internal: number; cross: number; placement: number; remaining: number }
   surplus?: { labs: LabSurplus[]; totals: SurplusTotals } | null
@@ -111,7 +116,9 @@ export const allocationApi = {
 
   // 全院调剂池
   pool: () => http.get<PoolView>('/allocation/pool'),
+  respondToProposal: (id: number, accept: boolean) => http.post('/allocation/proposals/' + id + '/respond', { accept }),
   confirmPool: (payload: {
+    discussion?: boolean
     studentId: number
     targetLaboratoryId: number
     targetLabTeacherId?: number | null

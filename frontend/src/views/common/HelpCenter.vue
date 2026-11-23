@@ -1,6 +1,6 @@
 <template>
   <section class="help-page">
-    <header class="help-header">
+    <header class="page-header help-header">
       <div>
         <h1>帮助与说明</h1>
         <p>本页面汇总选拔流程、当前角色的操作指引与常见问题。如仍有疑问，请联系学院实训室管理办公室。</p>
@@ -102,8 +102,8 @@ const stages: StageHelp[] = [
   { no: 3, name: '学生意向填报', desc: '每名学生最多填报 3 个平行志愿，无先后顺序，并独立选择两项调剂意愿。', student: '填报最多 3 个不同实训室；截止后自动锁定，无法修改。' },
   { no: 4, name: '导师初选与面试考核', desc: '所有报名学生均可参加对应实训室面试，教师从五个维度评分并给出拟录取建议。', student: '按面试时间参加面试，可在“面试安排”查看时间与结果。' },
   { no: 5, name: '拟录取与学生确认', desc: '学生在截止前确认一份拟录取邀请，其余待确认邀请释放名额。', student: '在“拟录取确认”页面选择接受或放弃，注意确认截止时间。' },
-  { no: 6, name: '实训室内部调剂', desc: '组长优先使用本室递补候选填补空缺，学生确认后更新录取状态。', student: '收到调剂通知后在“分轮补录”页面确认或拒绝。' },
-  { no: 7, name: '学院统筹调剂', desc: '学院统计剩余名额，对服从全院调剂的学生进行跨实训室调剂与沟通安置。', student: '保持通讯畅通，关注“调剂通知”页面的最新安排。' },
+  { no: 6, name: '分轮补录', desc: '学院依次公布第二轮、第三轮余量，未录取学生重新填报，由导师面试录取。', student: '在“分轮补录”选择实训室和导师，随后查看面试和录取通知。' },
+  { no: 7, name: '统筹调剂录取', desc: '第三轮结束后，学院按学生最近一次填报的意愿，先办理室内调剂，再办理全院调剂。', student: '在“统筹调剂结果”查看去向。' },
   { no: 8, name: '结果公示与正式入组', desc: '学院汇总最终名单、校验名额与重复录取，公示无异议后完成正式入组。', student: '在“最终结果”查看公示名单；如有异议可在公示期内提交。' }
 ]
 
@@ -123,14 +123,13 @@ const guideMap: Record<string, GuideItem[]> = {
   ],
   LAB_LEADER: [
     { title: '汇总本室选拔结果', detail: '查看本室面试、拟录取与学生确认进度。', path: '/leader/lab-selection' },
-    { title: '组织内部调剂', detail: '优先从本室递补候选中选择，提交内部调剂名单并等待学生确认。', path: '/leader/internal-allocation' },
-    { title: '上报剩余名额', detail: '内部调剂结束后向学院上报本室剩余名额，进入全院统筹调剂。', path: '/leader/lab-capacity' }
+    { title: '核对本室余量', detail: '核对本室录取和余量，配合学院公布补录名额。', path: '/leader/lab-capacity' }
   ],
   COLLEGE_ADMIN: [
     { title: '创建批次与阶段', detail: '设置学年、批次状态与八个阶段的时间窗口，阶段时间决定业务开关。', path: '/college/batches' },
-    { title: '维护实训室与学生', detail: '维护实训室名额、组长、导师团队，批量导入学生账号。', path: '/college/labs' },
-    { title: '跟踪各阶段进度', detail: '按阶段查看填报、面试、拟录取与确认统计。', path: '/college/preferences' },
-    { title: '统筹调剂与安置', detail: '统计剩余名额，处理跨实训室调剂与未落实学生沟通安置。', path: '/college/allocation/vacancies' },
+    { title: '维护实训室与学生', detail: '维护实训室名额、组长、导师团队，批量导入学生账号。', path: '/college/lab-materials' },
+    { title: '跟踪各阶段进度', detail: '按阶段查看填报、面试、拟录取与确认统计。', path: '/college/statistics' },
+    { title: '统筹调剂与安置', detail: '第三轮结束后按学生意愿办理室内与全院调剂。', path: '/college/allocation/pool' },
     { title: '审核最终名单并公示', detail: '合并最终名单后先审核，再发布公示；公示结束后批量确认正式入组。', path: '/college/final-list' }
   ]
 }

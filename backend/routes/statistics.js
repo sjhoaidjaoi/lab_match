@@ -1,3 +1,5 @@
+const { poolCandidates } = require('../utils/allocationPool')
+const { poolOpen } = require('../utils/rounds')
 const { ownsChoice, scopedChoice } = require('../utils/applicationScope')
 const { latestInterviews } = require('../services/interviewSelection')
 // ============ 学院端统计（文档 6.6 学院负责人首页 + 第七/八阶段） ============
@@ -35,21 +37,6 @@ function currentStage(stages) {
 function collegeTodos(store, batch) {
   if (!batch) return []
   const todos = []
-  const adjustments = store.adjustments.filter((a) => a.batchId === batch.id)
-  const pendingCross = adjustments.filter(
-    (a) => a.status === 'PENDING' && [ADJUSTMENT_TYPE.CROSS_LAB, ADJUSTMENT_TYPE.MANUAL_PLACEMENT].includes(a.adjustmentType)
-  ).length
-  if (pendingCross > 0) {
-    todos.push({
-      key: 'CROSS_ADJUSTMENT',
-      title: '待审核跨实训室调剂',
-      count: pendingCross,
-      desc: '有学生申请跨实训室调剂或沟通安置，需学院统筹确认',
-      path: '/college/allocation/cross',
-      level: 'warning'
-    })
-  }
-
   const admitted = store.finalAdmissions.filter((f) => f.batchId === batch.id && f.finalStatus !== 'REJECTED')
   const review = store.finalReview && store.finalReview.batchId === batch.id ? store.finalReview : null
   const reviewApproved = review?.status === 'APPROVED'
@@ -102,32 +89,11 @@ function collegeTodos(store, batch) {
   }
 
   // 第七阶段开始后仍有学生未落实去向
-  const stage7 = stageOf(store, batch.id, 7)?.stageStatus
-  if (stage7 === 'IN_PROGRESS' || stage7 === 'COMPLETED') {
-    const placed = new Set()
-    store.finalAdmissions
-      .filter((f) => f.batchId === batch.id && f.finalStatus !== 'REJECTED')
-      .forEach((f) => placed.add(f.studentId))
-    adjustments.filter((a) => a.status === 'CONFIRMED').forEach((a) => placed.add(a.studentId))
-    store.admissionIntentions
-      .filter((a) => a.batchId === batch.id && a.status === 'CONFIRMED')
-      .forEach((a) => placed.add(a.studentId))
-    const submitted = new Set(
-      store.studentPreferences
-        .filter((p) => p.batchId === batch.id && p.status === 'SUBMITTED')
-        .map((p) => p.studentId)
-    )
-    const unplaced = [...submitted].filter((id) => !placed.has(id)).length
-    if (unplaced > 0) {
-      todos.push({
-        key: 'UNPLACED',
-        title: '待沟通安置学生',
-        count: unplaced,
-        desc: '已填报志愿但尚未落实实训室，需学院统筹安置',
-        path: '/college/allocation/placement',
-        level: 'info'
-      })
-    }
+  if (poolOpen(store, batch.id)) {
+    const eligible = poolCandidates(store, batch).rows.filter(row => row.priority < 3)
+    if (eligible.length) todos.push({ key: 'ALLOCATION_POOL', title: '待办理统筹调剂',
+      count: eligible.length, desc: '按学生最近一轮意愿，先办室内调剂，再办全院调剂',
+      path: '/college/allocation/pool', level: 'info' })
   }
   return todos
 }

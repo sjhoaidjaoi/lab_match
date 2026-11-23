@@ -77,7 +77,7 @@ const leaderPages: PortalPage[] = [
   { path: 'lab-selection', title: '实训室学生汇总', component: () => import('@/views/leader/LeaderStudentSummary.vue') },
   { path: 'online-interviews', title: '线上面试', component: () => import('@/views/common/OnlineInterviewList.vue') },
   { path: 'interview-archives', title: '面试录像与档案', component: () => import('@/views/common/InterviewArchives.vue') },
-  { path: 'internal-allocation', title: '本实训室内部调剂', component: () => import('@/views/leader/LeaderInternal.vue') },
+
   { path: 'help', title: '帮助与说明', component: () => import('@/views/common/HelpCenter.vue') }
 ]
 // 学院总负责人端：使用真实业务页面组件（对应需求 4.5 节模块）
@@ -88,24 +88,17 @@ const collegePages: Array<{ path: string; title: string; component: () => Promis
   { path: 'students', title: '学生管理', component: () => import('@/views/college/CollegeStudents.vue') },
   { path: 'lab-materials', title: '实训室资料管理', component: () => import('@/views/college/CollegeLabMaterials.vue') },
   { path: 'lab-materials/:id', title: '实训室资料详情', component: () => import('@/views/college/CollegeLabMaterialDetail.vue') },
-  { path: 'labs', title: '实训室管理', component: () => import('@/views/college/CollegeLabs.vue') },
-  // 详情统一复用资料管理页（基础资料 / 教师档案 / 学年名额 / 宣传资料）
-  { path: 'labs/:id', title: '实训室详情与成员管理', component: () => import('@/views/college/CollegeLabMaterialDetail.vue') },
+  // 与八阶段流程 1:1 对应的过程页：宣讲 / 开放日 / 志愿 / 面试 / 拟录取与确认
   { path: 'briefing', title: '集中宣讲管理', component: () => import('@/views/college/CollegeBriefing.vue') },
   { path: 'openday', title: '开放日管理', component: () => import('@/views/college/CollegeOpenDay.vue') },
   { path: 'preferences', title: '志愿填报管理', component: () => import('@/views/college/CollegePreferences.vue') },
   { path: 'interviews', title: '面试进度管理', component: () => import('@/views/college/CollegeInterviews.vue') },
   { path: 'interview-archives', title: '面试录像与档案', component: () => import('@/views/common/InterviewArchives.vue') },
-  { path: 'recruitment-reviews', title: '实训室名单审核', component: () => import('@/views/common/RecruitmentLists.vue') },
   { path: 'admissions', title: '拟录取名单管理', component: () => import('@/views/college/CollegeAdmissions.vue') },
   { path: 'confirmation', title: '录取确认管理', component: () => import('@/views/college/CollegeConfirmation.vue') },
   { path: 'allocation/surplus', title: '各实训室剩余名额', component: () => import('@/views/college/CollegeSurplus.vue') },
   { path: 'allocation/pool', title: '全院调剂池', component: () => import('@/views/college/CollegeAllocationPool.vue') },
   { path: 'allocation/vacancies', title: '实训室空缺统计', component: () => import('@/views/college/CollegeVacancies.vue') },
-  { path: 'allocation/candidates', title: '递补与调剂候选', component: () => import('@/views/college/CollegeCandidates.vue') },
-  { path: 'allocation/internal', title: '内部调剂汇总', component: () => import('@/views/college/CollegeInternal.vue') },
-  { path: 'allocation/cross', title: '跨实训室调剂', component: () => import('@/views/college/CollegeCross.vue') },
-  { path: 'allocation/placement', title: '未落实学生安置', component: () => import('@/views/college/CollegePlacement.vue') },
   { path: 'final-list', title: '最终名单管理', component: () => import('@/views/college/CollegeFinalList.vue') },
   { path: 'publicity', title: '公示管理', component: () => import('@/views/college/CollegePublicity.vue') },
   { path: 'statistics', title: '数据统计与导出', component: () => import('@/views/college/CollegeStatistics.vue') },
@@ -121,6 +114,7 @@ function portal(prefix: string, roles: Role[], pages: PortalPage[]): RouteRecord
   })) as unknown as RouteRecordRaw[]
   children.push({ path: '', redirect: `/${prefix}/dashboard` })
   if (prefix === 'leader') children.push(
+    { path: 'internal-allocation', redirect: '/leader/dashboard' },
     { path: 'lab-content', redirect: '/leader/lab-info?tab=media' },
     { path: 'confirmation-status', redirect: '/leader/lab-selection?tab=confirmation' },
     { path: 'supplementary', redirect: '/leader/lab-selection?tab=alternates' },
@@ -142,6 +136,12 @@ function collegePortal(): RouteRecordRaw {
     meta: { roles, title: page.title }
   })) as unknown as RouteRecordRaw[]
   children.push({ path: '', redirect: '/college/dashboard' })
+  children.push(
+    { path: 'labs', redirect: '/college/lab-materials' },
+    { path: 'labs/:id', redirect: to => ({ path: `/college/lab-materials/${to.params.id}`, query: to.query }) },
+    ...['internal', 'cross', 'placement', 'candidates'].map(name => ({ path: 'allocation/' + name, redirect: '/college/allocation/pool' })),
+    { path: ':rest(.*)*', redirect: '/college/dashboard' }
+  )
   return { path: '/college', component: () => import('@/layouts/AppLayout.vue'), meta: { roles }, children }
 }
 const router = createRouter({

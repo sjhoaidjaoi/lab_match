@@ -1,9 +1,7 @@
 <template>
   <section class="announcement-page">
+    <header class="page-header"><h1>系统公告</h1></header>
     <el-card shadow="never">
-      <template #header>
-        <div class="card-title">系统公告</div>
-      </template>
       <el-empty v-if="!loading && !list.length" description="暂无公告" />
       <el-skeleton v-else-if="loading" :rows="4" animated />
       <div v-else class="notice-list">

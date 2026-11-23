@@ -1,3 +1,4 @@
+const rounds = require('./rounds')
 const { firstRoundEnded } = require('./applicationScope')
 
 function labCapacity(store, batchId, lab) {
@@ -15,6 +16,8 @@ function teacherCapacity(store, batchId, teacher) {
 function invitationExpired(store, item) {
   if (item.status !== 'PENDING') return false
   if (item.confirmationDeadline && Date.parse(item.confirmationDeadline) < Date.now()) return true
+  if (!rounds.roundOpen(store, item.batchId, rounds.roundOf(item))) return true
+  if (rounds.roundOf(item) > 1) return false
   return item.source === 'TEACHER_INVITATION' && firstRoundEnded(store, item.batchId)
 }
 

@@ -75,7 +75,7 @@ const emit = defineEmits<{ (event: 'update:open', value: boolean): void; (event:
 const REPLIES: Array<{ keys: string[]; text: string }> = [
   {
     keys: ['你好', '您好', 'hi', 'hello', '嗨', '在吗', '在么'],
-    text: '你好呀，我是 E宝 👋 欢迎来到河北师范大学软件学院！这里是实训室进组选拔平台，想先了解哪一块？'
+    text: '你好呀，我是 E宝 👋 欢迎来到软件学院！这里是实训室进组选拔平台，想先了解哪一块？'
   },
   {
     keys: ['谢谢', '好的', '收到', '辛苦', '明白'],
@@ -122,7 +122,7 @@ const REPLIES: Array<{ keys: string[]; text: string }> = [
 const FALLBACK = '这个问题我还答不上来… 你可以试试问我「怎么填志愿」「八阶段流程」「调剂怎么算」，或者往下翻一翻「常见问题」。'
 
 const GREETINGS = [
-  '你好呀，我是 E宝 👋 欢迎来到河北师范大学软件学院！',
+  '你好呀，我是 E宝 👋 欢迎来到软件学院！',
   '嗨，我是 E宝～ 软件学院欢迎你！想知道怎么选实训室吗？',
   '你好！我是 E宝 🤖 这里是实训室进组选拔平台，我可以给你讲讲流程。'
 ]

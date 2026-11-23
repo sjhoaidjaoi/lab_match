@@ -58,42 +58,23 @@
         <el-button @click="loadCheck">重新校验</el-button>
         <el-button type="success" :disabled="!check?.canReview" @click="review('APPROVED')">审核通过</el-button>
         <el-button type="danger" plain @click="review('REJECTED')">驳回名单</el-button>
-        <el-button type="primary" :disabled="check?.review?.status !== 'APPROVED'" @click="enrollAll">批量确认正式入组</el-button>
+        <el-button type="primary" :disabled="!check || !!check.enrollmentBlocker || total === enrolled" @click="enrollAll">批量确认正式入组</el-button>
       </div>
-      <div class="muted hint">批量入组需先审核通过，且公示结束后方可操作（公示未结束时后端会拒绝）。</div>
+      <div class="muted hint">{{ check?.enrollmentBlocker || (check ? '本批次已满足正式入组条件' : '暂无本批次校验结果') }}</div>
     </el-card>
 
-    <el-card v-for="lab in data?.perLab || []" :key="lab.laboratoryId" shadow="never" class="block">
-      <template #header>
-        <div class="block-header">
-          <span>{{ lab.laboratoryName }}</span>
-          <span class="muted">{{ lab.students.length }} / {{ lab.quota }} 人</span>
-        </div>
-      </template>
-      <el-table :data="lab.students" stripe size="small">
-        <el-table-column prop="studentNumber" label="学号" width="120" />
-        <el-table-column prop="studentName" label="姓名" width="100" />
-        <el-table-column label="录取来源" min-width="160">
-          <template #default="{ row }">{{ SOURCE_LABELS[row.admissionSource] || row.admissionSource }}</template>
-        </el-table-column>
-        <el-table-column label="状态" width="110" align="center">
-          <template #default="{ row }">
-            <el-tag :type="statusTag(row.finalStatus)" effect="light">
-              {{ FINAL_STATUS_LABELS[row.finalStatus] || row.finalStatus }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="130" align="center">
-          <template #default="{ row }">
-            <el-button v-if="row.finalStatus !== 'ENROLLED'" size="small" text type="primary" @click="enroll(row)">
-              确认入组
-            </el-button>
-            <span v-else class="muted">已入组</span>
-          </template>
-        </el-table-column>
-        <template #empty><span class="muted">暂无录取学生</span></template>
-      </el-table>
-    </el-card>
+    <h3>全院学生入组情况</h3>
+    <CollegeRosterTable :rows="data?.roster || []" admin>
+      <el-table-column label="录取来源" min-width="120">
+        <template #default="{ row }">{{ sourceLabel(row.studentId) }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="130">
+        <template #default="{ row }">
+          <el-button v-if="row.finalStatus === 'ADMITTED'" link type="primary" :disabled="!check || !!check.enrollmentBlocker" @click="enrollStudent(row.studentId)">确认入组</el-button>
+          <span v-else>—</span>
+        </template>
+      </el-table-column>
+    </CollegeRosterTable>
   </div>
 </template>
 
@@ -101,16 +82,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { collegeApi } from '@/api/college'
-import type { FinalAdmissionDetail, FinalCheck } from '@/types'
-import { FINAL_STATUS_LABELS, SOURCE_LABELS, exportExcel, statusTag } from './shared'
+import type { FinalCheck } from '@/types'
+import CollegeRosterTable from '@/components/CollegeRosterTable.vue'
+import { rosterStatus } from '@/config/roster'
+import { SOURCE_LABELS, exportExcel } from './shared'
 
-interface LabGroup {
-  laboratoryId: number
-  laboratoryName: string
-  quota: number
-  students: FinalAdmissionDetail[]
-}
-const data = ref<{ batchId: number; batchName: string; perLab: LabGroup[] } | null>(null)
+const data = ref<Awaited<ReturnType<typeof collegeApi.finalList>> | null>(null)
 const check = ref<FinalCheck | null>(null)
 const merging = ref(false)
 
@@ -161,24 +138,27 @@ async function merge() {
   }
 }
 
-async function enroll(row: FinalAdmissionDetail) {
+async function enrollStudent(studentId: number) {
+  const row = allStudents.value.find(student => student.studentId === studentId)
+  if (!row) return
   await ElMessageBox.confirm(`确认 ${row.studentName} 正式入组？`, '正式入组', { type: 'info' })
   await collegeApi.enroll(row.id)
   ElMessage.success('已确认入组')
   await load()
 }
 
+const sources = computed(() => new Map(allStudents.value.map(row => [row.studentId, row.admissionSource])))
+function sourceLabel(studentId: number) {
+  const source = sources.value.get(studentId)
+  return source ? SOURCE_LABELS[source] || source : '—'
+}
+
 function exportList() {
   exportExcel(
     `最终录取名单-${new Date().toISOString().slice(0, 10)}.csv`,
-    ['实训室', '学号', '姓名', '录取来源', '最终状态'],
-    (data.value?.perLab || []).flatMap((l) =>
-      l.students.map((s) => [
-        l.laboratoryName, s.studentNumber, s.studentName,
-        SOURCE_LABELS[s.admissionSource] || s.admissionSource,
-        FINAL_STATUS_LABELS[s.finalStatus] || s.finalStatus
-      ])
-    )
+    ['实训室', '指导教师', '学号', '姓名', '录取来源', '入组情况'],
+    (data.value?.roster || []).map(row => [row.laboratoryName || '未落实去向', row.teacherName || '—',
+      row.studentNumber, row.studentName, sourceLabel(row.studentId), rosterStatus(row.finalStatus)])
   )
 }
 

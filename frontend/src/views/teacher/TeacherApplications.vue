@@ -9,12 +9,13 @@
         <div class="tools">
           <el-input
             v-model="keyword"
-            placeholder="姓名 / 学号"
+            placeholder="搜索姓名或学号"
+            aria-label="搜索报名学生姓名或学号"
             clearable
             style="width: 200px"
           />
-          <el-button @click="exportList">导出 xlsx</el-button>
-          <el-select v-model="interviewStatus" clearable placeholder="面试状态" style="width: 140px">
+          <el-button @click="exportList">导出 Excel</el-button>
+          <el-select v-model="interviewStatus" clearable placeholder="全部面试状态" aria-label="筛选面试状态" style="width: 140px">
             <el-option v-for="(label, key) in interviewLabels" :key="key" :label="label" :value="key" />
           </el-select>
         </div>
@@ -26,7 +27,7 @@
     </el-card>
 
     <el-card v-else shadow="never">
-      <el-table v-loading="loading" :data="filtered" stripe empty-text="暂无报名学生">
+      <el-table v-loading="loading" :data="filtered" stripe :empty-text="emptyMessage">
         <el-table-column prop="studentName" label="学生" width="120" />
         <el-table-column prop="studentNumber" label="学号" width="140" />
         <el-table-column prop="laboratoryName" label="志愿实训室" min-width="130" />
@@ -91,6 +92,7 @@ const labId = computed(() => auth.user?.laboratoryId ?? null)
 
 const list = ref<PreferenceRow[]>([])
 const loading = ref(false)
+const failed = ref(false)
 const keyword = ref('')
 const interviewStatus = ref('')
 const selected = ref<PreferenceRow | null>(null)
@@ -106,12 +108,20 @@ const filtered = computed(() => {
   )
 })
 
+const emptyMessage = computed(() => {
+  if (loading.value) return '正在读取报名名单'
+  if (failed.value) return '报名名单暂未读取'
+  return list.value.length ? '没有符合条件的学生，请调整姓名、学号或面试状态' : '当前批次暂无学生报名'
+})
+
 async function load() {
   if (!labId.value) return
   loading.value = true
   try {
     list.value = await labApi.preferences(labId.value)
+    failed.value = false
   } catch (err) {
+    failed.value = true
     console.error('报名学生加载失败', err)
     ElMessage.error('报名学生加载失败')
   } finally {

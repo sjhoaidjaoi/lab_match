@@ -4,12 +4,13 @@
       <div class="header-row">
         <div>
           <h2 class="page-title">实训室资料管理</h2>
-          <p class="page-desc">学院统一维护六个实训室的基础资料、教师团队与招生名额，各端读取同一份数据。</p>
+          <p class="page-desc">学院统一维护各实训室的基础资料、教师团队与招生名额，各端读取同一份数据。</p>
         </div>
         <div class="header-tools">
           <el-select v-model="academicYear" class="year-select" @change="load">
             <el-option v-for="year in years" :key="year" :label="`${year} 学年`" :value="year" />
           </el-select>
+          <el-button @click="staffVisible = true">组长账号管理</el-button>
           <el-button @click="openAllFiles">全院宣传资料</el-button>
           <el-button type="primary" @click="openCreate">新增实训室</el-button>
         </div>
@@ -66,6 +67,7 @@
 
         <footer class="lab-card-foot">
           <el-button text type="primary" @click="openDetail(lab, 'profile')">查看详情</el-button>
+          <el-button text type="primary" @click="openDetail(lab, 'teachers')">教师与账号</el-button>
           <el-button type="primary" plain @click="openDetail(lab, 'edit')">编辑资料</el-button>
         </footer>
       </article>
@@ -73,6 +75,9 @@
       <el-empty v-if="!loading && !rows.length" class="empty-block" description="没有符合条件的实训室" />
     </div>
 
+    <el-drawer v-model="staffVisible" title="组长账号管理" size="90%" destroy-on-close @closed="load">
+      <CollegeLabs embedded />
+    </el-drawer>
     <el-drawer v-model="filesDrawer.visible" title="全院宣传资料" size="70%" @open="loadAllFiles">
       <div class="drawer-toolbar">
         <el-select v-model="filesDrawer.labId" clearable placeholder="全部实训室" class="year-select" @change="loadAllFiles">
@@ -108,6 +113,8 @@
 </template>
 
 <script setup lang="ts">
+import CollegeLabs from "./CollegeLabs.vue"
+const staffVisible = ref(false)
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
@@ -159,8 +166,8 @@ async function load() {
   finally { loading.value = false }
 }
 
-function openDetail(lab: LabSummaryRow, tab: 'profile' | 'edit') {
-  router.push({ path: `/college/lab-materials/${lab.id}`, query: tab === 'edit' ? { tab: 'profile', edit: '1' } : undefined })
+function openDetail(lab: LabSummaryRow, tab: 'profile' | 'edit' | 'teachers') {
+  router.push({ path: `/college/lab-materials/${lab.id}`, query: tab === 'edit' ? { tab: 'profile', edit: '1' } : { tab } })
 }
 
 /* ---------- 全院宣传资料 ---------- */

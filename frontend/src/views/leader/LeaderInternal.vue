@@ -212,7 +212,7 @@ async function submit() {
       targetLabTeacherId: targetTeacherId.value || undefined,
       reason: reason.value.trim()
     })
-    ElMessage.success('内部调剂提交成功，等待学院审核')
+    ElMessage.success('内部调剂通知已发送，等待学生确认')
     resetForm()
     await load()
   } catch (e) {

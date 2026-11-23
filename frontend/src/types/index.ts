@@ -105,6 +105,7 @@ export interface LabView {
 }
 
 export interface PreferenceItem {
+  round?: number
   resume?: { id: string; name: string; size: number } | null
   labTeacherId?: number
   labTeacherName?: string
@@ -373,6 +374,7 @@ export interface CandidateRow {
 }
 
 export interface FinalCheck {
+  enrollmentBlocker: string | null
   batchId: number
   batchName: string
   quotaTotal: number
@@ -385,7 +387,15 @@ export interface FinalCheck {
   canReview: boolean
 }
 
-export interface ObjectionItem {
+export interface ObjectionOrigin {
+  batchId?: number
+  batchName?: string
+  publicationVersion?: string
+  publicationTitle?: string
+  publicationCreatedAt?: string
+}
+
+export interface ObjectionItem extends ObjectionOrigin {
   id: number
   studentId: number
   studentName: string
@@ -425,6 +435,8 @@ export interface UserAccount {
 }
 
 export interface UserPayload {
+  linkTeacherProfile?: boolean
+  teacherProfileId?: number
   username?: string
   password?: string
   employeeNumber?: string
@@ -475,7 +487,19 @@ export interface FinalAdmissionDetail extends FinalAdmissionItem {
   finalStatus: string
 }
 
+export interface PublishedRosterRow {
+  studentName: string
+  laboratoryName: string
+  teacherName: string
+  finalStatus: string
+}
+export interface CollegeRosterRow extends PublishedRosterRow {
+  studentId: number
+  studentNumber: string
+}
 export interface PublicationInfo {
+  batchId?: number
+  version?: string
   id?: number
   title: string
   content?: string

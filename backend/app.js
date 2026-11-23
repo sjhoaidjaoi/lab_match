@@ -114,10 +114,14 @@ const { sweepVideoRooms } = require('./services/interviewVideoCleanup')
 const { sweepRecordings } = require('./services/interviewRecording')
 const { sweepAi } = require('./services/interviewAi')
 let stageTimer = null
+const { settleFirstRound } = require('./services/admissionSettlement')
+const { currentBatch: settlementBatch } = require('./utils/recruitment')
 function tickStageStatuses() {
   try {
     const store = getStore()
-    if (syncStageStatuses(store) > 0) persist(store)
+    const stagesChanged = syncStageStatuses(store)
+    const admissionsChanged = settleFirstRound(store, settlementBatch(store))
+    if (stagesChanged || admissionsChanged) persist(store)
   } catch (err) {
     console.error('[lab-match] 阶段状态同步失败：', err.message)
   }

@@ -2,7 +2,7 @@
   <div class="page">
     <div class="page-header">
       <h2 class="page-title">公示管理</h2>
-      <p class="page-desc">公示最终录取名单并设置公示起止时间，学生端在公示期内可查看结果。</p>
+      <p class="page-desc">核对全院学生的入组去向，设置公示时间。学生可从公示开始时查看名单。</p>
     </div>
 
     <el-card v-if="publication" shadow="never" class="block">
@@ -10,7 +10,7 @@
         <div class="block-header">
           <span>当前公示</span>
           <el-tag :type="statusTag(publication.status)" effect="light">
-            {{ publication.status === 'PUBLISHED' ? '公示中' : publication.status }}
+            {{ publicationLabel }}
           </el-tag>
         </div>
       </template>
@@ -27,9 +27,10 @@
       <template #header>
         <div class="block-header">
           <span>{{ publication ? '重新发布公示' : '发布公示' }}</span>
-          <span class="muted">当前最终名单 {{ finalCount }} 人</span>
+          <span class="muted">发布预览 · 全院 {{ roster.length }} 人</span>
         </div>
       </template>
+      <CollegeRosterTable :rows="roster" admin />
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" class="form">
         <el-form-item label="公示标题" prop="title">
           <el-input v-model="form.title" />
@@ -37,7 +38,7 @@
         <el-row :gutter="12">
           <el-col :span="12">
             <el-form-item label="开始时间" prop="startAt">
-              <el-date-picker v-model="form.startAt" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" />
+              <el-date-picker v-model="form.startAt" @change="setPublicityEnd" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -57,13 +58,23 @@
     <el-card shadow="never" class="block">
       <template #header>
         <div class="block-header">
-          <span>公示期间异议处理</span>
-          <el-button size="small" type="primary" @click="openObjection">登记异议</el-button>
+          <span>公示异议处理</span>
+          <el-radio-group v-model="scope" size="small" aria-label="异议记录范围">
+            <el-radio-button value="current">当前批次</el-radio-button>
+            <el-radio-button value="all">全部记录（含历史）</el-radio-button>
+          </el-radio-group>
+          <el-button size="small" type="primary" :disabled="!publication" @click="openObjection">登记异议</el-button>
         </div>
       </template>
-      <el-table :data="objections" stripe size="small">
+      <el-table :data="visibleObjections" stripe size="small">
         <el-table-column prop="studentNumber" label="学号" width="120" />
         <el-table-column prop="studentName" label="姓名" width="100" />
+        <el-table-column label="所属批次与公示" min-width="210">
+          <template #default="{ row }">
+            <div>{{ row.batchName || (row.batchId ? '批次 ' + row.batchId : '历史记录 · 批次未记录') }}</div>
+            <small>{{ row.publicationTitle || '公示版本未记录' }} {{ row.publicationCreatedAt ? formatTime(row.publicationCreatedAt) : '' }}</small>
+          </template>
+        </el-table-column>
         <el-table-column prop="type" label="异议类型" width="130" />
         <el-table-column prop="content" label="异议内容" min-width="220" show-overflow-tooltip />
         <el-table-column label="状态" width="110" align="center">
@@ -116,18 +127,32 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { collegeApi, listOf } from '@/api/college'
-import type { ObjectionItem, PublicationInfo, UserAccount } from '@/types'
+import CollegeRosterTable from '@/components/CollegeRosterTable.vue'
+import type { CollegeRosterRow, ObjectionItem, PublicationInfo, UserAccount } from '@/types'
 import { formatTime, statusTag } from './shared'
 
 const publication = ref<PublicationInfo | null>(null)
-const finalCount = ref(0)
+const now = ref(Date.now())
+let clock: number | undefined
+const publicationLabel = computed(() => {
+  const item = publication.value
+  if (!item || item.status !== 'PUBLISHED') return item?.status
+  if (now.value < Date.parse(item.startAt)) return '待开始'
+  return now.value < Date.parse(item.endAt) ? '公示中' : '已结束'
+})
+const roster = ref<CollegeRosterRow[]>([])
 const submitting = ref(false)
 
 // 公示异议
 const objections = ref<ObjectionItem[]>([])
+const scope = ref<'current' | 'all'>('current')
+const batchId = ref<number>()
+const visibleObjections = computed(() => scope.value === 'all' ? objections.value :
+  objections.value.filter(row => batchId.value != null && row.batchId === batchId.value))
+const objectionVersion = ref<string>()
 const students = ref<UserAccount[]>([])
 const objectionVisible = ref(false)
 const objectionFormRef = ref<FormInstance>()
@@ -141,6 +166,11 @@ const objectionRules: FormRules = {
   content: [{ required: true, message: '请输入异议内容', trigger: 'blur' }]
 }
 const formRef = ref<FormInstance>()
+function setPublicityEnd(start: string | null) {
+  if (!start) return
+  const end = new Date(new Date(start).getTime() + 86400000)
+  form.endAt = new Date(end.getTime() - end.getTimezoneOffset() * 60000).toISOString().slice(0, 19)
+}
 const form = reactive({ title: '2026 届实训室选拔最终录取名单公示', startAt: '', endAt: '', content: '' })
 const rules: FormRules = {
   title: [{ required: true, message: '请输入公示标题', trigger: 'blur' }],
@@ -150,14 +180,16 @@ const rules: FormRules = {
 
 async function load() {
   const [p, finals, objs] = await Promise.all([
-    collegeApi.publication(), collegeApi.finalList(), collegeApi.objections()
+    collegeApi.publication(), collegeApi.finalList(), collegeApi.objections('all')
   ])
-  publication.value = p
-  finalCount.value = (finals.perLab || []).reduce((s, l) => s + l.students.length, 0)
+  batchId.value = finals.batchId
+  publication.value = p && p.batchId === finals.batchId ? p : null
+  roster.value = finals.roster
   objections.value = objs
 }
 
 function openObjection() {
+  objectionVersion.value = publication.value?.version
   objectionForm.studentId = undefined
   objectionForm.type = OBJECTION_TYPES[0]
   objectionForm.content = ''
@@ -169,6 +201,7 @@ async function submitObjection() {
   await objectionFormRef.value.validate(async (valid) => {
     if (!valid) return
     await collegeApi.createObjection({
+      publicationVersion: objectionVersion.value,
       studentId: objectionForm.studentId as number,
       type: objectionForm.type,
       content: objectionForm.content
@@ -194,7 +227,7 @@ async function submit() {
   if (!formRef.value) return
   await formRef.value.validate(async (valid) => {
     if (!valid) return
-    await ElMessageBox.confirm('发布后学生端将可查看录取结果，是否继续？', '发布公示', { type: 'warning' })
+    await ElMessageBox.confirm('全院名单将至少公示 24 小时。公示期满并处理异议后方可办理入组。确认发布？', '发布公示', { type: 'warning' })
     submitting.value = true
     try {
       await collegeApi.publish({
@@ -212,9 +245,11 @@ async function submit() {
 }
 
 onMounted(async () => {
+  clock = window.setInterval(() => { now.value = Date.now() }, 10000)
   await load()
   students.value = listOf(await collegeApi.users({ role: 'STUDENT' }))
 })
+onBeforeUnmount(() => window.clearInterval(clock))
 </script>
 
 <style scoped>

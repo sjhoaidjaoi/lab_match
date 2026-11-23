@@ -289,6 +289,21 @@ async function main() {
     const removedRecord = await request('GET', '/logs?pageSize=5', { token: admin })
     check('移除教师写入操作日志', removedRecord.status === 200)
 
+    const accountLab = (await request('POST', '/lab-profiles/labs', { token: admin, body: { labCode: 'QA-TEAM' } })).body.data
+    const profile = (await request('POST', '/lab-profiles/labs/' + accountLab.id + '/teachers', {
+      token: admin, body: { name: '测试导师', employeeNo: 'QA-TEAM-T' }
+    })).body.data
+    for (const [role, employeeNumber, teacherProfileId] of [
+      ['LAB_TEACHER', 'QA-TEAM-T', profile.id], ['LAB_LEADER', 'QA-TEAM-L', undefined]
+    ]) {
+      const created = await request('POST', '/users', { token: admin, body: { realName: '测试导师', employeeNumber,
+        role, laboratoryId: accountLab.id, linkTeacherProfile: true, teacherProfileId } })
+      check(role + '账号可在实训室资料中创建', created.status === 200, JSON.stringify(created.body).slice(0,160))
+      check(role + '账号可以登录', Boolean(await login(employeeNumber)))
+    }
+    const team = await request('GET', '/lab-profiles/labs/' + accountLab.id + '/teachers', { token: admin })
+    check('组长和普通教师各自绑定到本室唯一档案', team.body?.data?.length === 2 &&
+      team.body.data.every(row => row.userId) && team.body.data.some(row => row.identity === 'LEADER'))
     console.log('\n== 九、鉴权 ==')
     const noToken = await request('GET', '/lab-profiles/overview')
     check('未登录访问被拒绝', noToken.status === 401, String(noToken.status))

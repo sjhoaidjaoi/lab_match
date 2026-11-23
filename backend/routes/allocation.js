@@ -1,3 +1,4 @@
+const { settleFirstRound } = require('../services/admissionSettlement')
 // ============ 剩余名额 / 多轮补录 / 全院调剂池 ============
 // GET  /api/allocation/surplus            各实训室剩余名额（学院、学生、组长可读）
 // GET  /api/allocation/rounds             轮次状态
@@ -21,10 +22,9 @@ const { mentorCapacityError } = require('../utils/mentorCapacity')
 // 名额口径只有一处实现：utils/labQuota.js（E宝 助手的事实快照也读它）
 const { labName, labBreakdown, labSurplus } = require('../utils/labQuota')
 const rounds = require('../utils/rounds')
-const { collectConfirmed, confirmedCountByLab, syncFinalAdmissions } = require('../utils/finalSync')
+const { syncFinalAdmissions } = require('../utils/finalSync')
 
-const PRIORITY = { INTERNAL: 1, CROSS_LAB: 2, PLACEMENT: 3 }
-const PRIORITY_LABELS = { 1: '实训室内部调剂', 2: '全院跨实训室调剂', 3: '未服从调剂学生安置' }
+const { poolCandidates, placedStudents } = require('../utils/allocationPool')
 
 function activeBatchOf(store) {
   return currentBatch(store)
@@ -56,6 +56,13 @@ router.post('/rounds/open', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), async
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
   const result = rounds.openRound(store, batch.id, body.round, req.user.uid)
   if (result.error) return res.status(409).json({ code: 'BUSINESS_ERROR', message: result.error, data: null })
+  const placed = placedStudents(store, batch.id)
+  for (const student of store.users.filter(user => user.role === ROLES.STUDENT && user.status === 'ACTIVE' && !placed.has(user.id))) {
+    store.notices.push({ id: nextId(store.notices), targetRole: ROLES.STUDENT, targetUserId: student.id,
+      batchId: batch.id, destination: 'STUDENT_SUPPLEMENT', title: `第 ${result.round} 轮补录名额已公布`,
+      content: '请在「分轮补录」查看各室余量，重新选择实训室和导师，并填写本轮调剂意愿。',
+      read: false, createdBy: req.user.uid, createdAt: new Date().toISOString() })
+  }
   logOperation(store, req, {
     operationType: 'OPEN_ROUND', targetType: 'BATCH', targetId: batch.id,
     description: `开启第 ${result.round} 轮（补录）报名`
@@ -68,6 +75,9 @@ router.post('/rounds/:round/close', requireAuth, requireRole(ROLES.COLLEGE_ADMIN
   const store = structuredClone(getStore())
   const batch = activeBatchOf(store)
   if (!batch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
+  const stopError = batchWritableError(batch)
+  if (stopError) return res.status(409).json({ message: stopError })
+  if (Number(req.params.round) === 1) settleFirstRound(store, batch)
   const result = rounds.closeRound(store, batch.id, req.params.round, req.user.uid)
   if (result.error) return res.status(409).json({ code: 'BUSINESS_ERROR', message: result.error, data: null })
   logOperation(store, req, {
@@ -79,84 +89,10 @@ router.post('/rounds/:round/close', requireAuth, requireRole(ROLES.COLLEGE_ADMIN
 }))
 
 // ---- 全院调剂池 ----
-function poolCandidates(store, batch) {
-  const surplus = labSurplus(store, batch)
-  const stats = new Map(surplus.labs.map((lab) => [lab.id, lab]))
-  const { confirmed } = collectConfirmed(store, batch.id)
-  const placed = new Set(confirmed.keys())
-
-  const prefs = (store.studentPreferences || []).filter((row) =>
-    Number(row.batchId) === Number(batch.id) && row.status === 'SUBMITTED')
-  const byStudent = new Map()
-  prefs.forEach((row) => {
-    if (!byStudent.has(row.studentId)) byStudent.set(row.studentId, [])
-    byStudent.get(row.studentId).push(row)
-  })
-
-  const rows = []
-  byStudent.forEach((choices, studentId) => {
-    if (placed.has(studentId)) return
-    const student = (store.users || []).find((user) => user.id === studentId)
-    const obeyCollege = choices.some((row) => row.obeyCollegeAdjustment)
-    const obeyInternal = choices.some((row) => row.obeyInternalAdjustment)
-
-    // 第一优先级：本人志愿室内仍有剩余名额，且该室已对其完成面试
-    const openOwn = choices.filter((row) => (stats.get(Number(row.laboratoryId))?.remaining || 0) > 0)
-    const interviewed = openOwn.find((row) => (store.interviews || []).some((item) =>
-      Number(item.batchId) === Number(batch.id) && Number(item.studentId) === Number(studentId) &&
-      Number(item.laboratoryId) === Number(row.laboratoryId) &&
-      ['COMPLETED', 'PASSED'].includes(item.interviewStatus || '')))
-    // 第二优先级：服从全院调剂，指向剩余名额最多的实训室
-    const crossTarget = [...stats.values()].filter((lab) => lab.remaining > 0)
-      .sort((a, b) => b.remaining - a.remaining)[0]
-
-    let priority = 3
-    let target = null
-    let reason = '学生未填报服从调剂意愿，需学院人工安置'
-    if (interviewed) {
-      priority = 1
-      target = stats.get(Number(interviewed.laboratoryId))
-      reason = '已在本室完成面试且本室仍有余量，优先内部调剂'
-    } else if (obeyCollege && crossTarget) {
-      priority = 2
-      target = crossTarget
-      reason = '服从全院调剂，可跨实训室安排到有余量的实训室'
-    } else if (!obeyCollege && !obeyInternal) {
-      priority = 3
-      reason = '两项调剂意愿均未服从，需学院人工安置'
-    } else if (openOwn.length) {
-      priority = 2
-      target = stats.get(Number(openOwn[0].laboratoryId))
-      reason = '志愿实训室仍有剩余名额'
-    }
-
-    rows.push({
-      studentId,
-      studentName: student?.realName || '',
-      studentNumber: student?.studentNumber || '',
-      priority,
-      priorityLabel: PRIORITY_LABELS[priority],
-      obeyInternalAdjustment: obeyInternal,
-      obeyCollegeAdjustment: obeyCollege,
-      preferredLabs: choices.map((row) => ({
-        laboratoryId: row.laboratoryId, laboratoryName: labName(stats.get(Number(row.laboratoryId))) ||
-          labName((store.laboratories || []).find((lab) => lab.id === row.laboratoryId))
-      })),
-      suggestedLaboratoryId: target?.id ?? null,
-      suggestedLaboratoryName: target?.name ?? '',
-      suggestedLabTeacherId: null,
-      reason
-    })
-  })
-
-  rows.sort((a, b) => a.priority - b.priority || a.studentNumber.localeCompare(b.studentNumber))
-  return { surplus, rows }
-}
-
 router.get('/pool', requireAuth, requireRole(ROLES.COLLEGE_ADMIN, ROLES.LAB_LEADER), (req, res) => {
   const store = getStore()
   const batch = activeBatchOf(store)
-  if (!batch) return res.json(ok({ rows: [], summary: { pending: 0, internal: 0, cross: 0, placement: 0, remaining: 0 } }))
+  if (!batch || !rounds.poolOpen(store, batch.id)) return res.json(ok({ blocker: '第三轮结束且进入统筹调剂录取阶段后开放', rows: [], summary: { pending: 0, internal: 0, cross: 0, placement: 0, remaining: 0 } }))
   const { surplus, rows } = poolCandidates(store, batch)
   if (req.user.activeRole === ROLES.LAB_LEADER) {
     const own = Number(req.user.laboratoryId)
@@ -180,6 +116,7 @@ router.get('/pool', requireAuth, requireRole(ROLES.COLLEGE_ADMIN, ROLES.LAB_LEAD
 })
 
 const ConfirmSchema = z.object({
+  discussion: z.boolean().optional(),
   studentId: z.number().int().positive(),
   targetLaboratoryId: z.number().int().positive(),
   targetLabTeacherId: z.number().int().positive().nullable().optional(),
@@ -194,10 +131,22 @@ router.post('/pool/confirm', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyn
   const stopError = batchWritableError(batch)
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
 
-  const lab = (store.laboratories || []).find((item) => Number(item.id) === Number(body.targetLaboratoryId))
-  if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '目标实训室不存在', data: null })
+  const deny = message => res.status(409).json({ code: 'BUSINESS_ERROR', message, data: null })
+  if (!rounds.poolOpen(store, batch.id)) return deny('第三轮结束且进入统筹调剂录取阶段后才能办理')
+  const { rows } = poolCandidates(store, batch)
+  const candidate = rows.find(row => row.studentId === body.studentId)
+  if (body.discussion) {
+    if (!candidate || candidate.priority !== 3 || candidate.obeyCollegeAdjustment || candidate.obeyInternalAdjustment) return deny('谈话安置仅面向本轮未服从调剂的学生')
+    if (rows.some(row => row.priority < 3)) return deny('请先完成室内与跨室调剂')
+    if (!body.reason?.trim()) return deny('请填写谈话安置说明')
+    if (candidate.pendingProposal) return deny('学生已有待答复的方案')
+  } else if (!candidate?.eligibleLaboratoryIds.includes(body.targetLaboratoryId)) return deny('目标实训室不符合学生本轮意愿或已无余量')
+  if (candidate.priority === 2 && rows.some(row => row.priority === 1)) return deny('请先完成有名额的室内调剂')
 
-  const { confirmed } = collectConfirmed(store, batch.id)
+  const lab = (store.laboratories || []).find((item) => Number(item.id) === Number(body.targetLaboratoryId))
+  if (!lab || lab.status !== 'ACTIVE') return res.status(404).json({ code: 'NOT_FOUND', message: '目标实训室不存在', data: null })
+
+  const confirmed = placedStudents(store, batch.id)
   if (confirmed.has(body.studentId)) {
     return res.status(409).json({ code: 'BUSINESS_ERROR', message: '该学生已有确认的录取去向', data: null })
   }
@@ -214,34 +163,35 @@ router.post('/pool/confirm', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyn
     }
   }
 
-  const preference = (store.studentPreferences || []).find((row) =>
+  const preference = (store.studentPreferences || []).filter((row) =>
     Number(row.batchId) === Number(batch.id) && Number(row.studentId) === Number(body.studentId) &&
-    Number(row.laboratoryId) === Number(lab.id))
-  const sameLab = Boolean(preference)
+    Number(row.laboratoryId) === Number(lab.id) && row.status === 'SUBMITTED').sort((a, b) => rounds.roundOf(b) - rounds.roundOf(a))[0]
+  const sameLab = candidate.priority === 1
   const item = {
     id: nextId(store.adjustments),
     batchId: batch.id,
     studentId: body.studentId,
-    sourceLaboratoryId: preference?.laboratoryId ?? null,
-    sourceLabTeacherId: preference?.labTeacherId ?? null,
+    sourceLaboratoryId: sameLab ? lab.id : null,
+    sourceLabTeacherId: sameLab ? preference?.labTeacherId ?? null : null,
     targetLaboratoryId: lab.id,
-    targetLabTeacherId: body.targetLabTeacherId ?? preference?.labTeacherId ?? null,
-    adjustmentType: sameLab ? 'INTERNAL' : 'CROSS_LAB',
+    targetLabTeacherId: body.targetLabTeacherId ?? null,
+    adjustmentType: body.discussion ? 'MANUAL_PLACEMENT' : sameLab ? 'INTERNAL' : 'CROSS_LAB',
+    requiresConsent: Boolean(body.discussion),
     round: rounds.currentRoundOf(store, batch.id),
     reason: body.reason || '全院调剂池统筹安排',
     operatorId: req.user.uid,
-    status: 'CONFIRMED',
+    status: body.discussion ? 'PENDING' : 'CONFIRMED',
     createdAt: new Date().toISOString()
   }
   store.adjustments.push(item)
   store.notices = store.notices || []
   store.notices.push({
     id: nextId(store.notices), targetRole: 'STUDENT', targetUserId: item.studentId,
-    title: '调剂结果通知',
-    content: `你已被调剂至「${labName(lab)}」，请前往「我的录取结果」查看。`,
+    destination: 'STUDENT_ADJUSTMENT', title: body.discussion ? '谈话安置方案待答复' : '调剂结果通知',
+    content: body.discussion ? `学院建议安排至「${labName(lab)}」，请在统筹调剂结果中选择接受或拒绝。` : `你已被调剂至「${labName(lab)}」，请前往「我的录取结果」查看。`,
     read: false, createdBy: req.user.uid, createdAt: item.createdAt
   })
-  const sync = syncFinalAdmissions(store, batch.id, { strict: false })
+  const sync = body.discussion ? { merged: 0 } : syncFinalAdmissions(store, batch.id, { strict: false })
   logOperation(store, req, {
     operationType: 'ALLOCATION_POOL_CONFIRM', targetType: 'ADJUSTMENT', targetId: item.id,
     description: `调剂池确认：学生#${item.studentId} → 实训室#${lab.id}，同步最终名单 ${sync.merged} 人`
@@ -250,12 +200,42 @@ router.post('/pool/confirm', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), asyn
   res.json(ok({ adjustment: item, synced: sync.merged }))
 }))
 
+router.post('/proposals/:id/respond', requireAuth, requireRole(ROLES.STUDENT), asyncMutation(async (req, res) => {
+  const { accept } = z.object({ accept: z.boolean() }).parse(req.body)
+  const store = structuredClone(getStore())
+  const batch = activeBatchOf(store)
+  const row = store.adjustments.find(item => item.id === Number(req.params.id) && item.batchId === batch?.id &&
+    item.studentId === req.user.uid && item.requiresConsent && item.adjustmentType === 'MANUAL_PLACEMENT')
+  if (!row) return res.status(404).json({ message: '没有该安置方案' })
+  if (row.status !== 'PENDING' || batchWritableError(batch) || !rounds.poolOpen(store, batch.id)) return res.status(409).json({ message: '该方案已关闭' })
+  if (accept) {
+    const lab = store.laboratories.find(item => item.id === row.targetLaboratoryId && item.status === 'ACTIVE')
+    const { rows } = poolCandidates(store, batch)
+    if (!rows.some(item => item.studentId === row.studentId && item.priority === 3) || rows.some(item => item.priority < 3) ||
+      !lab || labBreakdown(store, batch.id, lab).remaining <= 0 || mentorCapacityError(store, batch.id, row.targetLabTeacherId, row.studentId))
+      return res.status(409).json({ message: '名额或去向已变化，请联系学院重新核对' })
+  }
+  row.status = accept ? 'CONFIRMED' : 'REJECTED'
+  row.confirmedAt = new Date().toISOString()
+  if (accept) syncFinalAdmissions(store, batch.id, { strict: false })
+  logOperation(store, req, { operationType: 'PLACEMENT_RESPONSE', targetType: 'ADJUSTMENT', targetId: row.id,
+    description: accept ? '学生接受谈话安置方案' : '学生拒绝谈话安置方案' })
+  await commitStore(store)
+  res.json(ok(row))
+}))
+
+function selectableMentor(store, mentorId, labId) {
+  const mentor = store.labTeachers.find(item => item.id === mentorId && !item.deletedAt && item.status !== 'INACTIVE')
+  return mentor?.laboratoryId === labId && store.users.some(user => user.id === mentor.userId &&
+    user.status === 'ACTIVE' && user.laboratoryId === labId && [ROLES.LAB_TEACHER, ROLES.LAB_LEADER].includes(user.role))
+}
+
 // ---- 学生端补录志愿 ----
 router.get('/my-supplement', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {
   const store = getStore()
   const batch = activeBatchOf(store)
   if (!batch) return res.json(ok({ round: null, placed: false, labs: [], choices: [] }))
-  const { confirmed } = collectConfirmed(store, batch.id)
+  const confirmed = placedStudents(store, batch.id)
   const view = rounds.roundView(store, batch.id)
   const surplus = labSurplus(store, batch)
   const placedInfo = confirmed.get(req.user.uid)
@@ -274,7 +254,7 @@ router.get('/my-supplement', requireAuth, requireRole(ROLES.STUDENT), (req, res)
       id: lab.id, name: lab.name, labCode: lab.labCode,
       college: lab.college, researchDirection: lab.researchDirection,
       plan: lab.plan, remaining: lab.remaining,
-      teachers: lab.teachers.filter((teacher) => teacher.remaining === null || teacher.remaining > 0)
+      teachers: lab.teachers.filter(teacher => selectableMentor(store, teacher.id, lab.id) && (teacher.remaining === null || teacher.remaining > 0))
     })),
     choices
   }))
@@ -298,10 +278,10 @@ router.post('/supplement', requireAuth, requireRole(ROLES.STUDENT), asyncMutatio
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
 
   const openRound = rounds.openRoundOf(store, batch.id)
-  if (!openRound || openRound.round < 2) {
+  if (!openRound || openRound.round < 2 || !rounds.supplementWindow(store, batch.id)) {
     return res.status(409).json({ code: 'BUSINESS_ERROR', message: '当前没有开放补录轮次', data: null })
   }
-  const { confirmed } = collectConfirmed(store, batch.id)
+  const confirmed = placedStudents(store, batch.id)
   if (confirmed.has(req.user.uid)) {
     return res.status(409).json({ code: 'BUSINESS_ERROR', message: '你已被录取，无需再填报补录志愿', data: null })
   }
@@ -324,7 +304,7 @@ router.post('/supplement', requireAuth, requireRole(ROLES.STUDENT), asyncMutatio
     if (lab.remaining <= 0) {
       return res.status(400).json({ code: 'VALIDATION_FAILED', message: `「${lab.name}」已无剩余名额`, data: null })
     }
-    const teacher = lab.teachers.find((item) => Number(item.id) === Number(choice.labTeacherId))
+    const teacher = lab.teachers.find((item) => item.id === choice.labTeacherId && selectableMentor(store, item.id, lab.id))
     if (!teacher) {
       return res.status(400).json({ code: 'VALIDATION_FAILED', message: '请选择该实训室内的指导教师', data: null })
     }

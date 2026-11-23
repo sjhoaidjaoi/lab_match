@@ -1,3 +1,6 @@
+import { collegeTools, collegeWorkflows } from './collegeModules'
+import { studentMvp } from '@/api/studentMvp'
+
 export interface MenuItem {
   path: string
   title: string
@@ -8,52 +11,60 @@ export interface MenuItem {
 const map = (prefix: string, items: string[][]): MenuItem[] =>
   items.map(([path, title, icon]) => ({ path: `/${prefix}/${path}`, title, icon }))
 
-const group = (title: string, icon: string, items: string[][]): MenuItem => ({
+const group = (prefix: string, title: string, icon: string, items: string[][]): MenuItem => ({
   path: '',
   title,
   icon,
-  children: items.map(([path, label, childIcon]) => ({ path: `/college/${path}`, title: label, icon: childIcon }))
+  children: map(prefix, items)
 })
 
 export const menus: Record<string, MenuItem[]> = {
-  STUDENT: map('student', [['dashboard','工作台','HomeFilled'],['announcement','集中宣讲','VideoCamera'],['labs','实训室开放日','OfficeBuilding'],['application','意向填报','EditPen'],['interview','面试安排','Calendar'],['admission-confirmation','拟录取确认','CircleCheck'],['supplement','补录志愿','Refresh'],['allocation','调剂结果','Connection'],['result','最终结果','Trophy'],['help','帮助说明','QuestionFilled']]),
-  LAB_TEACHER: map('teacher', [
-    ['dashboard', '工作台', 'HomeFilled'],
-    ['lab-info', '本实训室信息', 'OfficeBuilding'],
-    ['applications', '报名学生', 'User'],
-    ['interviews', '面试管理', 'Calendar'],
-    ['interview-archives', '面试录像与档案', 'VideoCamera'],
-    ['confirmation-status', '确认进度', 'CircleCheck'],
-    ['lab-members', '小组成员', 'UserFilled'],
-    ['help', '帮助说明', 'QuestionFilled']
-  ]),
-  LAB_LEADER: map('leader', [
-    ['dashboard', '工作台', 'HomeFilled'],
-    ['lab-info', '实训室相关信息', 'OfficeBuilding'],
-    ['lab-selection', '实训室学生汇总', 'DataAnalysis'],
-    ['online-interviews', '线上面试', 'VideoCamera'],
-    ['interview-archives', '面试录像与档案', 'Files'],
-    ['internal-allocation', '内部调剂', 'Connection']
-  ]),
-  // 学院总负责人端：负责实训室与教师信息、批次与名额，不再承担宣传物料与阶段业务操作
+  STUDENT: [
+    ...map('student', [['dashboard', '工作台', 'HomeFilled']]),
+    group('student', '了解实训室', 'OfficeBuilding', [
+      ...(studentMvp ? [] : [['announcement', '查看集中宣讲', 'VideoCamera']]),
+      ['labs', studentMvp ? '浏览实训室' : '参加开放日', 'OfficeBuilding']
+    ]),
+    group('student', '志愿与面试', 'EditPen', [
+      ['application', '填报志愿', 'EditPen'],
+      ...(studentMvp ? [['application/record', '查看填报回执', 'Document']] : []),
+      ['interview', '查看面试安排', 'Calendar']
+    ]),
+    group('student', '录取与结果', 'CircleCheck', [
+      ['admission-confirmation', '确认拟录取', 'CircleCheck'],
+      ...(studentMvp ? [] : [['supplement', '填报补录志愿', 'Refresh'], ['allocation', '查看调剂结果', 'Connection']]),
+      ['result', '查看最终结果', 'Trophy']
+    ])
+  ],
+  LAB_TEACHER: [
+    ...map('teacher', [['dashboard', '工作台', 'HomeFilled']]),
+    group('teacher', '报名与面试', 'Calendar', [
+      ['applications', '查看报名学生', 'User'], ['interviews', '办理面试', 'Calendar'],
+      ['interview-archives', '查看面试档案', 'VideoCamera']
+    ]),
+    group('teacher', '录取与成员', 'CircleCheck', [
+      ['confirmation-status', '查看确认进度', 'CircleCheck'], ['lab-members', '查看小组成员', 'UserFilled']
+    ]),
+    ...map('teacher', [['lab-info', '本室资料', 'OfficeBuilding']])
+  ],
+  LAB_LEADER: [
+    ...map('leader', [['dashboard', '工作台', 'HomeFilled']]),
+    group('leader', '学生与面试', 'User', [
+      ['lab-selection', '查看学生汇总', 'DataAnalysis'], ['online-interviews', '进入线上面试', 'VideoCamera'],
+      ['interview-archives', '查看面试档案', 'Files'], ['lab-selection?tab=confirmation', '录取确认', 'CircleCheck'],
+      ['lab-selection?tab=lists', '名单与报送', 'List'], ['lab-selection?tab=alternates', '候补名单', 'Tickets']
+    ]),
+    group('leader', '实训室事务', 'OfficeBuilding', [
+      ['lab-info', '本室与教师信息', 'OfficeBuilding'],
+      ['lab-info?tab=files', '宣传资料', 'Folder'], ['lab-info?tab=media', '宣讲与开放日', 'VideoCamera']
+    ])
+  ],
   COLLEGE_ADMIN: [
     { path: '/college/dashboard', title: '全院总览', icon: 'HomeFilled' },
-    group('基础配置', 'Setting', [
-      ['batches', '选拔批次管理', 'Calendar'],
-      ['stages', '阶段时间管理', 'Clock'],
-      ['students', '学生管理', 'User'],
-      ['labs', '实训室与教师管理', 'OfficeBuilding']
-    ]),
-    group('调剂与录取', 'Connection', [
-      ['allocation/surplus', '各实训室剩余名额', 'PieChart'],
-      ['allocation/pool', '全院调剂池', 'UserFilled'],
-      ['final-list', '最终名单管理', 'List'],
-      ['publicity', '汇总与公示', 'Trophy']
-    ]),
-    group('系统', 'Tools', [
-      ['statistics', '数据统计与导出', 'Histogram'],
-      ['logs', '系统操作日志', 'Tickets'],
-      ['help', '帮助与说明', 'QuestionFilled']
-    ])
+    ...collegeWorkflows.map(group => ({
+      title: group.title, path: '', icon: group.icon,
+      children: group.modules.map(module => ({ title: module.title, path: module.links[0].path, icon: module.icon }))
+    })),
+    { title: '统计与服务', path: '', icon: 'Tools', children: collegeTools }
   ]
 }

@@ -1,20 +1,21 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <RouterLink :to="openDay ? '/student/labs' : '/student/announcement'">
-      ← 返回{{ openDay ? '实训室开放日' : '集中宣讲' }}
-    </RouterLink>
-    <el-alert v-if="failed" title="实训室资料加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
-    <template v-else-if="lab">
-      <header class="student-welcome">
-        <p>{{ openDay ? '实训室开放日' : '集中宣讲' }}</p>
-        <h1>{{ lab.displayName || lab.name }}</h1>
+    <header class="page-header">
+      <RouterLink :to="openDay ? '/student/labs' : '/student/announcement'">
+        ← 返回{{ openDay ? '实训室开放日' : '集中宣讲' }}
+      </RouterLink>
+      <h1>{{ lab?.displayName || lab?.name || '实训室资料' }}</h1>
+      <template v-if="lab">
         <p v-if="lab.researchDirection || lab.projectDirection">{{ lab.researchDirection || lab.projectDirection }}</p>
         <p v-if="lab.college || lab.location" class="lab-meta-line">
           <template v-if="lab.college">{{ lab.college }}</template>
           <template v-if="lab.college && lab.location"> · </template>
           <template v-if="lab.location">{{ lab.location }}</template>
         </p>
-      </header>
+      </template>
+    </header>
+    <el-alert v-if="failed" title="实训室资料加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
+    <template v-else-if="lab">
       <el-card v-if="!openDay" shadow="never">
         <h2>实训室简介</h2>
         <p class="lab-introduction">{{ lab.description || lab.briefingText || '学院尚未发布简介。' }}</p>

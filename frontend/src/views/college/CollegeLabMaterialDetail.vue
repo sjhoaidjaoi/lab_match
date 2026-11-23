@@ -1,6 +1,6 @@
 <template>
   <div v-loading="loading" class="page lab-material-detail">
-    <div class="detail-head">
+    <div class="page-header detail-head">
       <el-button text class="back" @click="goBack">
         <el-icon><ArrowLeft /></el-icon>返回实训室列表
       </el-button>
@@ -101,7 +101,7 @@
                   <el-option label="实训室组长" value="LEADER" />
                   <el-option label="普通教师" value="TEACHER" />
                 </el-select>
-                <el-button @click="openAccountCreate">新增教师账号</el-button>
+                <el-button @click="openAccountCreate()">新增教师账号</el-button>
                 <el-button type="primary" @click="openTeacherDrawer(null)">新增教师</el-button>
               </div>
             </div>
@@ -156,6 +156,7 @@
             </el-table-column>
             <el-table-column label="操作" width="210" align="right">
               <template #default="{ row }">
+                <el-button v-if="!row.userId" link type="primary" @click="openAccountCreate(row)">开通账号</el-button>
                 <el-button link type="primary" @click="openTeacherDrawer(row)">编辑</el-button>
                 <el-button v-if="row.identity !== 'LEADER'" link type="primary"
                   :disabled="!leaderCandidates.length" @click="setLeader(row)">设为组长</el-button>
@@ -314,6 +315,12 @@
     <!-- 新增教师登录账号 -->
     <el-dialog v-model="accountDialog.visible" title="新增教师登录账号" width="520px">
       <el-form ref="accountRef" :model="accountForm" :rules="accountRules" label-width="100px">
+        <el-form-item label="账号身份">
+          <el-radio-group v-model="accountForm.role">
+            <el-radio value="LAB_LEADER">组长教师</el-radio>
+            <el-radio value="LAB_TEACHER">普通教师</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="姓名" prop="realName">
           <el-input v-model="accountForm.realName" maxlength="32" placeholder="教师真实姓名" />
         </el-form-item>
@@ -323,11 +330,8 @@
         <el-form-item label="手机号">
           <el-input v-model="accountForm.phone" maxlength="20" placeholder="选填" />
         </el-form-item>
-        <el-form-item label="初始密码">
-          <el-input v-model="accountForm.password" type="password" show-password maxlength="64" placeholder="留空则使用系统初始密码" />
-        </el-form-item>
         <p class="form-hint">
-          账号创建后即可在「教师管理 → 编辑 → 关联登录账号」中绑定到对应教师档案；首次登录须修改初始密码。
+          账号与本室教师档案同时绑定，首次登录使用系统初始密码并按提示修改。
         </p>
       </el-form>
       <template #footer>
@@ -518,16 +522,17 @@ async function setLeader(row: LabTeacherItem) {
 }
 
 /* ---------------- 教师登录账号 ---------------- */
-const accountDialog = reactive({ visible: false, saving: false })
+const accountDialog = reactive({ visible: false, saving: false, teacherId: undefined as number | undefined })
 const accountRef = ref<FormInstance>()
-const accountForm = reactive({ realName: '', employeeNumber: '', phone: '', password: '' })
+const accountForm = reactive({ role: 'LAB_TEACHER' as 'LAB_TEACHER' | 'LAB_LEADER', realName: '', employeeNumber: '', phone: '' })
 const accountRules: FormRules = {
   realName: [{ required: true, message: '请输入教师姓名', trigger: 'blur' }],
   employeeNumber: [{ required: true, message: '请输入工号（登录账号）', trigger: 'blur' }]
 }
 
-function openAccountCreate() {
-  Object.assign(accountForm, { realName: '', employeeNumber: '', phone: '', password: '' })
+function openAccountCreate(row?: LabTeacherItem) {
+  accountDialog.teacherId = row?.id
+  Object.assign(accountForm, { role: row?.identity === 'LEADER' ? 'LAB_LEADER' : 'LAB_TEACHER', realName: row?.name || '', employeeNumber: row?.employeeNo || '', phone: '' })
   accountDialog.visible = true
 }
 
@@ -542,12 +547,13 @@ async function submitAccount() {
       employeeNumber,
       realName: accountForm.realName.trim(),
       phone: accountForm.phone.trim() || null,
-      ...(accountForm.password ? { password: accountForm.password } : {}),
-      role: 'LAB_TEACHER',
+      linkTeacherProfile: true,
+      teacherProfileId: accountDialog.teacherId,
+      role: accountForm.role,
       laboratoryId: labId.value,
       status: 'ACTIVE'
     })
-    ElMessage.success('登录账号已创建，请到「教师管理」中编辑教师并关联该账号')
+    ElMessage.success('登录账号已创建并绑定教师档案')
     accountDialog.visible = false
     await load()
   } catch { /* 请求层已提示失败原因（如工号重复） */ }
@@ -556,7 +562,7 @@ async function submitAccount() {
 
 function goBack() {
   if (window.history.state?.back) router.back()
-  else router.push('/college/labs')
+  else router.push('/college/lab-materials')
 }
 
 async function resetAccountPassword(row: LabTeacherItem) {

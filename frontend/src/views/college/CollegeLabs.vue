@@ -1,6 +1,6 @@
 <template>
   <div class="page lab-admin">
-    <div class="page-header">
+    <div v-if="!embedded" class="page-header">
       <div class="header-row">
         <div>
           <h2 class="page-title">实训室与教师管理</h2>
@@ -22,7 +22,7 @@
       <el-table v-loading="loading" :data="rows" stripe empty-text="没有符合条件的实训室">
         <el-table-column label="实训室" min-width="190">
           <template #default="{ row }">
-            <el-link type="primary" :underline="false" @click="router.push(`/college/labs/${row.id}`)">
+            <el-link type="primary" :underline="false" @click="router.push(`/college/lab-materials/${row.id}`)">
               {{ row.name }}
             </el-link>
           </template>
@@ -57,8 +57,8 @@
         </el-table-column>
         <el-table-column label="操作" width="260" align="right">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="router.push(`/college/labs/${row.id}`)">查看</el-button>
-            <el-button size="small" text type="primary" @click="router.push({ path: `/college/labs/${row.id}`, query: { tab: 'profile' } })">编辑资料</el-button>
+            <el-button size="small" text type="primary" @click="router.push(`/college/lab-materials/${row.id}`)">查看</el-button>
+            <el-button size="small" text type="primary" @click="router.push({ path: `/college/lab-materials/${row.id}`, query: { tab: 'profile' } })">编辑资料</el-button>
             <el-button v-if="!leaderOf(row)" size="small" type="primary" plain @click="openLeaderCreate(row)">创建组长</el-button>
             <el-dropdown v-else trigger="click" @command="(command: string) => onLeaderCommand(command, row)">
               <el-button size="small" plain>
@@ -165,6 +165,7 @@
 </template>
 
 <script setup lang="ts">
+defineProps<{ embedded?: boolean }>()
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
@@ -286,7 +287,7 @@ async function submitLab() {
       ElMessage.success('实训室档案已建立，请到详情页设置招生名额')
       labDialogVisible.value = false
       await load()
-      router.push({ path: `/college/labs/${created.id}`, query: { tab: 'quotas' } })
+      router.push({ path: `/college/lab-materials/${created.id}`, query: { tab: 'quotas' } })
     } catch { /* 请求层已提示保存失败原因（如编号重复） */ }
     finally { labSubmitting.value = false }
   })

@@ -1,16 +1,12 @@
 <template>
-  <section v-loading="loading" class="student-page" aria-live="polite">
-    <h1>{{ title }}</h1>
+  <section v-loading="loading" class="student-page" :class="{ 'portal-home': page === 'dashboard' }" aria-live="polite">
+    <header class="page-header">
+      <h1>{{ title }}</h1>
+    </header>
     <el-alert v-if="failed" type="error" show-icon :closable="false" title="暂时无法读取选拔数据" />
     <el-button v-if="failed" @click="load">重试</el-button>
     <template v-if="workspace && !failed">
-      <el-card v-if="page === 'dashboard'" shadow="never">
-        <h2>我的选拔进度</h2>
-        <p><RouterLink to="/student/application">意向填报</RouterLink> · {{ receipt.length ? '已提交' : '未提交' }}</p>
-        <p><RouterLink to="/student/interview">面试安排</RouterLink> · {{ workspace.interviews.length }} 条</p>
-        <p><RouterLink to="/student/admission-confirmation">拟录取</RouterLink> · {{ workspace.offers.length }} 条</p>
-        <p><RouterLink to="/student/result">最终结果</RouterLink> · {{ workspace.published ? '已公示' : '尚未公示' }}</p>
-      </el-card>
+      <WorkspaceShortcuts v-if="page === 'dashboard'" title="我的选拔事项" :items="shortcuts" />
 
       <template v-if="page === 'labs' || page === 'lab-detail'">
         <RouterLink v-if="page === 'lab-detail'" to="/student/labs">返回实训室列表</RouterLink>
@@ -104,6 +100,7 @@
 </template>
 
 <script setup lang="ts">
+import WorkspaceShortcuts from '@/components/WorkspaceShortcuts.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -133,6 +130,18 @@ const draft = reactive({ laboratories: [] as number[], internal: null as boolean
 const open = computed(() => workspace.value?.preferenceWindow.open ?? false)
 const displayLabs = computed(() => route.params.labId
   ? labs.value.filter(lab => String(lab.id) === route.params.labId) : labs.value)
+
+const preferenceDeadline = computed(() => {
+  const window = workspace.value?.preferenceWindow
+  return window?.open && window.end ? `截止 ${formatTime(window.end)}` : ''
+})
+const shortcuts = computed(() => [
+  { path: '/student/labs', title: '浏览实训室', icon: 'OfficeBuilding', detail: '了解研究方向与招生名额' },
+  { path: '/student/application', title: '填报志愿', icon: 'EditPen', detail: [receipt.value.length ? '已提交志愿' : '暂无提交记录', preferenceDeadline.value].filter(Boolean).join(' · ') },
+  { path: '/student/interview', title: '查看面试安排', icon: 'Calendar', detail: `共 ${workspace.value?.interviews.length ?? 0} 条安排` },
+  { path: '/student/admission-confirmation', title: '确认拟录取', icon: 'CircleCheck', detail: `收到 ${workspace.value?.offers.length ?? 0} 条通知` },
+  { path: '/student/result', title: '查询录取结果', icon: 'Trophy', detail: workspace.value?.published ? '已公示' : '尚未公示' }
+])
 
 let loadVersion = 0
 

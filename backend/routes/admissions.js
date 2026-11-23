@@ -1,3 +1,4 @@
+const { settleFirstRound } = require('../services/admissionSettlement')
 // ============ 拟录取 / 确认 ============
 // POST   /api/admissions/intend            实训室组长/教师提交拟录取 / 递补名单
 // POST   /api/admissions/:id/confirm       学生确认或放弃
@@ -31,20 +32,21 @@ function occupiedCount(store, batchId, laboratoryId) {
 }
 
 function isFirstRoundOpen(store, batchId) {
-  return [4, 5].some(number => stageOpen(store, batchId, number)) &&
+  return rounds.roundOpen(store, batchId, 1) && [4, 5].some(number => stageOpen(store, batchId, number)) &&
     !firstRoundEnded(store, batchId)
 }
 
 // 补录轮次（第 2/3 轮）开放期间，录取结果随时可确认，不受首轮阶段时间窗限制
 function supplementRoundOpen(store, batchId) {
   const open = rounds.openRoundOf(store, batchId)
-  return Boolean(open && open.round >= 2)
+  return Boolean(open && open.round >= 2 && rounds.supplementWindow(store, batchId))
 }
 
 // 学生能否确认某条拟录取
 function acceptanceOpen(store, batch, item) {
   if (!batch) return false
-  if (supplementRoundOpen(store, batch.id)) return true
+  if (!rounds.roundOpen(store, batch.id, rounds.roundOf(item))) return false
+  if (rounds.roundOf(item) > 1) return supplementRoundOpen(store, batch.id)
   return item.source === TEACHER_INVITATION
     ? isFirstRoundOpen(store, batch.id)
     : stageOpen(store, batch.id, 5)
@@ -70,7 +72,7 @@ function teacherRoom(store, user) {
 
 function teacherPasses(store, batchId, user, labId) {
   return latestInterviews(store).filter(record => record.batchId === batchId && record.laboratoryId === labId &&
-    record.interviewStatus === 'COMPLETED' && record.recommendation === 'INTENDED' &&
+    rounds.roundOf(record) === rounds.currentRoundOf(store, batchId) && record.interviewStatus === 'COMPLETED' && record.recommendation === 'INTENDED' &&
     mentorEvaluated(store, record) &&
     (record.scoredBy ?? record.interviewerId) === user.uid &&
     scopedChoice(store, user, batchId, record.studentId, labId))
@@ -84,11 +86,11 @@ router.get('/teacher-invitations', requireAuth, requireRole(ROLES.LAB_TEACHER), 
     item.laboratoryId === lab.id && item.admissionType === ADMISSION_TYPE.INTENDED &&
     (item.labTeacherId != null ? item.labTeacherId === mentor.id :
       scopedChoice(store, req.user, batch.id, item.studentId, lab.id))) : []
-  const open = Boolean(batch && lab?.status === 'ACTIVE' && mentor && mentor.status !== 'INACTIVE' && isFirstRoundOpen(store, batch.id))
+  const open = Boolean(batch && lab?.status === 'ACTIVE' && mentor && mentor.status !== 'INACTIVE' && (isFirstRoundOpen(store, batch.id) || supplementRoundOpen(store, batch.id)))
   const occupied = batch && mentor ? occupiedAdmissionStudents(store, batch.id, { mentorId: mentor.id }).size : 0
   const candidates = batch && lab && mentor ? teacherPasses(store, batch.id, req.user, lab.id)
     .filter(item => !store.admissionIntentions.some(invitation => invitation.batchId === batch.id &&
-      invitation.laboratoryId === lab.id && invitation.studentId === item.studentId))
+      rounds.roundOf(invitation) === rounds.roundOf(item) && invitation.laboratoryId === lab.id && invitation.studentId === item.studentId))
     .map(item => withStudent(store, { studentId: item.studentId })) : []
   res.json(ok({ invitations: invitations.map(item => withStudent(store, visibleInvitation(store, item))),
     candidates, open, mentorConfigured: Boolean(mentor), quota: mentor && batch ? teacherCapacity(store, batch.id, mentor) : null, occupied }))
@@ -102,7 +104,7 @@ router.post('/teacher-invitations', requireAuth, requireRole(ROLES.LAB_TEACHER),
     const { lab, mentor } = teacherRoom(store, req.user)
     const stopError = batchWritableError(batch)
     if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
-    const choice = lab && batch && scopedChoice(store, req.user, batch.id, studentId, lab.id)
+    const choice = lab && batch && scopedChoice(store, req.user, batch.id, studentId, lab.id, rounds.currentRoundOf(store, batch.id))
     if (!choice || choice.labTeacherId !== mentor?.id) return res.status(403).json({ message: '只能邀请明确选择本人的学生' })
     if (lab.status !== 'ACTIVE' || mentor.status === 'INACTIVE' ||
       (!isFirstRoundOpen(store, batch.id) && !supplementRoundOpen(store, batch.id))) {
@@ -185,7 +187,7 @@ function promoteAlternate(store, batchId, laboratoryId) {
   if (occupiedCount(store, batchId, laboratoryId) >= labCapacity(store, batchId, lab)) return null
   const alternate = store.admissionIntentions
     .filter((a) => a.batchId === batchId && a.laboratoryId === laboratoryId &&
-      a.admissionType === ADMISSION_TYPE.ALTERNATE && a.status === 'PENDING' &&
+      rounds.roundOf(a) === rounds.currentRoundOf(store, batchId) && a.admissionType === ADMISSION_TYPE.ALTERNATE && a.status === 'PENDING' &&
       !mentorCapacityError(store, batchId, a.labTeacherId, a.studentId) &&
       !store.admissionIntentions.some(other => other.batchId === batchId && other.studentId === a.studentId &&
         other.admissionType === ADMISSION_TYPE.INTENDED && other.status === 'CONFIRMED'))
@@ -194,7 +196,7 @@ function promoteAlternate(store, batchId, laboratoryId) {
   alternate.admissionType = ADMISSION_TYPE.INTENDED
   alternate.status = 'PENDING'
   alternate.promotedAt = new Date().toISOString()
-  alternate.confirmationDeadline = store.recruitmentStages.find(stage => stage.batchId === batchId && stage.stageNumber === 5)?.endTime || null
+  alternate.confirmationDeadline = store.recruitmentStages.find(stage => stage.batchId === batchId && stage.stageNumber === (rounds.roundOf(alternate) > 1 ? 6 : 5))?.endTime || null
   store.notices.push({ id: nextId(store.notices), targetRole: 'STUDENT', targetUserId: alternate.studentId,
     title: `${lab.name} · 递补拟录取`, content: '请前往拟录取确认页面处理。', read: false, createdAt: alternate.promotedAt })
   return alternate
@@ -246,10 +248,10 @@ router.post('/:id/confirm', requireAuth, requireRole(ROLES.STUDENT), async (req,
           a.admissionType === ADMISSION_TYPE.INTENDED && a.status === 'PENDING') {
           a.status = 'REJECTED'
           a.releasedAt = new Date().toISOString()
-          if (a.source !== TEACHER_INVITATION) promoteAlternate(store, batch.id, a.laboratoryId)
+          promoteAlternate(store, batch.id, a.laboratoryId)
         }
       })
-    } else if (item.source !== TEACHER_INVITATION) {
+    } else {
       promoteAlternate(store, batch.id, item.laboratoryId)
     }
 
@@ -333,6 +335,7 @@ router.post('/expire', requireAuth, requireRole(ROLES.LAB_LEADER), (req, res) =>
   if (!activeBatch) return res.status(400).json({ code: 'BUSINESS_ERROR', message: '没有活跃批次', data: null })
   const stopError = batchWritableError(activeBatch)
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
+  const settled = settleFirstRound(store, activeBatch)
   let count = 0
   store.admissionIntentions
     .filter((a) => a.batchId === activeBatch.id && a.status === 'PENDING' &&
@@ -342,7 +345,7 @@ router.post('/expire', requireAuth, requireRole(ROLES.LAB_LEADER), (req, res) =>
       if (invitationExpired(store, a)) {
         a.status = 'EXPIRED'
         count += 1
-        if (a.source !== TEACHER_INVITATION) promoteAlternate(store, activeBatch.id, a.laboratoryId)
+        promoteAlternate(store, activeBatch.id, a.laboratoryId)
       }
     })
   if (count) {
@@ -352,7 +355,7 @@ router.post('/expire', requireAuth, requireRole(ROLES.LAB_LEADER), (req, res) =>
     })
   }
   persistStore(store)
-  res.json(ok({ expired: count }))
+  res.json(ok({ expired: count, settled }))
 })
 
 // 学院汇总

@@ -23,6 +23,8 @@ const STATUS_ENUM = z.enum(['ACTIVE', 'INACTIVE'])
 const AccountNumber = z.string().trim().min(1, '账号编号不能为空').max(64, '账号编号最多 64 位')
 
 const CreateSchema = z.object({
+  linkTeacherProfile: z.boolean().optional(),
+  teacherProfileId: z.number().int().positive().optional(),
   username: AccountNumber.optional(),
   password: z.string().optional(),
   realName: z.string().trim().min(1, '请输入姓名'),
@@ -313,6 +315,20 @@ router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   if (body.role === ROLES.LAB_LEADER && body.laboratoryId == null) {
     return res.status(400).json(fail(ResultCode.VALIDATION_FAILED, '请为组长指定所属实训室'))
   }
+  let teacher
+  if (body.linkTeacherProfile) {
+    const lab = store.laboratories.find(item => item.id === body.laboratoryId)
+    if (!lab || ![ROLES.LAB_TEACHER, ROLES.LAB_LEADER].includes(body.role)) {
+      return res.status(400).json(fail(ResultCode.VALIDATION_FAILED, '请选择有效的实训室和教师身份'))
+    }
+    teacher = store.labTeachers.find(item => item.id === body.teacherProfileId && !item.deletedAt)
+    if (body.teacherProfileId && (!teacher || teacher.userId || teacher.laboratoryId !== lab.id)) {
+      return res.status(409).json(fail(ResultCode.BUSINESS_ERROR, '该教师档案无法绑定，请刷新教师列表'))
+    }
+    if (store.labTeachers.some(item => !item.deletedAt && item.id !== teacher?.id && item.employeeNo?.toLowerCase() === username.toLowerCase())) {
+      return res.status(409).json(fail(ResultCode.BUSINESS_ERROR, '该工号已有教师档案，请在对应教师行开通账号'))
+    }
+  }
   const user = {
     id: nextId(store.users),
     username,
@@ -329,6 +345,18 @@ router.post('/', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (req, res) => {
   installPassword(user, password)
   store.users.push(user)
   if (user.role === ROLES.LAB_LEADER) syncLabLeader(store, user.laboratoryId, user.id)
+  if (body.linkTeacherProfile) {
+    if (!teacher) {
+      teacher = { id: nextId(store.labTeachers), name: user.realName, laboratoryId: user.laboratoryId,
+        recruitmentQuota: null, createdAt: user.createdAt }
+      store.labTeachers.push(teacher)
+    }
+    if (user.role === ROLES.LAB_LEADER) {
+      for (const peer of store.labTeachers.filter(item => item.laboratoryId === user.laboratoryId)) peer.identity = 'TEACHER'
+    }
+    Object.assign(teacher, { userId: user.id, employeeNo: username, status: user.status,
+      identity: user.role === ROLES.LAB_LEADER ? 'LEADER' : 'TEACHER' })
+  }
   logOperation(store, req, {
     operationType: 'CREATE_USER', targetType: 'USER', targetId: user.id,
     description: `新建${roleLabel(user.role)}账号 ${user.username}（${user.realName}）`

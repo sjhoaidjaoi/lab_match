@@ -98,7 +98,7 @@ router.post('/:id/token', asyncMutation(async (req, res) => {
       fail('面试关联的报名已失效，请联系实训室', 'ROLE_FORBIDDEN', 403)
     }
     const config = video.requireConfig()
-    const stageEnd = Date.parse(stageOf(store, interview.batchId, 4)?.endTime) || Infinity
+    const stageEnd = Date.parse(stageOf(store, interview.batchId, (interview.round || 1) > 1 ? 6 : 4)?.endTime) || Infinity
     const ttl = Math.min(video.TOKEN_TTL_SECONDS,
       Math.floor((stageEnd - now) / 1000))
     if (ttl < 1) fail('本场线上面试已关闭')

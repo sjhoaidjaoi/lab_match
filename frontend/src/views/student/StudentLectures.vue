@@ -1,12 +1,12 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <header class="student-welcome">
+    <header class="page-header">
       <h1>{{ openDay ? '实训室开放日' : '集中宣讲' }}</h1>
       <p>{{ openDay ? '选择实训室，观看组长发布的云游视频。' : '选择实训室，查看简介、宣讲文稿和介绍视频。' }}</p>
     </header>
     <el-input v-model="query" clearable placeholder="搜索实训室或研究方向" aria-label="搜索实训室" />
     <el-alert v-if="failed" title="实训室加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
-    <el-empty v-else-if="!loading && !filteredLabs.length" description="没有匹配的实训室" />
+    <el-empty v-else-if="!loading && !filteredLabs.length" :description="labs.length ? '没有匹配的实训室，请更换名称或研究方向' : '暂无实训室资料'" />
     <ul v-else class="student-lab-list" aria-label="实训室列表">
       <li v-for="lab in filteredLabs" :key="lab.id">
         <RouterLink class="student-lab-link"

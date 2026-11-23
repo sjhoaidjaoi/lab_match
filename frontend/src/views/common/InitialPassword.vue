@@ -75,7 +75,7 @@ function exit() {
 
 <style scoped>
 .activation {
-  --el-color-primary: #a4402a;
+  --el-color-primary: #c9450b;
   min-height: 100dvh;
   display: grid;
   align-items: safe center;
@@ -108,6 +108,15 @@ function exit() {
 .activation-card h1 { margin: 0; font-size: clamp(1.5rem, 5vw, 2rem); }
 .activation-intro { margin: 8px 0 24px; color: #57504c; overflow-wrap: anywhere; }
 .activation-hint { margin-top: 4px; color: #57504c; line-height: 1.5; }
+/* 玻璃卡上的输入框必须自带边界，否则白底白框糊成一片 */
+.activation :deep(.el-input__wrapper) {
+  background: #fffefc;
+  box-shadow: inset 0 0 0 1px #d8cdbe;
+}
+.activation :deep(.el-input__wrapper.is-focus),
+.activation :deep(.el-input__wrapper:focus-within) {
+  box-shadow: inset 0 0 0 2px #c9450b, 0 0 0 3px rgba(201, 69, 11, .12);
+}
 .activation-error { margin: 0 0 12px; color: #a72318; overflow-wrap: anywhere; }
 .activation-submit { width: 100%; min-height: 44px; border-radius: 20px; }
 .activation-logout { display: block; margin: 10px auto 0; }

@@ -8,7 +8,7 @@ const attempt = row => row.attemptNo || 1
 function latestInterviews(store) {
   const latest = new Map()
   for (const interview of store.interviews) {
-    const key = `${interview.batchId}/${interview.studentId}/${interview.laboratoryId}`
+    const key = `${interview.batchId}/${interview.studentId}/${interview.laboratoryId}/${interview.round || 1}`
     if (!latest.has(key) || attempt(latest.get(key)) < attempt(interview)) latest.set(key, interview)
   }
   return [...latest.values()]
@@ -18,7 +18,7 @@ function linkedChoice(store, interview) {
   const explicit = interview.preferenceId ?? interview.onlinePreferenceId
   return store.studentPreferences.find(choice => (explicit == null || explicit === choice.id) &&
     choice.batchId === interview.batchId && choice.studentId === interview.studentId &&
-    choice.laboratoryId === interview.laboratoryId && choice.status === 'SUBMITTED')
+    (choice.round || 1) === (interview.round || 1) && choice.laboratoryId === interview.laboratoryId && choice.status === 'SUBMITTED')
 }
 
 function scorePolicy(store, batchId) {
