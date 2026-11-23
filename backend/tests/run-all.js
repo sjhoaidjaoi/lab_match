@@ -17,6 +17,7 @@ const SUITES = [
   { name: '多轮补录与全院调剂池', file: 'tests/allocation.js' },
   { name: '阶段真实时钟自动流转', file: 'tests/stage-clock.js' },
   { name: '接口限流与登录防爆破', file: 'tests/rate-limit.js' },
+  { name: '数据库初始化（真实 MySQL，无库时跳过）', file: 'tests/db-init.js' },
   { name: '线上面试（排期/等候/令牌/聊天）', file: 'tests/interview-video.js' },
   { name: '会议录制与留痕', file: 'tests/interview-recording.js' },
   { name: 'AI 纪要（STT/总结/审阅）', file: 'tests/interview-ai.js' }
@@ -29,7 +30,8 @@ function extractSummary(output) {
     /结果：通过\s*(\d+)\s*项，失败\s*(\d+)\s*项/,
     /=====\s*阶段时钟验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/,
     /=====\s*补录与调剂验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/,
-    /=====\s*限流验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/
+    /=====\s*限流验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/,
+    /=====\s*数据库初始化验收结果：通过\s*(\d+)，失败\s*(\d+)\s*=====/
   ]
   for (const pattern of patterns) {
     const match = output.match(pattern)

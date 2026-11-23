@@ -119,6 +119,19 @@ SOURCE database/migration_v3.sql;
 cd backend && npm run db:init
 ```
 
+`db:init` 会先用 `information_schema` 判断现场属于哪一种，再决定动作：
+
+1. **数据库不存在** → 建库 + 完整 `schema.sql`；
+2. **库存在但本系统表 0 张**（例如空库上线）→ 完整 `schema.sql`；
+3. **库存在且已有本系统表** → 只执行 v2 → v14 增量迁移，绝不执行含 `DROP TABLE` 的完整脚本。
+
+迁移按分号逐条执行（字符串/注释内的分号会被正确跳过），失败时抛出「文件 + 第几条 + SQL 片段 + MySQL 错误码」，
+只忽略 `ER_DUP_FIELDNAME / ER_DUP_KEYNAME / ER_FK_DUP_NAME / ER_TABLE_EXISTS_ERROR` 这类「对象已存在」错误，
+`ER_DUP_ENTRY`（1062）等数据错误不会被吞掉。结束后校验 37 张业务表是否齐全，缺表即视为失败。
+
+权限只要求目标库范围内：`CREATE, ALTER, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE, DROP`，
+不需要全局权限或 `SUPER`。
+
 ### MySQL 运行模式说明
 
 - 启动时读取 `information_schema.COLUMNS` 建立 `snake_case ↔ camelCase` 映射，新增字段无需修改加载代码；
@@ -155,6 +168,7 @@ publication_objections.student_id → users, handler_id → users
 
 ## 六、待确认与已知限制
 
-- MySQL 适配层已完成代码与迁移脚本，但当前环境没有 MySQL 实例，建表、外键、事务与端到端读写**尚未在真实数据库上执行验证**。
+- MySQL 适配层的初始化（建库 / 建表 / v2–v14 迁移 / 幂等重跑 / 数据保留）已在 MySQL 8.0.46 上用独立测试库实测通过（`npm run test:db`）；
+  但「浏览器 → 后端 → MySQL 全链路业务回归」仍在 JS 文件数据源上执行，MySQL 模式只验证了启动加载与健康检查。
 - MySQL 模式采用整表同步，数据量很大时应改为增量写入或直接 SQL 查询。
 - 面试地点、形式、确认时限、递补排序、自动匹配权重等字段口径需学院确认后补充。
