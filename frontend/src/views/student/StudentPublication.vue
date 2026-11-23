@@ -1,8 +1,10 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <h1>最终结果与公示</h1>
+    <header class="page-header">
+      <h1>最终结果与公示</h1>
+    </header>
     <el-empty v-if="!loading && !published" description="最终录取结果尚未公示" />
-    <template v-else>
+    <template v-else-if="published">
       <el-card shadow="never">
         <h2>学院录取公示</h2>
         <template v-if="publication">
@@ -27,11 +29,19 @@
         <p v-else-if="publication">当前不在公示期内，无法提交异议。</p>
       </el-card>
       <el-card shadow="never">
+        <h2>全院学生入组公示名单</h2>
+        <p v-if="!roster">公示名单暂未读取</p>
+        <CollegeRosterTable v-else :rows="roster" />
+      </el-card>
+    </template>
+      <el-card v-if="published || objections.length" shadow="never">
         <h2>我的异议</h2>
         <el-empty v-if="!objections.length" description="暂无异议记录" />
         <div v-else class="student-grid">
           <el-card v-for="item in objections" :key="item.id" shadow="never">
             <h2>{{ objectionTypeLabel(item.type) }}</h2>
+            <p>{{ item.batchName || (item.batchId ? '批次 ' + item.batchId : '历史记录 · 批次未记录') }} · {{ item.publicationTitle || '公示版本未记录' }}
+              {{ item.publicationCreatedAt ? formatDateTime(item.publicationCreatedAt) : '' }}</p>
             <p>{{ item.content }}</p>
             <p>提交时间 · {{ formatDateTime(item.createdAt) }}</p>
             <p>处理状态 · <el-tag :type="objectionTag(item.status)">{{ objectionStatusLabel(item.status) }}</el-tag></p>
@@ -39,7 +49,6 @@
           </el-card>
         </div>
       </el-card>
-    </template>
     <el-dialog v-model="dialogVisible" title="提交公示异议" width="520px">
       <el-form label-position="top">
         <el-form-item label="异议类型">
@@ -67,7 +76,9 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import type { PublicationInfo } from '@/types'
+import CollegeRosterTable from '@/components/CollegeRosterTable.vue'
+import { http } from '@/api/request'
+import type { PublishedRosterRow, PublicationInfo } from '@/types'
 import {
   formatDateTime, studentApi, type PublicationObjection, type StudentFinalResult
 } from '@/api/student'
@@ -78,6 +89,7 @@ const submitting = ref(false)
 const dialogVisible = ref(false)
 const finalResult = ref<StudentFinalResult | null>(null)
 const publication = ref<PublicationInfo | null>(null)
+const roster = ref<PublishedRosterRow[] | null>(null)
 const objections = ref<PublicationObjection[]>([])
 const form = reactive({ type: '', content: '' })
 
@@ -92,7 +104,7 @@ const inPublicity = computed(() => {
   const pub = publication.value
   if (!pub || !pub.startAt || !pub.endAt) return false
   const now = Date.now()
-  return new Date(pub.startAt).getTime() <= now && now <= new Date(pub.endAt).getTime()
+  return new Date(pub.startAt).getTime() <= now && now < new Date(pub.endAt).getTime()
 })
 
 function objectionTypeLabel(type: string) {
@@ -115,7 +127,7 @@ function objectionTag(status: string) {
 async function load() {
   loading.value = true
   const results = await Promise.allSettled([
-    studentApi.myFinal(), studentApi.publication(), studentApi.myObjections()
+    studentApi.myFinal(), studentApi.publication(), studentApi.myObjections(), http.get<PublishedRosterRow[] | null>('/final/published-roster')
   ])
   if (results[0].status === 'fulfilled') finalResult.value = results[0].value
   else console.error('最终结果读取失败', results[0].reason)
@@ -123,6 +135,7 @@ async function load() {
   else console.error('公示信息读取失败', results[1].reason)
   if (results[2].status === 'fulfilled') objections.value = results[2].value
   else console.error('异议记录读取失败', results[2].reason)
+  roster.value = results[3].status === 'fulfilled' ? results[3].value : null
   loading.value = false
 }
 
@@ -140,7 +153,7 @@ async function submitObjection() {
   }
   submitting.value = true
   try {
-    await studentApi.submitObjection({ type: form.type, content: form.content.trim() })
+    await studentApi.submitObjection({ publicationVersion: publication.value?.version, type: form.type, content: form.content.trim() })
     ElMessage.success('异议已提交')
     dialogVisible.value = false
     objections.value = await studentApi.myObjections()

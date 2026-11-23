@@ -1,6 +1,8 @@
 <template>
   <section :class="{ page: !embedded }" v-loading="loading">
-    <h1 v-if="!embedded" class="page-title">{{ college ? '实训室名单审核' : leader ? '实训室学生汇总' : '选拔名单' }}</h1>
+    <header v-if="!embedded" class="page-header">
+      <h1 class="page-title">{{ college ? '实训室名单审核' : leader ? '实训室学生汇总' : '选拔名单' }}</h1>
+    </header>
     <el-alert v-if="failed" title="名单数据加载失败" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
     <el-card v-if="!college" shadow="never">
       <p>实训室总名额 {{ quota }}。{{ leader ? '整理教师已发出的入组邀请和面试通过名单。' : '保存草稿或提交组长审核。' }}</p>

@@ -5,7 +5,7 @@
         <div>
           <h2 class="page-title">全院调剂池</h2>
           <p class="page-desc">
-            三轮补录结束后，剩余名额纳入全院调剂池。系统按优先级排出候选，学院逐条确认即可生效，
+            第三轮录取结束后，剩余名额纳入全院调剂池。系统按优先级排出候选，学院逐条确认即可生效，
             确认结果直接同步进最终录取名单。
           </p>
         </div>
@@ -16,6 +16,7 @@
       </div>
     </div>
 
+    <el-alert v-if="blocker" :title="blocker" :closable="false" type="info" />
     <el-row :gutter="14" class="summary">
       <el-col :xs="12" :lg="6">
         <div class="stat-card">
@@ -37,7 +38,7 @@
       </el-col>
       <el-col :xs="12" :lg="6">
         <div class="stat-card">
-          <div class="stat-label">第三优先级 · 未服从调剂安置</div>
+          <div class="stat-label">暂无符合意愿的去向</div>
           <div class="stat-value priority-3">{{ summary.placement }}</div>
         </div>
       </el-col>
@@ -49,7 +50,7 @@
           <el-radio-button :value="0">全部</el-radio-button>
           <el-radio-button :value="1">内部调剂</el-radio-button>
           <el-radio-button :value="2">跨实训室</el-radio-button>
-          <el-radio-button :value="3">未服从调剂</el-radio-button>
+          <el-radio-button :value="3">暂无去向</el-radio-button>
         </el-radio-group>
         <el-input v-model="keyword" placeholder="按学号 / 姓名筛选" clearable size="small" class="search" />
       </div>
@@ -95,14 +96,14 @@
         <el-table-column prop="reason" label="判定依据" min-width="220" show-overflow-tooltip />
         <el-table-column label="操作" width="110" align="center" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="openConfirm(row)">确认调剂</el-button>
+            <el-button type="primary" link :disabled="row.pendingProposal || (row.priority === 3 && (row.obeyInternalAdjustment || row.obeyCollegeAdjustment || summary.internal + summary.cross > 0)) || (row.priority === 2 && summary.internal > 0)" @click="openConfirm(row)">{{ row.pendingProposal ? '等待答复' : row.priority === 3 ? '谈话安置' : '确认调剂' }}</el-button>
           </template>
         </el-table-column>
       </el-table>
       <el-empty v-if="!loading && !filteredRows.length" description="当前没有待安置的学生" />
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="确认调剂去向" width="520px">
+    <el-dialog v-model="dialogVisible"  :title="current?.priority === 3 ? '谈话安置方案' : '确认调剂去向'" width="520px">
       <el-form v-if="current" label-width="96px">
         <el-form-item label="学生">
           <span>{{ current.studentName }}（{{ current.studentNumber }}）</span>
@@ -138,7 +139,7 @@
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="submitting" :disabled="!form.targetLaboratoryId" @click="submitConfirm">
-          确认并同步名单
+          {{ current?.priority === 3 ? '发送给学生确认' : '确认并同步名单' }}
         </el-button>
       </template>
     </el-dialog>
@@ -151,6 +152,7 @@ import { ElMessage } from 'element-plus'
 import { allocationApi, type LabSurplus, type PoolRow, type TeacherQuota } from '@/api/allocation'
 import { exportExcel } from './shared'
 
+const blocker = ref('')
 const loading = ref(false)
 const submitting = ref(false)
 const dialogVisible = ref(false)
@@ -175,7 +177,7 @@ const filteredRows = computed(() => {
   })
 })
 
-const availableLabs = computed(() => labs.value.filter((lab) => lab.remaining > 0))
+const availableLabs = computed(() => labs.value.filter((lab) => lab.remaining > 0 && (current.value?.priority === 3 || current.value?.eligibleLaboratoryIds.includes(lab.id))))
 const selectableTeachers = computed<TeacherQuota[]>(() => {
   const lab = labs.value.find((item) => item.id === form.targetLaboratoryId)
   if (!lab) return []
@@ -192,6 +194,7 @@ async function load() {
   loading.value = true
   try {
     const data = await allocationApi.pool()
+    blocker.value = data.blocker || ''
     rows.value = data.rows || []
     summary.value = data.summary || { pending: 0, internal: 0, cross: 0, placement: 0, remaining: 0 }
     labs.value = data.surplus?.labs || []
@@ -208,7 +211,7 @@ function openConfirm(row: PoolRow) {
     : availableLabs.value[0]?.id ?? null
   form.targetLaboratoryId = preferred
   form.targetLabTeacherId = null
-  form.reason = row.priorityLabel
+  form.reason = row.priority === 3 ? '' : row.priorityLabel
   dialogVisible.value = true
 }
 
@@ -221,12 +224,13 @@ async function submitConfirm() {
   submitting.value = true
   try {
     const result = await allocationApi.confirmPool({
+      discussion: current.value.priority === 3,
       studentId: current.value.studentId,
       targetLaboratoryId: form.targetLaboratoryId,
       targetLabTeacherId: form.targetLabTeacherId || null,
       reason: form.reason || undefined
     })
-    ElMessage.success(`已确认调剂，最终名单同步 ${result.synced} 人`)
+    ElMessage.success(current.value.priority === 3 ? '已发送方案，等待学生答复' : `已确认调剂，最终名单同步 ${result.synced} 人`)
     dialogVisible.value = false
     await load()
   } finally {

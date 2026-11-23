@@ -1,7 +1,9 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <h1>意向填报</h1>
-    <p v-if="batch">{{ batch.batchName }}</p>
+    <header class="page-header">
+      <h1>意向填报</h1>
+      <p v-if="batch">{{ batch.batchName }}</p>
+    </header>
     <el-alert v-if="loadError" title="填报数据加载失败，请重新加载" type="error" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
     <el-alert v-if="!record && !open" type="info" show-icon :closable="false" :title="windowHint" />
     <el-card v-if="!record && !preferences.length" shadow="never">

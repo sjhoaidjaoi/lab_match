@@ -189,6 +189,7 @@
 </template>
 
 <script setup lang="ts">
+import { allocationApi } from '@/api/allocation'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -207,7 +208,8 @@ const cycle = useCycleStore()
 const labId = computed(() => auth.user?.laboratoryId ?? null)
 
 // 面试阶段（第 4 阶段）时间窗，用于限制线上面试的排期时间
-const interviewStage = computed(() => cycle.stages.find((s) => s.stageNumber === 4))
+const currentRound = ref<number | null>(null)
+const interviewStage = computed(() => cycle.stages.find((s) => s.stageNumber === ((currentRound.value || 1) > 1 ? 6 : 4)))
 const stageStart = computed(() => interviewStage.value ? new Date(interviewStage.value.startTime) : null)
 const stageEnd = computed(() => interviewStage.value ? new Date(interviewStage.value.endTime) : null)
 
@@ -226,7 +228,7 @@ function stageOpenNow(stage?: StageInfo) {
   return true
 }
 
-const interviewStageOpen = computed(() => stageOpenNow(interviewStage.value))
+const interviewStageOpen = computed(() => currentRound.value !== null && stageOpenNow(interviewStage.value))
 const stageEarlyStarted = computed(() => interviewStage.value?.statusOverride === 'STARTED')
 // 尚未开放时才用原定开始时间作为可选日期下限；已开放则只要求选未来时间
 const stageDayFloor = computed(() => (interviewStageOpen.value ? null : stageStart.value))
@@ -450,7 +452,8 @@ async function load() {
   if (!labId.value) return
   loading.value = true
   try {
-    const [i, p] = await Promise.all([labApi.interviews(labId.value), labApi.preferences(labId.value)])
+    const [i, p, rounds] = await Promise.all([labApi.interviews(labId.value), labApi.preferences(labId.value), allocationApi.rounds()])
+    currentRound.value = rounds.open === 1 || rounds.supplementActive ? rounds.open : null
     list.value = i
     preferences.value = p
   } catch (err) {

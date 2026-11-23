@@ -36,7 +36,7 @@
               <span class="boot-line"><span class="boot-word word-zh">软件人</span></span>
             </h1>
             <div class="boot-rule" aria-hidden="true"><i></i></div>
-            <p class="boot-sub">河北师范大学软件学院 · 实训室双向选拔与统筹调剂平台</p>
+            <p class="boot-sub">软件学院 · 实训室双向选拔与统筹调剂平台</p>
           </div>
 
           <footer class="boot-foot">
@@ -67,7 +67,7 @@
 
     <header class="nav" :class="{ scrolled }">
       <div class="brand" @click="scrollToId('top')">
-        <img class="school-logo nav-school-logo" :src="schoolLogo" width="4206" height="650" alt="河北师范大学软件学院" />
+        <SchoolBrand class="school-logo nav-school-logo" />
         <span class="brand-text">
           <strong>实训室进组选拔平台</strong>
           <em>LAB MATCH · 双向选择 / 统筹调剂</em>
@@ -133,7 +133,7 @@
         <div class="hero-inner">
           <div class="hero-copy">
             <p class="kicker">SOFTWARE ENGINEERING · LAB MATCH</p>
-            <p class="hero-platform">河北师范大学软件学院 · 软件工程 · 实训室双向选拔与统筹调剂</p>
+            <p class="hero-platform">软件学院 · 软件工程 · 实训室双向选拔与统筹调剂</p>
             <h1 class="hero-title">
               <span class="line"><span class="boxed">双向选择</span></span>
               <span class="line">透明<span class="grad">统筹调剂</span></span>
@@ -323,7 +323,7 @@
     >
       <template #header>
         <div class="dialog-head">
-          <img class="school-logo dialog-school-logo" :src="schoolLogo" width="4206" height="650" alt="河北师范大学软件学院" />
+          <SchoolBrand class="school-logo dialog-school-logo" />
           <p class="kicker">SIGN IN</p>
           <h2>统一登录</h2>
         </div>
@@ -352,6 +352,7 @@
 </template>
 
 <script setup lang="ts">
+import SchoolBrand from '@/components/SchoolBrand.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules, InputInstance } from 'element-plus'
@@ -362,7 +363,6 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
-const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.png`
 /* 开场页右侧的时光塔。窄屏换小图，解码像素只有六成。 */
 const bootTower = window.innerWidth < 900
   ? `${import.meta.env.BASE_URL}images/tower-boot-sm.webp`
@@ -405,7 +405,7 @@ const formRef = ref<FormInstance>()
 const accountRef = ref<InputInstance>()
 
 const tickerItems = [
-  '河北师范大学软件学院 · 实训室进组选拔平台',
+  '软件学院 · 实训室进组选拔平台',
   '八阶段全流程线上化 · 志愿 / 面试 / 拟录取 / 调剂 / 公示',
   '最多 3 个平行志愿 · 内部与跨室调剂独立选择',
   '名额与时间窗由系统统一约束，操作全程留痕'

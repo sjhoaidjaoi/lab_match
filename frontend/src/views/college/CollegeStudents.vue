@@ -7,7 +7,8 @@
           <p class="page-desc">维护学生账号；停用后无法登录，但保留其志愿与录取数据。</p>
         </div>
         <div class="tools">
-          <el-input v-model="keyword" placeholder="学号 / 姓名" clearable style="width: 200px" @keyup.enter="search" @clear="search" />
+          <el-input v-model="keyword" placeholder="学号或姓名" aria-label="按学号或姓名查询学生" clearable style="width: 200px" @keyup.enter="search" @clear="search" />
+          <el-button @click="search">查询</el-button>
           <el-button @click="openImport">批量导入</el-button>
           <el-button type="primary" @click="openCreate">新增学生</el-button>
         </div>

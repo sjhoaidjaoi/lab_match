@@ -4,7 +4,7 @@
       <div class="header-row">
         <div>
           <h2 class="page-title">阶段时间管理</h2>
-          <p class="page-desc">配置八阶段起止时间：到点自动开始与结束；要马上推进就点「立即开始」，该阶段业务立刻可用。</p>
+          <p class="page-desc">在这里设置八个阶段的时间。第二轮和第三轮的名额由学院在「公布名额与分轮补录」中发布。</p>
         </div>
         <div class="header-actions">
           <el-select v-model="batchId" placeholder="选择批次" style="width: 240px" @change="loadStages">
@@ -31,10 +31,11 @@
             <el-date-picker v-model="row.endTime" type="datetime" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 100%" />
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="130" align="center">
+        <el-table-column label="时间窗与办理状态" min-width="160" align="center">
           <template #default="{ row }">
             <el-tag :type="statusTag(row.stageStatus)" effect="light">{{ STAGE_STATUS_LABELS[row.stageStatus] || row.stageStatus }}</el-tag>
             <el-tag v-if="row.statusOverride" class="override-tag" type="warning" effect="plain" size="small">人工</el-tag>
+            <small v-if="row.businessHint" class="business-hint">{{ row.businessHint }}</small>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="336" align="center">
@@ -82,7 +83,7 @@
       type="info"
       :closable="false"
       title="说明"
-      description="阶段状态默认由起止时间自动推导：到点开始、到点结束。点「立即开始」后该阶段业务立刻可用（结束时间照旧生效），排在其后的、已提前开始的阶段会退回按时间自动流转，避免多个阶段同时挂着「进行中」把后续业务判错。暂停与提前结束会一直生效，需点「恢复自动」才回到时间窗判定。"
+      description="时间窗决定各阶段的起止时间。拟录取确认结束后，在「公布名额与分轮补录」依次开放第二轮、第三轮。结束第三轮及分轮补录阶段后，在「全院调剂池」先办室内调剂，再办全院调剂。"
     />
 
     <el-dialog v-model="restartVisible" title="重新开始选拔" width="520px" append-to-body>
@@ -293,6 +294,7 @@ onMounted(loadBatches)
 </script>
 
 <style scoped>
+.business-hint { display: block; margin-top: 4px; color: var(--lm-text-secondary); }
 .header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .header-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .tip { margin-top: 16px; }

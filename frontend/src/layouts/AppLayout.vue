@@ -1,12 +1,9 @@
 <template>
   <el-container direction="vertical" class="layout workspace-theme" :data-role="auth.currentRole">
-    <GlassAmbient />
 
-    <!-- ========= 顶部栏：悬浮玻璃胶囊 ========= -->
-    <el-header class="topbar">
-      <span class="lg-lens" aria-hidden="true"></span>
+    <WorkspaceNav :role="auth.currentRole">
       <RouterLink class="brand workspace-account" :to="ROLE_HOME[auth.currentRole] || '/'">
-        <img class="workspace-logo" :src="schoolLogo" alt="河北师范大学软件学院" />
+        <SchoolBrand class="workspace-logo" />
         <div class="brand-text">
           <span class="brand-name">实训室进组选拔平台</span>
           <span class="brand-sub">{{ auth.roleName }} · LAB MATCH</span>
@@ -60,40 +57,18 @@
           </template>
         </el-dropdown>
       </div>
-    </el-header>
+    </WorkspaceNav>
 
-    <!-- ========= 横向菜单条：第二块玻璃岛 ========= -->
-    <nav class="navbar" aria-label="工作台导航">
-      <span class="lg-lens" aria-hidden="true"></span>
-      <div class="navbar-scroll">
-        <el-menu :default-active="activeMenuPath" router mode="horizontal" menu-trigger="click"
-          :ellipsis="false" class="nav-menu">
-          <template v-for="item in currentMenus" :key="item.path || item.title">
-            <el-sub-menu v-if="item.children && item.children.length" :index="item.title" popper-class="workspace-popover">
-              <template #title>
-                <el-icon><component :is="item.icon" /></el-icon>
-                <span>{{ item.title }}</span>
-              </template>
-              <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">
-                <el-icon><component :is="child.icon" /></el-icon>
-                <span>{{ child.title }}</span>
-              </el-menu-item>
-            </el-sub-menu>
-            <el-menu-item v-else :index="item.path">
-              <el-icon><component :is="item.icon" /></el-icon>
-              <span>{{ item.title }}</span>
-            </el-menu-item>
-          </template>
-        </el-menu>
-      </div>
-    </nav>
-
-    <!-- ========= 内容区 ========= -->
     <el-main class="main">
       <div ref="workspaceContent" class="workspace-content">
-        <WorkspaceRibbon :role="auth.currentRole" />
-        <router-view />
-        <WorkspaceBackdrop />
+        <nav v-if="collegeModule" class="module-switch" :aria-label="collegeModule.title">
+          <strong>{{ collegeModule.title }}</strong>
+          <RouterLink v-for="link in collegeModule.links" :key="link.path" :to="link.path"
+            :aria-current="route.path === link.path || route.path.startsWith(link.path + '/') ? 'location' : undefined">
+            {{ link.title }}
+          </RouterLink>
+        </nav>
+        <router-view class="portal-sheet" />
       </div>
     </el-main>
 
@@ -102,30 +77,26 @@
 </template>
 
 <script setup lang="ts">
+import SchoolBrand from '@/components/SchoolBrand.vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Clock } from '@element-plus/icons-vue'
-import { menus } from '@/router/menus'
+import { collegeModuleFor } from '@/router/collegeModules'
 import { ROLE_HOME } from '@/config/stages'
 import { useAuthStore } from '@/stores/auth'
 import { useCycleStore } from '@/stores/cycle'
-import WorkspaceRibbon from '@/components/WorkspaceRibbon.vue'
-import WorkspaceBackdrop from '@/components/WorkspaceBackdrop.vue'
+import WorkspaceNav from '@/components/WorkspaceNav.vue'
 import AssistantDock from '@/components/AssistantDock.vue'
-import GlassAmbient from '@/components/GlassAmbient.vue'
 import '@/styles/workspace.css'
+/* 质感层必须排在 workspace.css 之后：两者有同特异性选择器，靠顺序决胜 */
+import '@/styles/premium.css'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const cycleStore = useCycleStore()
-const schoolLogo = `${import.meta.env.BASE_URL}brand/hebei-normal-software.png`
+const collegeModule = computed(() => auth.currentRole === 'COLLEGE_ADMIN' ? collegeModuleFor(route.path) : undefined)
 
-const currentMenus = computed(() => menus[auth.currentRole] ?? [])
-const activeMenuPath = computed(() => {
-  const items = currentMenus.value.flatMap(item => item.children || [item])
-  return items.find(item => route.path === item.path || route.path.startsWith(item.path + '/'))?.path ?? ''
-})
 const workspaceContent = ref<HTMLElement>()
 const switchingRole = ref(false)
 
@@ -204,74 +175,47 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
 </script>
 
 <style scoped>
+.module-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 8px var(--sheet-inset); background: white; border: 1px solid var(--portal-line); border-bottom: 0; border-radius: 18px 18px 0 0; }
+.module-switch strong { font-size: 14px; margin-right: 4px; }
+.module-switch a { color: var(--workspace-muted); padding: 6px 0; font-size: 14px; }
+.module-switch a:hover, .module-switch a[aria-current] { color: var(--lm-primary-dark); }
+.module-switch a[aria-current] { text-decoration: underline; text-underline-offset: 5px; font-weight: 650; }
+.module-switch + :deep(.portal-sheet), .module-switch + :deep(.portal-sheet > .page-header) { border-top-left-radius: 0; border-top-right-radius: 0; }
 .layout { height: 100%; min-width: 0; }
-
-/* ---------- 顶部玻璃胶囊 ----------
-   overflow 必须保持 visible：菜单展开时突变 overflow 会让合成器重建离屏纹理，整条顶栏白闪 */
-.topbar {
-  position: relative;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 18px;
-  min-height: 64px;
-  height: auto;
-  margin: 14px var(--workspace-gutter) 0;
-  padding: 8px 16px 8px 12px;
-  border-radius: 999px;
-  overflow: visible;
-  background-color: rgba(255, 255, 255, 0.3);
-  background-image:
-    radial-gradient(120% 200% at 3% -60%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 62%),
-    linear-gradient(148deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.1) 52%, rgba(255, 255, 255, 0.3) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.96),
-    inset 1px 0 0 rgba(255, 255, 255, 0.5),
-    inset -1px 0 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.7),
-    0 1px 2px rgba(58, 41, 28, 0.04),
-    var(--lg-shadow);
-  transition: box-shadow 0.45s var(--lg-ease);
-}
-.topbar :deep(.lg-lens) { border-radius: 999px; }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 13px;
   min-width: 0;
-  padding: 5px 10px 5px 5px;
-  margin-inline-start: -2px;
-  border-radius: 999px;
+  padding: 6px 12px 6px 6px;
+  margin-inline-start: -4px;
+  border-radius: 16px;
   transition: background-color 0.3s var(--lg-ease);
 }
-.brand-text { display: grid; gap: 3px; white-space: nowrap; }
-.brand-name { font-size: 13px; font-weight: 700; letter-spacing: -0.01em; color: var(--workspace-ink); }
-.brand-sub { font-size: 10.5px; letter-spacing: 0.06em; color: var(--workspace-accent); }
+.brand-text { display: grid; gap: 4px; white-space: nowrap; }
+.brand-name { font-size: 14px; font-weight: 750; letter-spacing: .01em; color: var(--workspace-ink); }
+.brand-sub { font-size: 10px; font-weight: 600; letter-spacing: .14em; color: #a4551f; }
 
-/* 阶段胶囊：内嵌一层更薄的玻璃，形成「玻璃上的玻璃」层次 */
+/* 阶段胶囊：白纸 + 发丝边，靠一枚橙色状态点提示「正在进行」 */
 .stage-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   min-width: 0;
-  min-height: 34px;
-  padding: 4px 13px;
+  min-height: 38px;
+  padding: 5px 14px 5px 13px;
+  border: 1px solid #ece2d4;
   border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.4);
-  background-image: linear-gradient(150deg, rgba(255, 255, 255, 0.6), color-mix(in srgb, var(--workspace-tint) 70%, transparent));
+  background: linear-gradient(180deg, #ffffff, #fdf8f1);
   font-size: 13px;
   color: var(--workspace-ink);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.6),
-    0 1px 3px rgba(58, 41, 28, 0.06);
+  box-shadow: 0 1px 2px rgba(66, 45, 28, .05), inset 0 1px 0 #fff;
 }
-.stage-pill-icon { color: var(--workspace-accent); flex: none; }
-.stage-pill-label { color: var(--workspace-muted); font-size: 11px; white-space: nowrap; }
-.stage-pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 640; }
-.stage-pill-countdown { color: var(--workspace-accent); font: 12px var(--workspace-mono); white-space: nowrap; }
+.stage-pill-icon { color: var(--workspace-accent); flex: none; font-size: 14px; }
+.stage-pill-label { color: #8b857c; font-size: 11px; letter-spacing: .06em; white-space: nowrap; }
+.stage-pill-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 680; }
+.stage-pill-countdown { padding-inline-start: 10px; border-inline-start: 1px solid #eee3d5; color: #b1591c; font: 600 12px var(--workspace-mono); white-space: nowrap; }
 .topbar-right { display: flex; align-items: center; gap: 10px; flex: none; }
 .role-select { width: 118px; }
 
@@ -315,85 +259,12 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
 .user-role { font-size: 10px; color: var(--workspace-muted); }
 .user-caret { color: var(--workspace-accent); }
 
-/* ---------- 导航玻璃岛 ---------- */
-.navbar {
-  position: relative;
-  z-index: 4;
-  flex: none;
-  min-width: 0;
-  margin: 10px var(--workspace-gutter) 0;
-  padding: 4px 8px;
-  border-radius: 999px;
-  overflow: visible;
-  background-color: rgba(255, 255, 255, 0.26);
-  background-image:
-    radial-gradient(100% 220% at 0% -80%, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0) 60%),
-    linear-gradient(148deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.08));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.62),
-    0 1px 2px rgba(58, 41, 28, 0.03),
-    var(--lg-shadow);
-}
-.navbar :deep(.lg-lens) { border-radius: 999px; }
-.navbar-scroll {
-  display: flex;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.navbar-scroll::-webkit-scrollbar { height: 0; }
-
-.nav-menu {
-  --el-menu-horizontal-height: 44px;
-  --el-menu-bg-color: transparent;
-  --el-menu-text-color: var(--workspace-muted);
-  --el-menu-active-color: var(--workspace-accent);
-  --el-menu-hover-bg-color: rgba(255, 255, 255, 0.5);
-  width: max-content;
-  align-items: center;
-  gap: 3px;
-  border: 0;
-  background: transparent;
-}
-.nav-menu > :deep(.el-menu-item),
-.nav-menu > :deep(.el-sub-menu > .el-sub-menu__title) {
-  height: 36px;
-  line-height: 36px;
-  padding: 0 clamp(10px, 1vw, 15px);
-  border: 0;
-  border-radius: 999px;
-  color: var(--workspace-muted);
-  font-weight: 550;
-  white-space: nowrap;
-  transition: color 0.22s var(--lg-ease), background-color 0.3s var(--lg-ease), box-shadow 0.3s var(--lg-ease);
-}
-.nav-menu > :deep(.el-menu-item.is-active),
-.nav-menu > :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
-  color: var(--workspace-accent) !important;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.98),
-    0 1px 3px rgba(58, 41, 28, 0.1),
-    0 6px 16px -10px rgba(58, 41, 28, 0.3);
-  font-weight: 700;
-  border: 0;
-}
-.nav-menu > :deep(.el-menu-item:hover),
-.nav-menu > :deep(.el-sub-menu > .el-sub-menu__title:hover) {
-  color: var(--workspace-ink);
-  background: rgba(255, 255, 255, 0.46);
-}
-.nav-menu > :deep(.el-menu-item:active),
-.nav-menu > :deep(.el-sub-menu:active > .el-sub-menu__title) { box-shadow: inset 0 2px 4px rgba(58, 41, 28, 0.08); }
-.nav-menu :deep(.el-icon) { margin-inline-end: 5px; font-size: 14px; }
-.nav-menu :deep(.el-sub-menu__icon-arrow) { position: static; margin: 0 0 0 6px; }
-
 .main { min-width: 0; min-height: 0; padding: clamp(14px, 1.7vw, 25px) var(--workspace-gutter) 20px; overflow: auto; }
 .workspace-content {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 1816px;
+  max-width: none;
   min-width: 0;
   min-height: 100%;
   margin-inline: auto;
@@ -402,19 +273,10 @@ onUnmounted(() => { if (timer) window.clearInterval(timer) })
   .brand-text { display: none; }
 }
 @media (max-width: 720px) {
-  .topbar {
-    flex-wrap: wrap;
-    /* 换行后胶囊会变成大水滴，改成大圆角更稳 */
-    border-radius: 26px;
-    margin-top: 10px;
-    padding: 10px 12px;
-  }
   .stage-pill { order: 3; flex: 1 0 100%; border-radius: 18px; }
   .stage-pill-countdown { margin-inline-start: auto; }
   .user-info { display: none; }
   .brand { padding-inline-end: 0; }
-  .navbar { border-radius: 22px; padding: 3px 6px; }
-  .nav-menu { --el-menu-horizontal-height: 42px; }
   .main { padding-top: 14px; }
   .main :deep(.el-card__body) { padding: 12px; }
 }

@@ -1,8 +1,11 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <h1>拟录取确认</h1>
-    <p v-if="pendingList.length > 1">收到多个拟录取通知时，只能确认一个实训室；确认后其余待确认名额将自动释放。</p>
-    <el-empty v-if="!loading && !intended.length" description="暂无拟录取通知" />
+    <header class="page-header">
+      <h1>拟录取确认</h1>
+      <p v-if="pendingList.length > 1">收到多个拟录取通知时，只能确认一个实训室；确认后其余待确认名额将自动释放。</p>
+    </header>
+    <el-alert v-if="failed" type="error" title="拟录取通知读取失败" :closable="false"><el-button text @click="load">重试</el-button></el-alert>
+    <el-empty v-else-if="!loading && !intended.length" description="暂无拟录取通知" />
     <div v-else class="student-grid">
       <el-card v-for="item in intended" :key="item.id" shadow="never">
         <h2>{{ item.laboratoryName || '实训室#' + item.laboratoryId }}</h2>
@@ -26,6 +29,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { formatDateTime, studentApi, type StudentAdmission } from '@/api/student'
 
 const loading = ref(false)
+const failed = ref(false)
 const savingId = ref<number | null>(null)
 const admissions = ref<StudentAdmission[]>([])
 
@@ -49,7 +53,9 @@ async function load() {
   loading.value = true
   try {
     admissions.value = await studentApi.myAdmissions()
+    failed.value = false
   } catch (error) {
+    failed.value = true
     console.error('拟录取读取失败', error)
   } finally {
     loading.value = false

@@ -12,9 +12,9 @@
         <div class="header-actions">
           <el-button @click="exportList">导出 CSV</el-button>
           <el-button :loading="acting" :disabled="!round?.canOpenNext" type="primary" @click="openNextRound">
-            开启第 {{ nextRound }} 轮补录
+            公布名额并开启第 {{ nextRound }} 轮补录
           </el-button>
-          <el-button :loading="acting" :disabled="!round?.open" @click="closeCurrentRound">结束本轮录取</el-button>
+          <el-button :loading="acting" :disabled="!round?.canClose" @click="closeCurrentRound">结束本轮录取</el-button>
         </div>
       </div>
     </div>
@@ -36,10 +36,10 @@
         :closable="false"
         show-icon
         title="当前没有开放的报名轮次"
-        description="该轮录取已结束。可开启下一轮补录，未录取学生重新填报志愿后由实训室统一组织面试。"
+         :description="round?.current === 3 ? '三轮已结束，进入统筹调剂录取阶段后可在全院调剂池办理。' : '在分轮补录阶段公布名额后，学生即可重新填报。'"
       />
       <el-alert
-        v-else-if="round.open >= 2"
+        v-else-if="round.supplementActive"
         type="info"
         :closable="false"
         show-icon
@@ -137,7 +137,7 @@ const acting = ref(false)
 const totals = computed(() => view.value?.totals || { plan: 0, admitted: 0, pending: 0, remaining: 0 })
 const round = computed(() => view.value?.round || null)
 const nextRound = computed(() => Math.min((round.value?.current || 1) + 1, round.value?.max || 3))
-const roundActive = computed(() => (round.value?.rounds || []).filter((item) => item.status === 'OPEN').length)
+const roundActive = computed(() => round.value?.rounds.filter(item => item.status === 'CLOSED').length ?? 0)
 
 const roundSteps = computed(() => {
   const labels: Record<number, string> = { 1: '第一轮录取', 2: '第二轮补录', 3: '第三轮补录' }
@@ -148,7 +148,7 @@ const roundSteps = computed(() => {
     return {
       round: no,
       label: labels[no] || `第 ${no} 轮`,
-      desc: !item ? '未开始' : item.status === 'OPEN' ? '报名中' : '已结束'
+      desc: !item ? '未开始' : item.status === 'OPEN' ? '录取中' : '已结束'
     }
   })
 })

@@ -1,12 +1,14 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <h1>补录志愿填报</h1>
+    <header class="page-header">
+      <h1>补录志愿填报</h1>
+    </header>
 
     <el-card shadow="never" class="round-card">
       <div class="round-head">
         <div>
           <p class="round-title">
-            <template v-if="view?.round?.open">第 {{ view.round.open }} 轮补录报名中</template>
+            <template v-if="openRound">第 {{ openRound }} 轮补录报名中</template>
             <template v-else>当前没有开放补录轮次</template>
           </p>
           <p class="round-desc">
@@ -14,8 +16,8 @@
             由实训室统一组织面试。三轮补录后剩余名额进入全院调剂池统一安排。
           </p>
         </div>
-        <el-tag v-if="view?.round?.open" type="success" effect="light">
-          {{ roundLabel(view.round.open) }}
+        <el-tag v-if="openRound" type="success" effect="light">
+          {{ roundLabel(openRound) }}
         </el-tag>
       </div>
     </el-card>
@@ -144,7 +146,7 @@ const choices = reactive([
 const obeyInternal = ref(true)
 const obeyCollege = ref(true)
 
-const openRound = computed(() => view.value?.round?.open ?? null)
+const openRound = computed(() => view.value?.round?.supplementActive ? view.value.round.open : null)
 const surplusLabs = computed(() => view.value?.labs || [])
 const currentRoundChoices = computed(() =>
   (view.value?.choices || []).filter((item) => item.round === openRound.value && item.status === 'SUBMITTED'))

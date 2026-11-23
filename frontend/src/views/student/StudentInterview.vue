@@ -1,6 +1,6 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <header>
+    <header class="page-header">
       <h1>我的面试</h1>
       <p>按志愿查看面试安排。拟录取通知与最终公示会在对应阶段发布。</p>
       <div class="interview-actions">

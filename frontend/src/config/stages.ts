@@ -14,8 +14,8 @@ export const stages: StageDef[] = [
   { no: 3, key: 'PREFERENCE', name: '学生意向填报',         time: '学院统一安排', desc: '最多 3 个平行志愿 + 2 项调剂意愿独立选择' },
   { no: 4, key: 'INTERVIEW', name: '导师初选与面试考核',     time: '学院统一安排', desc: '实训室统一面试，5 维度评分' },
   { no: 5, key: 'ADMISSION_CONFIRM', name: '拟录取与学生确认', time: '学院统一安排', desc: '在确认期内选择一份拟录取邀请' },
-  { no: 6, key: 'INTERNAL_SUPPLEMENT', name: '实训室内部调剂', time: '学院统一安排', desc: '组长主导，优先解决本室空缺' },
-  { no: 7, key: 'COLLEGE_ADJUSTMENT', name: '学院统筹调剂',  time: '学院统一安排', desc: '跨实训室调剂 + 沟通安置' },
+  { no: 6, key: 'SUPPLEMENT_ROUNDS', name: '分轮补录', time: '学院统一安排', desc: '学院公布余量，学生重新填报，导师面试录取，依次完成第二、三轮' },
+  { no: 7, key: 'COLLEGE_ADJUSTMENT', name: '统筹调剂录取',  time: '学院统一安排', desc: '第三轮结束后，学院按学生意愿先办室内调剂，再办全院调剂' },
   { no: 8, key: 'FINAL_PUBLICITY', name: '结果公示与正式入组', time: '学院统一安排', desc: '公示 + 异议 + 正式入组' }
 ]
 

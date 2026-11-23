@@ -2,7 +2,7 @@ import { http } from './request'
 import type {
   AdmissionDetail, AdjustmentDetail, AnnouncementItem, BatchInfo, CandidateRow, CapacityRow, CollegeDashboard,
   FinalAdmissionDetail, FinalCheck, InterviewDetail, LabView, ObjectionItem, OpenDaySchedule, OperationLogItem, PreferenceDetail,
-  PublicationInfo, PageResult, StageInfo, UnplacedStudent, UserAccount, UserPayload
+  CollegeRosterRow, PublicationInfo, PageResult, StageInfo, UnplacedStudent, UserAccount, UserPayload
 } from '@/types'
 
 /** 统一处理“分页对象 / 数组”两种返回结构 */
@@ -84,13 +84,13 @@ export const collegeApi = {
     http.put<AdjustmentDetail>(`/adjustments/${id}/status`, { status, reason }),
 
   // ---- 最终名单 / 公示 / 入组 ----
-  finalList: () => http.get<{ batchId: number; batchName: string; perLab: Array<{ laboratoryId: number; laboratoryName: string; quota: number; students: FinalAdmissionDetail[] }> }>('/final/list'),
+  finalList: () => http.get<{ batchId: number; batchName: string; roster: CollegeRosterRow[]; perLab: Array<{ laboratoryId: number; laboratoryName: string; quota: number; students: FinalAdmissionDetail[] }> }>('/final/list'),
   mergeFinal: () => http.post<{ merged: number }>('/final/merge'),
   finalCheck: () => http.get<FinalCheck | null>('/final/check'),
   reviewFinal: (status: string, comment?: string) => http.post<FinalCheck['review']>('/final/review', { status, comment }),
-  enrollAll: (force?: boolean) => http.post<{ enrolled: number }>('/final/enroll-all', { force: Boolean(force) }),
-  objections: () => http.get<ObjectionItem[]>('/final/objections'),
-  createObjection: (payload: { studentId: number; type: string; content: string }) =>
+  enrollAll: () => http.post<{ enrolled: number }>('/final/enroll-all'),
+  objections: (scope: 'current' | 'all' = 'current') => http.get<ObjectionItem[]>('/final/objections', { scope }),
+  createObjection: (payload: { publicationVersion?: string; studentId: number; type: string; content: string }) =>
     http.post<ObjectionItem>('/final/objections', payload),
   handleObjection: (id: number, status: string, handlingNote?: string) =>
     http.put<ObjectionItem>(`/final/objections/${id}`, { status, handlingNote }),

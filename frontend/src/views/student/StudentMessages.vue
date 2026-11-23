@@ -1,6 +1,8 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <h1>学院通知</h1>
+    <header class="page-header">
+      <h1>学院通知</h1>
+    </header>
     <div class="student-actions">
       <el-button :disabled="!unreadIds.length" :loading="markingAll" @click="markAllRead">全部标为已读</el-button>
       <span>{{ unreadIds.length }} 条未读</span>
@@ -13,6 +15,8 @@
       <div class="student-actions">
         <el-tag :type="notice.read ? 'info' : 'warning'">{{ notice.read ? '已读' : '未读' }}</el-tag>
         <router-link v-if="notice.destination === 'STUDENT_INTERVIEW'" :to="{ path: '/student/interview', query: { interviewId: notice.interviewId } }">查看面试安排 →</router-link>
+        <router-link v-if="notice.destination === 'STUDENT_SUPPLEMENT'" to="/student/supplement">查看名额与填报志愿 →</router-link>
+        <router-link v-if="notice.destination === 'STUDENT_ADJUSTMENT'" to="/student/allocation">查看调剂方案 →</router-link>
         <router-link v-if="notice.destination === 'STUDENT_RESULT'" to="/student/result">查看最终结果 →</router-link>
         <el-button v-if="!notice.read" text :loading="markingId === notice.id" @click="markRead(notice)">标为已读</el-button>
       </div>

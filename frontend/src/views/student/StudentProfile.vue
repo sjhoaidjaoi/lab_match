@@ -1,6 +1,8 @@
 <template>
   <section v-loading="loading" class="student-page">
-    <h1>个人信息与志愿情况</h1>
+    <header class="page-header">
+      <h1>个人信息与志愿情况</h1>
+    </header>
     <el-card shadow="never">
       <h2>账号资料</h2>
       <dl class="student-fields">

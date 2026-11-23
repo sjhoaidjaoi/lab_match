@@ -1,0 +1,512 @@
+/* ============================================================================
+   高级质感层 —— 在既有橙白体系之上做一次「印刷品 + 建筑感」的升级
+   ----------------------------------------------------------------------------
+   这一层只做视觉，不改任何布局语义：
+   1) 令牌：更深的墨、更暖的纸、更克制的橙（深橙比亮橙更显贵）。
+   2) 纸面：文档卡片从「一片白」变成有厚度、有边界、有呼吸的纸。
+   3) 页头：改成带暖橙渐层与细网格的封面带，标题字号上探到 40px。
+   4) 原子：表格、按钮、标签、提示、空态、分页、弹窗统一到同一套比例。
+   选择器一律带 .workspace-theme .portal-sheet 前缀：SFC 的 scoped 样式是
+   (0,2,0) 且有 [data-v-*]，只有更高特异性才能稳定接管，无需 !important。
+   ========================================================================== */
+
+.workspace-theme {
+  /* —— 墨色：不用纯黑，暖灰让大字更有纸感 —— */
+  --px-ink: #191b1e;
+  --px-ink-2: #2e3236;
+  --px-muted: #5f6167;
+  --px-faint: #8b857c;
+
+  /* —— 纸面与描边 —— */
+  --px-paper: #fffefc;
+  --px-canvas: #f2ede5;
+  --px-line: #e9e1d6;
+  --px-line-soft: #f1ebe2;
+  --px-line-strong: #d9cdbc;
+
+  /* —— 品牌橙：主色压深，浅色只做高光 —— */
+  --px-accent: #c9450b;
+  --px-accent-2: #ef7a2c;
+  --px-accent-3: #f8b678;
+  --px-gold: #b78a45;
+
+  /* —— 阴影：三层叠加，近实远虚，杜绝一团灰 —— */
+  --px-shadow-card: 0 1px 1px rgba(66, 45, 28, .035), 0 10px 26px -20px rgba(66, 45, 28, .34);
+  --px-shadow-lift: 0 2px 4px rgba(66, 45, 28, .04), 0 22px 44px -26px rgba(66, 45, 28, .38);
+  --px-shadow-sheet: 0 1px 1px rgba(66, 45, 28, .04), 0 18px 40px -30px rgba(66, 45, 28, .34),
+    0 50px 90px -60px rgba(66, 45, 28, .3);
+
+  --px-radius: 18px;
+  --px-radius-lg: 26px;
+
+  background-color: var(--px-canvas);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-theme .portal-sheet :is(.el-card, .stat-card, .service, .result-card) {
+    transition: box-shadow .42s var(--lg-ease), transform .42s var(--lg-ease), border-color .42s var(--lg-ease);
+  }
+}
+
+::selection { background: rgba(201, 69, 11, .16); }
+
+/* ---------------------------------------------------------------- 1. 纸面 */
+/* 外层留白交给 .student-body，纸本身只负责「厚度」 */
+.workspace-theme .portal-sheet {
+  position: relative;
+  isolation: isolate;
+  padding: 0 var(--sheet-inset) clamp(26px, 3vw, 44px);
+  border: 1px solid var(--px-line);
+  border-radius: var(--px-radius-lg);
+  background-color: var(--px-paper);
+  background-image: radial-gradient(120% 90% at 50% 0%, #fff 0%, #fffdfa 55%, #fdfaf5 100%);
+  box-shadow: var(--px-shadow-sheet);
+}
+
+/* 纸的顶部一道极细的品牌线，收边用，不抢标题 */
+.workspace-theme .portal-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  border-radius: var(--px-radius-lg) var(--px-radius-lg) 0 0;
+  background: linear-gradient(90deg, var(--px-accent) 0%, var(--px-accent-2) 34%, rgba(248, 182, 120, .5) 62%, transparent 92%);
+  opacity: .9;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ 2. 封面页头 */
+.workspace-theme .portal-sheet > .page-header {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: 0 calc(-1 * var(--sheet-inset)) clamp(16px, 1.8vw, 24px);
+  padding: clamp(26px, 3vw, 44px) var(--sheet-inset) clamp(22px, 2.4vw, 32px);
+  border: 0;
+  border-bottom: 1px solid #ecdfcd;
+  border-radius: calc(var(--px-radius-lg) - 1px) calc(var(--px-radius-lg) - 1px) 0 0;
+  background-color: #fdf6ec;
+  background-image:
+    radial-gradient(94% 180% at 97% -70%, #f2b783 0%, rgba(247, 211, 178, .86) 32%, rgba(253, 246, 236, 0) 64%),
+    radial-gradient(60% 120% at 0% -20%, #fffefb 0%, rgba(255, 254, 251, 0) 60%),
+    linear-gradient(102deg, #fffefa 0%, #fdf4e7 40%, #f6e2ca 100%);
+  box-shadow: none;
+}
+
+/* 细网格只出现在右半侧，像工程图纸的底纹，压住渐层的「糖水感」 */
+.workspace-theme .portal-sheet > .page-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(90deg, rgba(160, 96, 44, .07) 1px, transparent 1px),
+    linear-gradient(rgba(160, 96, 44, .07) 1px, transparent 1px);
+  background-size: 32px 32px;
+  -webkit-mask-image: linear-gradient(100deg, transparent 26%, #000 78%);
+  mask-image: linear-gradient(100deg, transparent 26%, #000 78%);
+  opacity: .85;
+}
+
+/* 两道同心细环，替代原来的斜切白光 */
+.workspace-theme .portal-sheet > .page-header::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -168px;
+  right: -104px;
+  width: 460px;
+  height: 460px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, transparent 0 33%, rgba(180, 104, 46, .14) 33.2%, transparent 33.8%),
+    radial-gradient(circle, transparent 0 45%, rgba(180, 104, 46, .1) 45.2%, transparent 45.8%),
+    radial-gradient(circle, rgba(255, 255, 255, .5) 0%, rgba(255, 255, 255, 0) 62%);
+  pointer-events: none;
+}
+
+.workspace-theme .portal-sheet > .page-header :is(h1, .page-title) {
+  margin: 10px 0 0;
+  color: var(--px-ink);
+  font-size: clamp(27px, 2.7vw, 40px);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -.035em;
+}
+
+/* 小标签：大写、字距、左侧一道短线 */
+.workspace-theme .portal-sheet > .page-header :is(.kicker, .selection-context) {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: #a35a26;
+  font-family: var(--font-grotesk);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.workspace-theme .portal-sheet > .page-header :is(.kicker, .selection-context)::before {
+  content: '';
+  width: 22px;
+  height: 1px;
+  flex: none;
+  background: currentColor;
+  opacity: .6;
+}
+
+.workspace-theme .portal-sheet > .page-header p:not(.selection-context, .kicker) {
+  max-width: 72ch;
+  margin: 10px 0 0;
+  color: #6a625a;
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+/* 页头里如果有右侧操作区，统一为「基线对齐 + 自适应换行」 */
+.workspace-theme .portal-sheet > .page-header:has(.head-main) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px 28px;
+}
+.workspace-theme .portal-sheet > .page-header .head-main { flex: 1 1 420px; min-width: 0; }
+.workspace-theme .portal-sheet > .page-header .head-actions { flex: 0 1 auto; }
+.workspace-theme .portal-sheet > .page-header :is(.header-row, .head-actions) { gap: 10px; }
+
+/* -------------------------------------------------------- 3. 章节与卡片面 */
+.workspace-theme .portal-sheet :is(.section-title, .block-title, .panel-title) {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--px-ink);
+  font-size: 16px;
+  font-weight: 720;
+  letter-spacing: -.012em;
+}
+.workspace-theme .portal-sheet :is(.section-title, .block-title, .panel-title)::before {
+  content: '';
+  width: 4px;
+  height: 15px;
+  flex: none;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--px-accent-2), var(--px-accent));
+}
+
+/* 文档卡：从「透明分割线」升级为真正的纸卡 */
+.workspace-theme .portal-sheet .el-card {
+  border: 1px solid var(--px-line);
+  border-radius: var(--px-radius);
+  background: #fffefc;
+  box-shadow: var(--px-shadow-card);
+  overflow: hidden;
+}
+.workspace-theme .portal-sheet .el-card + .el-card { border-top: 1px solid var(--px-line); }
+.workspace-theme .portal-sheet .el-card__header {
+  padding: 15px 20px 13px;
+  border-bottom: 1px solid var(--px-line-soft);
+  background: linear-gradient(180deg, #fffdf9, #fdf8f1);
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+.workspace-theme .portal-sheet .el-card__body { padding: 18px 20px; }
+/* 卡中卡：内层还原成浅底分区，避免套娃式阴影 */
+.workspace-theme .portal-sheet .el-card .el-card {
+  border: 1px solid var(--px-line-soft);
+  background: #fdfaf5;
+  box-shadow: none;
+}
+
+/* 统计卡：数字是主角 */
+.workspace-theme .portal-sheet .stat-card {
+  position: relative;
+  padding: 18px 20px;
+  border: 1px solid var(--px-line);
+  border-radius: 16px;
+  background-color: #fffefc;
+  background-image: linear-gradient(158deg, #fffffe 0%, #fdf8f1 100%);
+  box-shadow: var(--px-shadow-card);
+  overflow: hidden;
+}
+.workspace-theme .portal-sheet .stat-card::before {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, rgba(239, 122, 44, .1), var(--px-accent) 30%, var(--px-accent) 70%, rgba(201, 69, 11, .1));
+}
+.workspace-theme .portal-sheet .stat-card :is(.stat-value, .metric-value) {
+  color: var(--px-ink);
+  font-size: clamp(26px, 2.2vw, 34px);
+  font-weight: 780;
+  line-height: 1.1;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+}
+.workspace-theme .portal-sheet .stat-card :is(.stat-label, .metric-label) {
+  margin-top: 6px;
+  color: var(--px-muted);
+  font-size: 12.5px;
+  letter-spacing: .02em;
+}
+@media (hover: hover) {
+  .workspace-theme .portal-sheet :is(.stat-card, .el-card):hover {
+    box-shadow: var(--px-shadow-lift);
+    border-color: var(--px-line-strong);
+  }
+}
+
+/* ------------------------------------------------------------- 4. 表格 */
+.workspace-theme .portal-sheet .el-table {
+  --el-table-border-color: var(--px-line-soft);
+  --el-table-header-bg-color: #fbf7f1;
+  --el-table-row-hover-bg-color: #fff8ef;
+  --el-table-header-text-color: #6d6357;
+  font-size: 14px;
+  border-radius: 14px;
+}
+.workspace-theme .portal-sheet .el-table::before,
+.workspace-theme .portal-sheet .el-table__inner-wrapper::before { display: none; }
+.workspace-theme .portal-sheet .el-table th.el-table__cell {
+  padding: 9px 0;
+  color: #6d6357;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: .04em;
+}
+.workspace-theme .portal-sheet .el-table td.el-table__cell { padding: 12px 0; color: var(--px-ink-2); }
+.workspace-theme .portal-sheet .el-table tr:last-child td.el-table__cell { border-bottom: 0; }
+
+/* ------------------------------------------------------------- 5. 原子 */
+.workspace-theme .el-button:not(.is-text, .is-link, .is-circle) {
+  min-height: 34px;
+  border-radius: 10px;
+  font-weight: 620;
+  letter-spacing: .01em;
+}
+.workspace-theme .el-button--primary:not(.is-text, .is-link, .is-plain, .is-disabled) {
+  border-color: var(--px-accent);
+  background-image: linear-gradient(180deg, #e2600f 0%, var(--px-accent) 55%, #bb3c07 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .26), 0 1px 2px rgba(160, 54, 4, .26);
+}
+@media (hover: hover) {
+  .workspace-theme .el-button--primary:not(.is-text, .is-link, .is-plain, .is-disabled):hover {
+    background-image: linear-gradient(180deg, #ef6d18 0%, #d54e0d 55%, #c04208 100%);
+  }
+}
+.workspace-theme .el-button--default:not(.is-text, .is-link, .is-disabled) {
+  border-color: var(--px-line-strong);
+  background: #fffefc;
+  color: var(--px-ink-2);
+}
+.workspace-theme .el-button.is-round { border-radius: 999px; }
+
+/* 分段控件：把单选组做成印刷品的「切换页签」 */
+.workspace-theme .portal-sheet .el-radio-group {
+  padding: 4px;
+  border: 1px solid var(--px-line);
+  border-radius: 12px;
+  background: #fbf7f1;
+  box-shadow: inset 0 1px 2px rgba(66, 45, 28, .04);
+}
+.workspace-theme .portal-sheet .el-radio-button__inner {
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none !important;
+  color: var(--px-muted);
+  font-weight: 600;
+}
+.workspace-theme .portal-sheet .el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background: #fff;
+  color: var(--px-accent);
+  box-shadow: 0 1px 2px rgba(66, 45, 28, .08), 0 6px 14px -10px rgba(66, 45, 28, .3) !important;
+}
+
+.workspace-theme .portal-sheet .el-tag {
+  border-radius: 999px;
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+.workspace-theme .portal-sheet .el-alert {
+  border: 1px solid var(--px-line);
+  border-radius: 14px;
+  background: #fffdf9;
+}
+.workspace-theme .portal-sheet .el-empty { padding: clamp(28px, 5vw, 56px) 0; }
+.workspace-theme .portal-sheet .el-empty__description p { color: var(--px-faint); font-size: 13.5px; }
+.workspace-theme .portal-sheet .el-input__wrapper,
+.workspace-theme .portal-sheet .el-select__wrapper,
+.workspace-theme .portal-sheet .el-textarea__inner {
+  border-radius: 10px;
+  background: #fffefc;
+  box-shadow: inset 0 0 0 1px var(--px-line-strong);
+}
+.workspace-theme .portal-sheet .el-input__wrapper.is-focus,
+.workspace-theme .portal-sheet .el-select__wrapper.is-focused {
+  box-shadow: inset 0 0 0 2px var(--px-accent), 0 0 0 3px rgba(201, 69, 11, .1);
+}
+.workspace-theme .portal-sheet .el-tabs__item { font-weight: 620; }
+.workspace-theme .portal-sheet .el-tabs__active-bar { height: 3px; border-radius: 3px; }
+.workspace-theme .portal-sheet .el-pagination { --el-pagination-button-bg-color: transparent; }
+
+/* 弹窗：纸面 + 厚阴影，标题区加一道品牌线 */
+.workspace-theme body .el-dialog,
+body .workspace-theme .el-dialog,
+body:has(.workspace-theme) .el-dialog {
+  border-radius: 18px;
+  box-shadow: var(--px-shadow-float, 0 30px 80px -40px rgba(50, 34, 22, .5));
+  overflow: hidden;
+}
+body:has(.workspace-theme) .el-dialog__header {
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--px-line);
+  background: linear-gradient(180deg, #fffdf9, #fdf7f0);
+}
+body:has(.workspace-theme) .el-dialog__title { font-weight: 740; letter-spacing: -.01em; }
+body:has(.workspace-theme) .el-dialog__body { padding: 20px 22px; }
+
+/* ------------------------------------------------------- 6. 学生端专属 */
+/* 八阶段进度：连接线加粗、当前节点带光圈 */
+.workspace-theme .student-progress .student-timeline li:not(:last-child)::before {
+  top: 23px;
+  border-top: 2px solid #e7ded2;
+  background: linear-gradient(90deg, #e7ded2, #efe7db);
+  height: 2px;
+}
+.workspace-theme .student-step {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #eadfd0;
+  background: #fffdf9;
+  font: 650 12.5px var(--font-grotesk);
+  color: #7a7167;
+  box-shadow: 0 1px 2px rgba(66, 45, 28, .06);
+}
+.workspace-theme .student-timeline .done .student-step {
+  border-color: #cfe3d6;
+  background: #f0f8f2;
+  color: #2c6a47;
+}
+.workspace-theme .student-timeline .active .student-step {
+  border-color: transparent;
+  background: linear-gradient(155deg, #f59144, var(--px-accent));
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(201, 69, 11, .12), 0 6px 14px -6px rgba(201, 69, 11, .55);
+}
+.workspace-theme .student-progress .student-timeline li a { gap: 7px; font-size: 13px; color: var(--px-ink-2); }
+.workspace-theme .student-timeline li small { color: var(--px-faint); font-size: 11.5px; }
+/* 首页「当前阶段」横条 */
+.workspace-theme .portal-sheet .stage-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border: 1px solid #f0e0cd;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .66);
+  box-shadow: 0 1px 2px rgba(66, 45, 28, .04);
+  font-size: 13.5px;
+}
+.workspace-theme .portal-sheet .stage-line .stage-label { color: var(--px-faint); font-size: 12px; letter-spacing: .08em; }
+.workspace-theme .portal-sheet .stage-line strong { color: var(--px-ink); font-weight: 700; }
+.workspace-theme .portal-sheet .stage-action { margin-inline-start: auto; font-weight: 650; }
+
+/* 公告折叠区：浅纸卡而不是透明分隔 */
+.workspace-theme .portal-sheet .selection-notices {
+  margin-top: 4px;
+  padding: 18px 20px;
+  border: 1px solid var(--px-line);
+  border-radius: var(--px-radius);
+  background: #fffefc;
+  box-shadow: var(--px-shadow-card);
+}
+.workspace-theme .portal-sheet .selection-notices .notice-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 6px; }
+.workspace-theme .portal-sheet .selection-notices details { border-top: 1px solid var(--px-line-soft); }
+.workspace-theme .portal-sheet .selection-notices summary { padding: 12px 2px; font-weight: 600; }
+
+/* 材料卡 / 公告板：与纸卡同一套边界 */
+.workspace-theme .portal-sheet :is(.student-blackboard, .panel-meetings) {
+  border: 1px solid var(--px-line);
+  border-radius: var(--px-radius);
+  background: #fffefc;
+  box-shadow: var(--px-shadow-card);
+}
+
+/* 学生端「实训室列表 / 开放日 / 结果」这类一行行连接线，改成卡片列表：
+   每一行是一个可点的对象，而不是文档里的一行字。 */
+.workspace-theme .portal-sheet .student-lab-list { gap: 10px; margin: 6px 0 0; }
+.workspace-theme .portal-sheet .student-lab-list li {
+  border: 1px solid var(--px-line);
+  border-radius: 14px;
+  background: #fffefc;
+  box-shadow: 0 1px 1px rgba(66, 45, 28, .03);
+  overflow: hidden;
+}
+.workspace-theme .portal-sheet .student-lab-list li:last-child { border-bottom: 1px solid var(--px-line); }
+.workspace-theme .portal-sheet .student-lab-link { min-height: 74px; padding: 15px 18px; }
+.workspace-theme .portal-sheet .student-lab-link:hover { background: #fffaf2; }
+.workspace-theme .portal-sheet .student-lab-summary h2 { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.workspace-theme .portal-sheet .student-lab-action { padding: 4px 12px; border-radius: 999px; background: #fff4e8; font-size: 12.5px; }
+
+/* --------------------------------------------------------- 7. 模块切换条 */
+.workspace-theme .module-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--px-line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fffdf9, #fbf5ec);
+  box-shadow: var(--px-shadow-card);
+}
+.workspace-theme .module-switch strong {
+  padding-inline-end: 12px;
+  border-inline-end: 1px solid var(--px-line);
+  color: var(--px-ink);
+  font-size: 13.5px;
+  letter-spacing: .02em;
+}
+.workspace-theme .module-switch a {
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: var(--px-muted);
+  font-size: 13.5px;
+  text-decoration: none;
+}
+.workspace-theme .module-switch a:hover { background: #fff6ec; color: var(--px-accent); }
+.workspace-theme .module-switch a[aria-current] {
+  background: #fff;
+  color: var(--px-accent);
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(66, 45, 28, .07), 0 6px 14px -10px rgba(66, 45, 28, .3);
+}
+
+/* 与模块切换条相接时，把两者的圆角对成一个整体，避免出现「缺口」 */
+.workspace-theme .workspace-content > .module-switch { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.workspace-theme .module-switch + .portal-sheet {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+.workspace-theme .module-switch + .portal-sheet > .page-header {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+/* ----------------------------------------------------------- 8. 响应式 */
+@media (max-width: 720px) {
+  .workspace-theme { --px-radius-lg: 18px; }
+  .workspace-theme .portal-sheet { padding-bottom: 24px; }
+  .workspace-theme .portal-sheet > .page-header { padding-top: 22px; padding-bottom: 20px; }
+  .workspace-theme .portal-sheet > .page-header :is(h1, .page-title) { font-size: 25px; letter-spacing: -.02em; }
+  .workspace-theme .portal-sheet > .page-header::after { display: none; }
+  .workspace-theme .portal-sheet .el-card__body { padding: 14px 14px; }
+}

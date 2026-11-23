@@ -2,7 +2,7 @@ import { http } from './request'
 import type { MeetingStatus } from './interviewVideo'
 import type {
   AnnouncementItem, LabView, NoticeItem, OpenDaySchedule, PanoramaItem,
-  PreferenceItem, PublicationInfo, StageInfo, VideoItem
+  PreferenceItem, ObjectionOrigin, PublicationInfo, StageInfo, VideoItem
 } from '@/types'
 
 /** 当前阶段（由 /batches/current 计算返回） */
@@ -86,6 +86,7 @@ export interface StudentAdmission {
 }
 
 export interface StudentAdjustmentRecord {
+  requiresConsent?: boolean
   targetTeacherName?: string | null
   id: number
   batchId?: number
@@ -116,7 +117,7 @@ export interface StudentFinalResult {
   published?: boolean
 }
 
-export interface PublicationObjection {
+export interface PublicationObjection extends ObjectionOrigin {
   id: number
   studentId?: number
   type: string
@@ -135,6 +136,7 @@ export interface PreferenceSubmitPayload {
 }
 
 export interface ObjectionSubmitPayload {
+  publicationVersion?: string
   type: string
   content: string
 }
