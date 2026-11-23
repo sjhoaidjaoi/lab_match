@@ -153,7 +153,7 @@ function applyProvider(store, interview, item, info) {
   }
   if (info.status === EgressStatus.EGRESS_ENDING) item.state = 'STOPPING'
   if (info.status === EgressStatus.EGRESS_COMPLETE) {
-    const file = info.fileResults?.[0]
+    const file = info.fileResults?.[0] || (info.result?.case === 'file' ? info.result.value : null)
     item.egressEndedAt = timestamp(info.endedAt) || iso()
     item.durationSeconds = Number((file?.duration || 0n) / 1_000_000_000n)
     item.sizeBytes = Number(file?.size || 0n)
@@ -385,5 +385,5 @@ async function reconcile(enqueue, cloud, snapshot, interview, item) {
 
 module.exports = {
   active, audit, storageConfig, policyConfig, recordingFor, consentFor, ackRequired, newRecording,
-  recordingView, applyEgressWebhook, sweepRecordings, signAccess
+  recordingView, applyEgressWebhook, sweepRecordings, signAccess, startRequest, deleteObject
 }

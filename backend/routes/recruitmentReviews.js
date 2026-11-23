@@ -56,10 +56,10 @@ function selectEntries(ctx, raw, labId, requireReason = true) {
   if (requireReason && items.some(item => !item.reason)) reject('请填写每一项建议的原因', 400)
   if (new Set(items.map(item => item.studentId)).size !== items.length) reject('名单存在重复学生', 400)
   return items.map(item => {
-    const choice = scopedChoice(ctx.store, ctx.user, ctx.batch.id, item.studentId, labId)
+    const choice = scopedChoice(ctx.store, ctx.user, ctx.batch.id, item.studentId, labId, rounds.currentRoundOf(ctx.store, ctx.batch.id))
     if (!choice) reject('名单包含无权处理的学生', 403)
     const interview = selection.latestInterviews(ctx.store).find(record => record.batchId === ctx.batch.id &&
-      record.laboratoryId === labId && record.studentId === item.studentId)
+      rounds.roundOf(record) === rounds.roundOf(choice) && record.laboratoryId === labId && record.studentId === item.studentId)
     if (!selection.mentorEvaluated(ctx.store, interview)) reject('请先完成名单中每位学生的导师正式面试评价')
     return { ...item, labTeacherId: choice.labTeacherId }
   })
@@ -77,7 +77,7 @@ router.get('/', requireAuth, staff, handler(req => {
   if (!batch) return []
   const rows = store.recruitmentReviews || []
   const user = req.user
-  return rows.filter(row => row.batchId === batch.id && canAccessLab(req, row.laboratoryId) &&
+  return rows.filter(row => row.batchId === batch.id && rounds.roundOf(row) === rounds.currentRoundOf(store, batch.id) && canAccessLab(req, row.laboratoryId) &&
     (user.activeRole === ROLES.COLLEGE_ADMIN ? row.kind !== 'TEACHER'
       : user.activeRole === ROLES.LAB_LEADER ? row.kind !== 'TEACHER' || row.status !== 'DRAFT'
       : row.kind === 'TEACHER' && row.authorId === user.uid))
@@ -95,18 +95,19 @@ router.get('/', requireAuth, staff, handler(req => {
 }))
 
 function labCandidates(store, batchId, user, labId) {
+  const round = rounds.currentRoundOf(store, batchId)
   const choices = store.studentPreferences.filter(choice => choice.batchId === batchId &&
-    choice.laboratoryId === labId && choice.status === 'SUBMITTED')
+    rounds.roundOf(choice) === round && choice.laboratoryId === labId && choice.status === 'SUBMITTED')
   const interviews = new Map(selection.latestInterviews(store).filter(interview => interview.batchId === batchId &&
-    interview.laboratoryId === labId && selection.mentorEvaluated(store, interview))
+    rounds.roundOf(interview) === round && interview.laboratoryId === labId && selection.mentorEvaluated(store, interview))
     .map(interview => [interview.studentId, interview]))
   const submitted = new Map()
   const invitations = new Map(store.admissionIntentions.filter(item => item.batchId === batchId &&
-    item.laboratoryId === labId && item.source === 'TEACHER_INVITATION')
+    item.laboratoryId === labId && rounds.roundOf(item) === round && item.source === 'TEACHER_INVITATION')
     .map(item => [item.studentId, item]))
   for (const row of store.recruitmentReviews || []) {
     if (row.kind !== 'TEACHER' || row.status !== 'SUBMITTED' || row.batchId !== batchId ||
-      row.laboratoryId !== labId) continue
+      row.laboratoryId !== labId || rounds.roundOf(row) !== round) continue
     for (const item of row.entries || []) {
       submitted.set(item.studentId, { ...item, authorId: row.authorId, submittedAt: row.submittedAt })
     }
@@ -153,12 +154,13 @@ router.get('/lab-students', requireAuth, requireRole(ROLES.LAB_LEADER), handler(
   const store = getStore()
   const batch = currentBatch(store)
   const labId = req.user.laboratoryId
-  if (!labId) return []
-  const choices = store.studentPreferences.filter(item => item.batchId === batch?.id &&
+  if (!batch || !labId) return []
+  const round = rounds.currentRoundOf(store, batch.id)
+  const choices = store.studentPreferences.filter(item => item.batchId === batch.id && rounds.roundOf(item) === round &&
     item.laboratoryId === labId && item.status === 'SUBMITTED')
-  const localInterviews = new Map(selection.latestInterviews(store).filter(item => item.batchId === batch?.id && item.laboratoryId === labId)
+  const localInterviews = new Map(selection.latestInterviews(store).filter(item => item.batchId === batch.id && rounds.roundOf(item) === round && item.laboratoryId === labId)
     .map(item => [item.studentId, item]))
-  const localInvitations = new Map(store.admissionIntentions.filter(item => item.batchId === batch?.id &&
+  const localInvitations = new Map(store.admissionIntentions.filter(item => item.batchId === batch.id && rounds.roundOf(item) === round &&
     item.laboratoryId === labId && item.admissionType === 'INTENDED').map(item => [item.studentId, item]))
   const mentors = store.labTeachers.filter(mentor => mentor.laboratoryId === labId &&
     (mentor.status !== 'INACTIVE' || choices.some(choice => choice.labTeacherId === mentor.id)))
@@ -191,15 +193,15 @@ router.get('/lab-students', requireAuth, requireRole(ROLES.LAB_LEADER), handler(
 router.post('/teacher', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.LAB_LEADER), handler(async req => {
   const ctx = context(req)
   const labId = Number(ctx.user.laboratoryId)
-  if (!labId || !stageOpen(ctx.store, ctx.batch.id, 4)) reject('当前不在面试与建议提交阶段')
+  if (!labId || !((rounds.roundOpen(ctx.store, ctx.batch.id, 1) && stageOpen(ctx.store, ctx.batch.id, 4)) || supplementRoundOf(ctx.store, ctx.batch.id))) reject('当前不在面试与建议提交阶段')
   const submit = z.boolean().parse(req.body?.submit)
   // 组长的个人建议也只能使用明确选择自己的志愿。
   const entries = selectEntries({ ...ctx, user: personalScope(ctx.user) }, req.body?.entries, labId, submit)
   let row = ctx.rows.find(item => item.kind === 'TEACHER' && item.batchId === ctx.batch.id &&
-    item.laboratoryId === labId && item.authorId === ctx.user.uid)
+    item.laboratoryId === labId && item.authorId === ctx.user.uid && rounds.roundOf(item) === rounds.currentRoundOf(ctx.store, ctx.batch.id))
   if (row?.status === 'SUBMITTED') reject('名单已提交，需组长退回后才能编辑')
   if (!row) {
-    row = { id: nextId(ctx.rows), batchId: ctx.batch.id, laboratoryId: labId, kind: 'TEACHER', authorId: ctx.user.uid, version: 0 }
+    row = { id: nextId(ctx.rows), batchId: ctx.batch.id, laboratoryId: labId, kind: 'TEACHER', round: rounds.currentRoundOf(ctx.store, ctx.batch.id), authorId: ctx.user.uid, version: 0 }
     ctx.rows.push(row)
   }
   Object.assign(row, { entries, status: submit ? 'SUBMITTED' : 'DRAFT', returnReason: null })
@@ -211,9 +213,9 @@ router.post('/teacher/:id/return', requireAuth, requireRole(ROLES.LAB_LEADER), h
   const ctx = context(req)
   const row = findReview(ctx, req.params.id, 'TEACHER')
   if (!canAccessLab(req, row.laboratoryId)) reject('无权处理其他实训室名单', 403)
-  if (row.status !== 'SUBMITTED') reject('只能退回已提交名单')
+  if (rounds.roundOf(row) !== rounds.currentRoundOf(ctx.store, ctx.batch.id) || row.status !== 'SUBMITTED') reject('只能退回本轮已提交名单')
   if (ctx.rows.some(item => item.batchId === ctx.batch.id && item.laboratoryId === row.laboratoryId &&
-    item.kind === 'LAB' && ['SUBMITTED', 'APPROVED'].includes(item.status))) reject('本室名单已经报送学院')
+    rounds.roundOf(item) === rounds.roundOf(row) && item.kind === 'LAB' && ['SUBMITTED', 'APPROVED'].includes(item.status))) reject('本室名单已经报送学院')
   row.returnReason = noteSchema.parse(req.body?.reason)
   row.status = 'RETURNED'
   return save(ctx, req, row, 'RETURN_TEACHER_LIST')
@@ -222,7 +224,7 @@ router.post('/teacher/:id/return', requireAuth, requireRole(ROLES.LAB_LEADER), h
 // 补录轮次（第 2/3 轮）开放期间，报送与发布不再受首轮阶段时间窗限制
 function supplementRoundOf(store, batchId) {
   const open = rounds.openRoundOf(store, batchId)
-  return open && open.round >= 2 ? open : null
+  return open && open.round >= 2 && rounds.supplementWindow(store, batchId) ? open : null
 }
 
 // 名单生效：生成拟录取/递补记录并通知学生。
@@ -237,7 +239,7 @@ function publishLabList(ctx, req, row) {
   for (const item of selectEntries(ctx, row.entries, lab.id)) {
     const active = ctx.store.admissionIntentions.filter(record => record.batchId === ctx.batch.id && occupiesInvitation(ctx.store, record))
     const existing = ctx.store.admissionIntentions.find(record => record.batchId === ctx.batch.id &&
-      record.laboratoryId === lab.id && record.studentId === item.studentId)
+      rounds.roundOf(record) === rounds.roundOf(row) && record.laboratoryId === lab.id && record.studentId === item.studentId)
     if (existing) {
       if (existing.source === 'TEACHER_INVITATION' && existing.labTeacherId === item.labTeacherId && item.type === 'INTENDED') continue
       reject('名单与已有录取记录重复')
@@ -267,7 +269,7 @@ function publishLabList(ctx, req, row) {
 router.post('/lab', requireAuth, requireRole(ROLES.LAB_LEADER), handler(async req => {
   const ctx = context(req)
   const labId = Number(ctx.user.laboratoryId)
-  if (!labId || (![4, 5].some(stage => stageOpen(ctx.store, ctx.batch.id, stage)) && !supplementRoundOf(ctx.store, ctx.batch.id))) {
+  if (!labId || (!(rounds.roundOpen(ctx.store, ctx.batch.id, 1) && [4, 5].some(stage => stageOpen(ctx.store, ctx.batch.id, stage))) && !supplementRoundOf(ctx.store, ctx.batch.id))) {
     reject('当前不在名单提交阶段')
   }
   const currentRound = rounds.currentRoundOf(ctx.store, ctx.batch.id)
@@ -290,52 +292,10 @@ router.post('/lab', requireAuth, requireRole(ROLES.LAB_LEADER), handler(async re
   return save(ctx, req, row, 'SUBMIT_LAB_LIST')
 }))
 
-// 兼容保留：学院若需人工干预可再次触发（已生效的版本不再重复发布）
-router.post('/lab/:id/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), handler(async req => {
-  const ctx = context(req)
-  const row = findReview(ctx, req.params.id, 'LAB')
-  if (row.status === 'APPROVED') return row
-  if (row.status !== 'SUBMITTED') reject('该版本已经处理')
-  if (!z.boolean().parse(req.body?.approve)) {
-    row.status = 'RETURNED'
-    row.returnReason = noteSchema.parse(req.body?.reason)
-    return save(ctx, req, row, 'RETURN_LAB_LIST')
-  }
-  publishLabList(ctx, req, row)
-  return save(ctx, req, row, 'PUBLISH_LAB_LIST')
-}))
-
-router.post('/internal', requireAuth, requireRole(ROLES.LAB_LEADER), handler(async req => {
-  const ctx = context(req)
-  const labId = Number(ctx.user.laboratoryId)
-  const stageStatus = stageOf(ctx.store, ctx.batch.id, 6)?.stageStatus
-  if (!labId || stageStatus !== 'COMPLETED') reject('内部调剂结束后才能提交最终情况')
-  const adjustments = ctx.store.adjustments.filter(item => item.batchId === ctx.batch.id &&
-    item.targetLaboratoryId === labId && item.adjustmentType === 'INTERNAL')
-  const expiredAt = new Date().toISOString()
-  for (const item of adjustments.filter(record => record.status === 'PENDING')) {
-    item.status = 'REJECTED'
-    item.expiredAt = expiredAt
-    logOperation(ctx.store, req, { operationType: 'EXPIRE_INTERNAL_ADJUSTMENT', targetType: 'ADJUSTMENT',
-      targetId: item.id, description: '内部调剂阶段结束，未确认的通知已失效' })
-  }
-  const previous = ctx.rows.filter(item => item.kind === 'INTERNAL' && item.batchId === ctx.batch.id && item.laboratoryId === labId)
-  if (previous.some(item => ['SUBMITTED', 'APPROVED'].includes(item.status))) reject('已有待处理或已通过的版本')
-  const row = { id: nextId(ctx.rows), batchId: ctx.batch.id, laboratoryId: labId, kind: 'INTERNAL',
-    authorId: ctx.user.uid, adjustments, version: previous.length + 1, status: 'SUBMITTED', submittedAt: new Date().toISOString() }
-  ctx.rows.push(row)
-  return save(ctx, req, row, 'SUBMIT_INTERNAL_LIST')
-}))
-
-router.post('/internal/:id/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), handler(async req => {
-  const ctx = context(req)
-  const row = findReview(ctx, req.params.id, 'INTERNAL')
-  if (row.status !== 'SUBMITTED') reject('该版本已经处理')
-  const approve = z.boolean().parse(req.body?.approve)
-  row.status = approve ? 'APPROVED' : 'RETURNED'
-  if (!approve) row.returnReason = noteSchema.parse(req.body?.reason)
-  row.reviewedAt = new Date().toISOString()
-  return save(ctx, req, row, 'REVIEW_INTERNAL_LIST')
-}))
+// 历史审核链接保留明确的业务提示，名单在组长提交时已生效。
+router.post('/lab/:id/review', requireAuth, requireRole(ROLES.COLLEGE_ADMIN), (_req, res) =>
+  res.status(410).json({ message: '实训室名单由组长提交生效' }))
+router.post(['/internal', '/internal/:id/review'], requireAuth, staff, (_req, res) =>
+  res.status(410).json({ message: '室内调剂已并入学院统筹调剂录取' }))
 
 module.exports = router

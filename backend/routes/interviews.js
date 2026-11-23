@@ -1,3 +1,4 @@
+const rounds = require('../utils/rounds')
 // ============ 面试记录 ============
 // POST   /api/interviews/schedule          教师创建面试安排
 // POST   /api/interviews/:id/score         教师录入 5 维度评分 + 评价 + 建议
@@ -10,7 +11,7 @@ const { z } = require('zod')
 const { ok } = require('../utils/result')
 const { getStore, commitStore, nextId } = require('../data/seed')
 const { requireAuth, requireRole, ROLES, guardLab, isLabLeader } = require('../middleware/auth')
-const { currentBatch, scopedChoice, stageOpen } = require('../utils/applicationScope')
+const { currentBatch, scopedChoice } = require('../utils/applicationScope')
 const { findBatch, batchWritableError, stageOf, STAGE_STATUS } = require('../utils/recruitment')
 const { logOperation } = require('../utils/audit')
 const { BusinessError } = require('../middleware/error')
@@ -64,13 +65,13 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
   if (!lab) return res.status(404).json({ code: 'NOT_FOUND', message: '实训室不存在', data: null })
   if (!guardLab(req, res, body.laboratoryId)) return
 
-  const applied = scopedChoice(store, req.user, activeBatch.id, body.studentId, body.laboratoryId)
+  const applied = scopedChoice(store, req.user, activeBatch.id, body.studentId, body.laboratoryId, rounds.currentRoundOf(store, activeBatch.id))
   if (!applied || (body.preferenceId && applied.id !== body.preferenceId)) {
     return res.status(403).json({ message: '无权安排该学生的面试' })
   }
-  if (!stageOpen(store, activeBatch.id, 4)) {
+  if (!rounds.interviewOpen(store, applied)) {
     // 面试阶段整体闸门：说清是没开始、暂停还是已结束，并给出可操作的下一步
-    const stage = stageOf(store, activeBatch.id, 4)
+    const stage = stageOf(store, activeBatch.id, rounds.roundOf(applied) === 1 ? 4 : 6)
     const reason = stage?.stageStatus === STAGE_STATUS.PAUSED
       ? '面试阶段已暂停，请在学院端恢复阶段后再安排面试'
       : stage?.stageStatus === STAGE_STATUS.COMPLETED
@@ -85,7 +86,7 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
   }
 
   const latest = selection.latestInterviews(store).find(
-    (i) => i.batchId === activeBatch.id && i.studentId === body.studentId && i.laboratoryId === body.laboratoryId
+    (i) => i.batchId === activeBatch.id && i.studentId === body.studentId && i.laboratoryId === body.laboratoryId && rounds.roundOf(i) === rounds.roundOf(applied)
   )
   if (retryOf && latest?.previousInterviewId === retryOf && latest.interviewerId === req.user.uid &&
       latest.interviewTime === body.interviewTime && online === Boolean(latest.onlineRoomName) &&
@@ -93,7 +94,7 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
   if (retryOf && (!online || latest?.id !== retryOf || latest.interviewerId !== req.user.uid ||
       !latest.exceptionCode || (latest.onlineStartedAt && !latest.onlineEndedAt) ||
       selection.submittedEvaluations(store, latest).length || store.admissionIntentions.some(row =>
-        row.batchId === activeBatch.id && row.studentId === body.studentId && row.laboratoryId === lab.id))) {
+        row.batchId === activeBatch.id && rounds.roundOf(row) === rounds.roundOf(applied) && row.studentId === body.studentId && row.laboratoryId === lab.id))) {
     throw new BusinessError('仅可为已登记异常、未提交正式评价且尚未进入录取流程的面试安排补面试', 'BUSINESS_ERROR', 409)
   }
   const existing = retryOf ? null : latest
@@ -124,7 +125,7 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
     }
     // 能走到这里说明面试阶段已经开放（含学院端「提前开始」），
     // 所以只约束「未来时间」和「不超出阶段截止」，不再拿原定 startTime 当排期下限。
-    const stage = stageOf(store, activeBatch.id, 4)
+    const stage = stageOf(store, activeBatch.id, rounds.roundOf(applied) === 1 ? 4 : 6)
     if (start <= Date.now()) {
       throw new BusinessError('面试时间必须晚于当前时间，请选择未来的时段', 'BUSINESS_ERROR', 409)
     }
@@ -160,7 +161,7 @@ router.post('/schedule', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMutat
     existing.interviewTime !== body.interviewTime)
   const stamp = new Date().toISOString()
   if (rescheduled || retryOf) interview.rescheduledAt = stamp
-  Object.assign(interview, details, { interviewerId: req.user.uid, preferenceId: applied.id,
+  Object.assign(interview, details, { interviewerId: req.user.uid, preferenceId: applied.id, round: rounds.roundOf(applied),
     attemptNo: retryOf ? selection.attempt(latest) + 1 : selection.attempt(interview), acknowledgedAt: null })
   if (retryOf) interview.previousInterviewId = retryOf
   if (!existing) store.interviews.push(interview)
@@ -210,7 +211,7 @@ router.post('/:id/score', requireAuth, requireRole(ROLES.LAB_TEACHER), asyncMuta
   if (record.onlineRoomName && roomStatus(store, record) !== 'ENDED') return res.status(409).json({ message: '请先结束线上面试' })
   const stopError = batchWritableError(findBatch(store, record.batchId))
   if (stopError) return res.status(409).json({ code: 'BUSINESS_ERROR', message: stopError, data: null })
-  if (record.batchId !== currentBatch(store)?.id || !stageOpen(store, record.batchId, 4)) return res.status(409).json({ message: '本批次面试评分已关闭' })
+  if (record.batchId !== currentBatch(store)?.id || !rounds.interviewOpen(store, record)) return res.status(409).json({ message: '本批次面试评分已关闭' })
   if (!record.interviewTime || Date.parse(record.interviewTime) > Date.now() || record.interviewStatus === 'CANCELLED' || record.exceptionCode ||
       !selection.latestInterviews(store).includes(record)) return res.status(409).json({ message: '当前场次不能提交评价' })
   if (host && body.state === 'SUBMITTED' && body.recommendation !== 'INTENDED' && store.admissionIntentions.some(item =>
@@ -262,7 +263,7 @@ router.get('/:id/evaluation', requireAuth, requireRole(ROLES.LAB_TEACHER), (req,
     .sort((a, b) => b.version - a.version)
   const legacy = selection.submittedEvaluations(store, interview).find(row => row.reviewerId === req.user.uid && !row.version)
   if (legacy) history.push(legacy)
-  const editable = currentBatch(store)?.id === interview.batchId && stageOpen(store, interview.batchId, 4) &&
+  const editable = currentBatch(store)?.id === interview.batchId && rounds.interviewOpen(store, interview) &&
     selection.latestInterviews(store).includes(interview) && Date.parse(interview.interviewTime) <= Date.now() &&
     !interview.exceptionCode && interview.interviewStatus !== 'CANCELLED' &&
     (!interview.onlineRoomName || roomStatus(store, interview) === 'ENDED')
@@ -316,7 +317,7 @@ router.post('/:id/exception', requireAuth, requireRole(ROLES.LAB_TEACHER), async
   }
   const { code, reason } = z.object({ code: z.enum(['STUDENT_ABSENT', 'TEACHER_ABSENT', 'NETWORK', 'OTHER']),
     reason: z.string().trim().min(1).max(400) }).strict().parse(req.body)
-  if (currentBatch(store)?.id !== interview.batchId || !stageOpen(store, interview.batchId, 4) ||
+  if (currentBatch(store)?.id !== interview.batchId || !rounds.interviewOpen(store, interview) ||
       !selection.latestInterviews(store).includes(interview) || !interview.interviewTime || Date.parse(interview.interviewTime) > Date.now() ||
       (interview.onlineStartedAt && !interview.onlineEndedAt) || selection.submittedEvaluations(store, interview).length ||
       store.admissionIntentions.some(row => row.batchId === interview.batchId && row.studentId === interview.studentId &&
@@ -344,8 +345,8 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.COLL
   if (!guardLab(req, res, labId)) return
   const activeBatch = currentBatch(store)
   const list = selection.latestInterviews(store)
-    .filter((i) => i.laboratoryId === labId && i.batchId === activeBatch?.id &&
-      scopedChoice(store, req.user, i.batchId, i.studentId, labId))
+    .filter((i) => i.laboratoryId === labId && i.batchId === activeBatch?.id && rounds.roundOf(i) === rounds.currentRoundOf(store, i.batchId) &&
+      scopedChoice(store, req.user, i.batchId, i.studentId, labId, rounds.roundOf(i)))
     .map((i) => {
       const stu = store.users.find((u) => u.id === i.studentId)
       const interviewer = store.users.find((u) => u.id === i.interviewerId)
@@ -381,7 +382,7 @@ router.get('/my', requireAuth, requireRole(ROLES.STUDENT), (req, res) => {
         interviewTime: i.interviewTime, interviewStatus: i.interviewStatus, location: i.location,
         interviewForm: i.interviewForm, instructions: i.instructions, durationMinutes: i.durationMinutes,
         appointmentStatus, acknowledgedAt: i.acknowledgedAt,
-        canAcknowledge: stageOpen(store, i.batchId, 4) && ['SCHEDULED', 'WAITING', 'RESCHEDULED', 'IN_PROGRESS'].includes(appointmentStatus),
+        canAcknowledge: rounds.interviewOpen(store, i) && ['SCHEDULED', 'WAITING', 'RESCHEDULED', 'IN_PROGRESS'].includes(appointmentStatus),
         rescheduledAt: i.rescheduledAt, followUp: Boolean(i.exceptionCode),
         online, laboratoryName: lab?.name || `实训室#${i.laboratoryId}`, interviewerName: interviewer?.realName, labTeacherName: teacher?.name }
     })
@@ -393,7 +394,7 @@ router.post('/:id/acknowledge', requireAuth, requireRole(ROLES.STUDENT), asyncMu
   const row = selection.latestInterviews(store).find(item => item.id === Number(req.params.id) &&
     item.studentId === req.user.uid && item.batchId === currentBatch(store)?.id && selection.linkedChoice(store, item))
   if (!row) return res.status(404).json({ message: '面试不存在' })
-  if (!stageOpen(store, row.batchId, 4) || !['SCHEDULED', 'WAITING', 'RESCHEDULED', 'IN_PROGRESS'].includes(selection.appointmentStatus(row))) {
+  if (!rounds.interviewOpen(store, row) || !['SCHEDULED', 'WAITING', 'RESCHEDULED', 'IN_PROGRESS'].includes(selection.appointmentStatus(row))) {
     return res.status(409).json({ message: '该面试邀请已关闭' })
   }
   if (!row.acknowledgedAt) {

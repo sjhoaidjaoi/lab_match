@@ -23,9 +23,10 @@ function ownsChoice(store, user, choice) {
   return user.activeRole === ROLES.LAB_TEACHER && mentor?.userId === user.uid
 }
 
-function scopedChoice(store, user, batchId, studentId, laboratoryId) {
-  return store.studentPreferences.find(choice => choice.batchId === batchId &&
-    choice.studentId === studentId && choice.laboratoryId === laboratoryId && ownsChoice(store, user, choice))
+function scopedChoice(store, user, batchId, studentId, laboratoryId, round) {
+  return store.studentPreferences.filter(choice => choice.batchId === batchId &&
+    choice.studentId === studentId && choice.laboratoryId === laboratoryId && (round == null || (choice.round || 1) === round) && ownsChoice(store, user, choice))
+    .sort((a, b) => (b.round || 1) - (a.round || 1))[0]
 }
 
 // 阶段是否开放：统一走时间窗实时判定（不再依赖数据库里的 stageStatus 快照）
@@ -34,12 +35,7 @@ function stageOpen(store, batchId, number) {
 }
 
 function firstRoundEnded(store, batchId) {
-  const stage5 = stageOf(store, batchId, 5)
-  if (stage5?.stageStatus === 'COMPLETED') return true
-  return [6, 7, 8].some((no) => {
-    const status = stageOf(store, batchId, no)?.stageStatus
-    return status === 'IN_PROGRESS' || status === 'COMPLETED'
-  })
+  return stageOf(store, batchId, 5)?.stageStatus === 'COMPLETED'
 }
 
 module.exports = { currentBatch, ownsChoice, personalScope, scopedChoice, stageOpen, firstRoundEnded }

@@ -1,3 +1,4 @@
+const { roundView, thirdRoundClosed } = require('../utils/rounds')
 // ============ 选拔批次 + 八阶段时间窗 ============
 // GET  /api/batches/current      当前批次（含实时阶段状态）
 // GET  /api/batches              批次列表
@@ -99,7 +100,17 @@ router.post('/', requireAuth, collge, (req, res) => {
 router.get('/:id/stages', requireAuth, (req, res) => {
   const store = getStore()
   syncAndPersist(store)
-  res.json(ok(batchStages(store, Number(req.params.id))))
+  const batchId = Number(req.params.id)
+  const stages = batchStages(store, batchId)
+  const finished = number => stages.some(stage => stage.stageNumber === number && stage.stageStatus === STAGE_STATUS.COMPLETED)
+  const rounds = roundView(store, batchId)
+  const complete = thirdRoundClosed(store, batchId)
+  const hints = {
+    6: !finished(5) ? '等待拟录取确认结束' : rounds.supplementActive ? `第 ${rounds.open} 轮补录中` : complete ? '第三轮已结束' : '待学院公布下一轮名额',
+    7: !complete ? '等待第三轮结束' : !finished(6) ? '等待分轮补录阶段结束' : '',
+    8: !complete || !finished(7) ? '等待补录和统筹调剂结束' : ''
+  }
+  res.json(ok(stages.map(stage => ({ ...stage, businessHint: stage.stageStatus === STAGE_STATUS.IN_PROGRESS ? hints[stage.stageNumber] : undefined }))))
 })
 
 // 更新阶段时间 / 暂停 / 恢复

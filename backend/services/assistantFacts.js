@@ -1,3 +1,4 @@
+const { poolCandidates } = require('../utils/allocationPool')
 // ============ E宝 助手：数据库事实快照 ============
 // 目的只有一个：让大模型「照着数据库回答」，而不是照着语言习惯编答案。
 //
@@ -135,7 +136,7 @@ function studentBlock(store, batch, uid, surplus) {
   }
 
   const openRound = rounds.openRoundOf(store, batch.id)
-  if (openRound && openRound.round > 1 && !placed) {
+  if (openRound && openRound.round > 1 && rounds.supplementWindow(store, batch.id) && !placed) {
     const open = surplus.labs.filter((lab) => lab.remaining > 0).map((lab) => `${lab.name} 剩 ${lab.remaining}`)
     lines.push(`补录：第 ${openRound.round} 轮开放中${open.length ? `，仍有名额的实训室：${open.join('，')}` : '，当前所有实训室都已无名额'}`)
   }
@@ -204,27 +205,10 @@ function collegeBlock(store, batch, surplus) {
     Number(row.batchId) === Number(batch.id) && row.finalStatus !== 'REJECTED')
   lines.push(`最终名单：${finals.length} 人（已确认录取去向 ${confirmed.size} 人）`)
 
-  /* 调剂池：未录取且已填志愿的学生，按三级优先级估算 */
-  const placed = new Set(confirmed.keys())
-  const prefs = (store.studentPreferences || []).filter((row) =>
-    Number(row.batchId) === Number(batch.id) && row.status === 'SUBMITTED')
-  const unplacedStudents = new Set()
-  prefs.forEach((row) => { if (!placed.has(row.studentId)) unplacedStudents.add(row.studentId) })
-  const bucket = { 1: 0, 2: 0, 3: 0 }
-  const stats = new Map(surplus.labs.map((lab) => [lab.id, lab]))
-  unplacedStudents.forEach((studentId) => {
-    const choices = prefs.filter((row) => row.studentId === studentId)
-    const own = choices.some((row) => (stats.get(Number(row.laboratoryId))?.remaining || 0) > 0)
-    const obeyCollege = choices.some((row) => row.obeyCollegeAdjustment)
-    const interviewed = choices.some((row) => (store.interviews || []).some((item) =>
-      Number(item.batchId) === Number(batch.id) && Number(item.studentId) === Number(studentId) &&
-      Number(item.laboratoryId) === Number(row.laboratoryId) &&
-      ['COMPLETED', 'PASSED'].includes(item.interviewStatus || '')))
-    if (interviewed && own) bucket[1] += 1
-    else if (obeyCollege && surplus.totals.remaining > 0) bucket[2] += 1
-    else bucket[3] += 1
-  })
-  lines.push(`调剂池：未录取且填过志愿 ${unplacedStudents.size} 人（本室优先 ${bucket[1]} / 跨室可调 ${bucket[2]} / 需人工安置 ${bucket[3]}）`)
+  if (rounds.poolOpen(store, batch.id)) {
+    const { rows } = poolCandidates(store, batch)
+    lines.push(`调剂池：本室优先 ${rows.filter(row => row.priority === 1).length} 人，跨室可调 ${rows.filter(row => row.priority === 2).length} 人，其余暂时没有符合意愿的去向。`)
+  }
 
   const objections = (store.publicationObjections || []).filter((row) => Number(row.batchId) === Number(batch.id))
   if (objections.length) lines.push(`公示异议：${objections.length} 条`)

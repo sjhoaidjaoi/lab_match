@@ -1,3 +1,4 @@
+const rounds = require('../utils/rounds')
 // ============ 学生志愿（意向填报） ============
 // POST   /api/preferences/submit            学生提交最多 3 个平行志愿 + 2 项调剂意愿
 // GET    /api/preferences/my                学生查看自己的志愿
@@ -164,11 +165,11 @@ router.get('/lab/:labId', requireAuth, requireRole(ROLES.LAB_TEACHER, ROLES.COLL
   const activeBatch = activeBatchOf(store)
   const latest = latestInterviews(store)
   const list = store.studentPreferences
-    .filter((p) => p.laboratoryId === labId && p.batchId === activeBatch?.id && ownsChoice(store, req.user, p))
+    .filter((p) => p.laboratoryId === labId && p.batchId === activeBatch?.id && rounds.roundOf(p) === rounds.currentRoundOf(store, activeBatch.id) && ownsChoice(store, req.user, p))
     .map((p) => {
       const student = store.users.find((u) => u.id === p.studentId)
       const resume = (store.applicationResumes || []).find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.submittedAt)
-      const interview = latest.find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.laboratoryId === labId)
+      const interview = latest.find(item => item.batchId === p.batchId && item.studentId === p.studentId && item.laboratoryId === labId && rounds.roundOf(item) === rounds.roundOf(p))
       return {
         id: p.id, studentId: p.studentId, laboratoryId: labId,
         studentName: student?.realName || '', studentNumber: student?.studentNumber || '',

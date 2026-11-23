@@ -2,6 +2,8 @@
 // 第 1 轮为主线录取，第 2、3 轮为补录轮；三轮结束后剩余名额进入全院调剂池。
 // 历史数据没有 round 字段，一律视为第 1 轮（见 data/seed.js migrateStore）。
 
+const { stageOpen, stageCompleted } = require('./recruitment')
+
 const MAX_ROUND = 3
 
 const ROUND_LABELS = { 1: '第一轮', 2: '第二轮补录', 3: '第三轮补录' }
@@ -47,6 +49,25 @@ function roundOpen(store, batchId, round) {
   return effectiveRounds(store, batchId).some((row) => row.round === Number(round) && row.status === 'OPEN')
 }
 
+function supplementWindow(store, batchId, now) {
+  return stageCompleted(store, batchId, 5, now) && stageOpen(store, batchId, 6, now)
+}
+
+function interviewOpen(store, record, now) {
+  const round = roundOf(record)
+  return roundOpen(store, record.batchId, round) && (round === 1
+    ? stageOpen(store, record.batchId, 4, now)
+    : supplementWindow(store, record.batchId, now))
+}
+
+function thirdRoundClosed(store, batchId) {
+  return roundsOf(store, batchId).some(row => row.round === MAX_ROUND && row.status === 'CLOSED')
+}
+
+function poolOpen(store, batchId) {
+  return thirdRoundClosed(store, batchId) && stageOpen(store, batchId, 7) && stageCompleted(store, batchId, 6)
+}
+
 function roundView(store, batchId) {
   const list = effectiveRounds(store, batchId)
   const current = currentRoundOf(store, batchId)
@@ -55,7 +76,9 @@ function roundView(store, batchId) {
     current,
     max: MAX_ROUND,
     open: open ? open.round : null,
-    canOpenNext: !open && current < MAX_ROUND,
+    supplementActive: Boolean(open && open.round > 1 && supplementWindow(store, batchId)),
+    canClose: Boolean(open && (open.round > 1 || stageCompleted(store, batchId, 5))),
+    canOpenNext: !open && current < MAX_ROUND && supplementWindow(store, batchId),
     rounds: list.map((row) => ({
       round: row.round,
       label: row.label || ROUND_LABELS[row.round] || `第 ${row.round} 轮`,
@@ -87,6 +110,7 @@ function ensureBaseRound(store, batchId, operatorId) {
 
 // 开启指定轮次；不传则自动开启下一轮
 function openRound(store, batchId, round, operatorId) {
+  if (!supplementWindow(store, batchId)) return { error: '请先结束拟录取与学生确认，并开启分轮补录阶段' }
   const list = ensureBaseRound(store, batchId, operatorId)
   const target = round == null ? Math.min(MAX_ROUND, currentRoundOf(store, batchId) + 1) : Number(round)
   if (!Number.isInteger(target) || target < 1 || target > MAX_ROUND) return { error: `轮次必须是 1-${MAX_ROUND}` }
@@ -113,6 +137,7 @@ function closeRound(store, batchId, round, operatorId) {
   const row = ensureBaseRound(store, batchId, operatorId).find((item) => item.round === Number(round))
   if (!row) return { error: '轮次不存在' }
   if (row.status !== 'OPEN') return { error: '该轮次不是开放状态' }
+  if (row.round === 1 && !stageCompleted(store, batchId, 5)) return { error: '拟录取与学生确认尚未结束' }
   row.status = 'CLOSED'
   row.closedAt = new Date().toISOString()
   row.closedBy = operatorId ?? null
@@ -121,5 +146,5 @@ function closeRound(store, batchId, round, operatorId) {
 
 module.exports = {
   MAX_ROUND, ROUND_LABELS, roundOf, roundsOf, effectiveRounds, currentRoundOf, openRoundOf,
-  roundOpen, roundView, ensureBaseRound, openRound, closeRound
+  supplementWindow, interviewOpen, thirdRoundClosed, poolOpen, roundOpen, roundView, ensureBaseRound, openRound, closeRound
 }
