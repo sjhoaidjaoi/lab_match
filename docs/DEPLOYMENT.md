@@ -106,10 +106,11 @@ LOGIN_RATE_WINDOW_MS=600000
 # 1) 建库与账号（在 MySQL 中执行）
 CREATE DATABASE lab_match DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER 'lab_match'@'127.0.0.1' IDENTIFIED BY '<数据库密码>';
-GRANT ALL PRIVILEGES ON lab_match.* TO 'lab_match'@'127.0.0.1';
+-- 只需要该库范围内的权限；不需要任何全局权限，也不需要 SUPER
+GRANT CREATE, ALTER, INDEX, REFERENCES, SELECT, INSERT, UPDATE, DELETE, DROP ON lab_match.* TO 'lab_match'@'127.0.0.1';
 FLUSH PRIVILEGES;
 
-# 2) 建表与迁移（可重复执行，内部按 v2 → v12 顺序应用增量迁移）
+# 2) 建表与迁移（可重复执行）
 cd /opt/lab_match/backend
 npm run db:init
 
@@ -117,11 +118,36 @@ npm run db:init
 npm run db:check
 ```
 
-迁移脚本位于 `database/`，编号 `migration_v2.sql` … `migration_v13.sql`，按序应用。上线前可先做静态校验：
+**`db:init` 的判定逻辑**（依据 `information_schema` 里的实际表，而不是「库是否存在」）：
+
+| 现场状态 | 行为 | 输出 |
+| --- | --- | --- |
+| 数据库不存在 | `CREATE DATABASE` + 执行完整 `schema.sql` | `数据库不存在 → 已新建数据库并完成建表` |
+| 库存在但没有任何本系统表 | 执行完整 `schema.sql` | `数据库已存在但没有业务表 → 已按首次建表执行完整 schema` |
+| 库存在且已有本系统表 | 只按 v2 → vN 顺序执行增量迁移 | `数据库已存在且有业务表 → 只执行了增量迁移（未执行任何 DROP）` |
+
+安全边界：
+
+- **绝不执行 `DROP DATABASE`**；只有「库内本系统表为 0 张」时才允许执行含 `DROP TABLE` 的完整 `schema.sql`；
+- 库已存在但基础表不全（历史半初始化）时**直接报错退出**，不会静默补建、不会删表；
+- 迁移过程中只忽略「对象已存在」类错误（列/索引/外键/表已存在），数据类错误（如 1062 重复数据）一律抛出，并给出 `文件 + 第几条语句 + MySQL 错误码`。
+
+`npm run db:init` 结束时会校验 37 张业务表是否齐全，只有全部存在才打印「初始化完成」。
+
+迁移脚本位于 `database/`，编号 `migration_v2.sql` … `migration_v14.sql`，按序应用。上线前可先做静态校验：
 
 ```bash
 node database/verify.js
 ```
+
+若目标环境有可用 MySQL，可先跑一遍真实验收（会自建 `lab_match_test_*` 独立测试库并在结束后删除，不会碰业务库）：
+
+```bash
+cd backend
+MYSQL_TEST_HOST=127.0.0.1 MYSQL_TEST_PORT=3306 MYSQL_TEST_USER=lab_match MYSQL_TEST_PASSWORD='<密码>' npm run test:db
+```
+
+未提供 MySQL 连接时该套件自动跳过（退出码 0）。
 
 > **v13 迁移要点（多轮补录与全院调剂池）**：新增 `recruitment_rounds` 表（批次内轮次），并给
 > `student_preferences` / `interviews` / `admission_intentions` / `adjustments` / `final_admissions`

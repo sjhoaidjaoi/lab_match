@@ -20,6 +20,7 @@
     "test:rate-limit": "node tests/rate-limit.js",
     "test:stage-clock": "node tests/stage-clock.js",
     "test:allocation": "node tests/allocation.js",
+    "test:db": "node tests/db-init.js",
     "test:all": "node tests/run-all.js",
     "check:storage": "node scripts/check-storage.js",
     "check:ffmpeg": "node scripts/check-ffmpeg.js",

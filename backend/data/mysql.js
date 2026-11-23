@@ -65,6 +65,24 @@ const SINGLETON_COLLECTIONS = new Set(['publication', 'finalReview'])
 
 const SKIP_COLUMNS = new Set(['extra_json'])
 
+/** 初始化结束后必须存在的表：后端集合映射 + 志愿提交记录表（v4 建表，未纳入集合映射） */
+const REQUIRED_TABLES = [...new Set([...Object.values(COLLECTION_TABLES), 'student_preference_submissions'])]
+
+/**
+ * 迁移过程中允许忽略的错误：只涵盖「对象已存在」这类可重复执行产生的噪音。
+ * 注意：ER_DUP_ENTRY（1062，数据重复）、ER_NO_SUCH_TABLE（1146，表缺失）等一律抛出，
+ * 不能为了让脚本跑完而吞掉真正的迁移问题。
+ */
+const IGNORABLE_MIGRATION_CODES = new Set([
+  'ER_DUP_FIELDNAME',      // 列已存在
+  'ER_DUP_KEYNAME',        // 索引已存在
+  'ER_FK_DUP_NAME',        // 外键名已存在
+  'ER_TABLE_EXISTS_ERROR'  // 表已存在
+])
+
+/** 数据库名只允许字母、数字、下划线（用于拼接标识符，防止注入） */
+const DB_NAME_PATTERN = /^[A-Za-z0-9_]+$/
+
 function snakeToCamel(key) {
   return key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
 }
@@ -126,15 +144,27 @@ function recordToRow(record, columns) {
   return row
 }
 
-function getPool() {
-  if (pool) return pool
-  const mysql = require('mysql2/promise')
-  pool = mysql.createPool({
+/** 连接参数（运行期与初始化共用同一套环境变量） */
+function dbConfig() {
+  return {
     host: process.env.MYSQL_HOST || '127.0.0.1',
     port: Number(process.env.MYSQL_PORT || 3306),
     user: process.env.MYSQL_USER || 'root',
     password: process.env.MYSQL_PASSWORD || '',
-    database: process.env.MYSQL_DATABASE || 'lab_match',
+    database: process.env.MYSQL_DATABASE || 'lab_match'
+  }
+}
+
+function getPool() {
+  if (pool) return pool
+  const mysql = require('mysql2/promise')
+  const { host, port, user, password, database } = dbConfig()
+  pool = mysql.createPool({
+    host,
+    port,
+    user,
+    password,
+    database,
     waitForConnections: true,
     connectionLimit: Number(process.env.MYSQL_POOL_SIZE || 5),
     charset: 'utf8mb4',
@@ -239,59 +269,374 @@ async function saveStore(store, submission) {
   }
 }
 
-/** 执行建表 + 迁移脚本（仅用于 npm run db:init） */
-async function initDatabase() {
+// ---------------------------------------------------------------------
+// 初始化辅助：SQL 解析、结构探测、错误包装
+// ---------------------------------------------------------------------
+
+function readDatabaseFile(name) {
+  return fs.readFileSync(path.join(__dirname, '../../database', name), 'utf8')
+}
+
+/**
+ * 按分号拆分 SQL，跳过字符串、反引号标识符和注释里的分号。
+ * 本项目不使用 DELIMITER 与存储过程，常规语句即可覆盖 schema 与全部迁移。
+ */
+function splitSqlStatements(sqlText) {
+  const statements = []
+  let current = ''
+  let index = 0
+  const flush = () => {
+    const text = current.trim()
+    if (text) statements.push(text)
+    current = ''
+  }
+  while (index < sqlText.length) {
+    const char = sqlText[index]
+    const next = sqlText[index + 1]
+    // -- 行注释（MySQL 要求 -- 后跟空白）
+    if (char === '-' && next === '-' && (index + 2 >= sqlText.length || /\s/.test(sqlText[index + 2]))) {
+      while (index < sqlText.length && sqlText[index] !== '\n') index += 1
+      current += '\n'
+      continue
+    }
+    // # 行注释
+    if (char === '#') {
+      while (index < sqlText.length && sqlText[index] !== '\n') index += 1
+      continue
+    }
+    // /* */ 块注释
+    if (char === '/' && next === '*') {
+      const end = sqlText.indexOf('*/', index + 2)
+      index = end === -1 ? sqlText.length : end + 2
+      current += ' '
+      continue
+    }
+    // 字符串与反引号标识符
+    if (char === "'" || char === '"' || char === '`') {
+      const quote = char
+      current += char
+      index += 1
+      while (index < sqlText.length) {
+        const inner = sqlText[index]
+        if (inner === '\\' && quote !== '`') {
+          current += inner + (sqlText[index + 1] || '')
+          index += 2
+          continue
+        }
+        if (inner === quote) {
+          if (sqlText[index + 1] === quote) {
+            current += inner + inner
+            index += 2
+            continue
+          }
+          current += inner
+          index += 1
+          break
+        }
+        current += inner
+        index += 1
+      }
+      continue
+    }
+    if (char === ';') {
+      flush()
+      index += 1
+      continue
+    }
+    current += char
+    index += 1
+  }
+  flush()
+  return statements
+}
+
+/** 解析 SQL 文本里真正建表的表名（已剔除注释） */
+function createTableNames(sqlText) {
+  const names = []
+  for (const statement of splitSqlStatements(sqlText)) {
+    const match = statement.match(/^CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+`?([A-Za-z0-9_]+)`?/i)
+    if (match) names.push(match[1])
+  }
+  return names
+}
+
+/** 迁移文件按版本升序；编号必须从 v2 起连续，避免漏跑 */
+function migrationFileList() {
+  const dir = path.join(__dirname, '../../database')
+  const listed = fs.readdirSync(dir)
+    .map((file) => {
+      const matched = file.match(/^migration_v(\d+)\.sql$/)
+      return { file, version: matched ? Number(matched[1]) : NaN }
+    })
+    .filter((item) => Number.isFinite(item.version))
+    .sort((a, b) => a.version - b.version)
+  if (!listed.length) throw new Error('database/ 目录下没有找到 migration_v*.sql')
+  const expected = listed.map((_, index) => index + 2)
+  if (listed.some((item, index) => item.version !== expected[index])) {
+    throw new Error(`迁移文件编号不连续：期望 ${expected.map((v) => `v${v}`).join(',')}，实际 ${listed.map((item) => `v${item.version}`).join(',')}`)
+  }
+  return listed
+}
+
+/** 当前库的业务表（BASE TABLE）清单 */
+async function listBaseTables(conn, database) {
+  const [rows] = await conn.query(
+    `SELECT TABLE_NAME AS tableName FROM information_schema.TABLES
+      WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'
+      ORDER BY TABLE_NAME`,
+    [database]
+  )
+  return rows.map((row) => row.tableName || row.TABLE_NAME)
+}
+
+/**
+ * 表的索引名清单。表不存在时返回空数组（information_schema 不会像 SHOW INDEX 那样报 1146），
+ * 这正是空库初始化失败的直接原因所在。
+ */
+async function listIndexNames(conn, database, table) {
+  const [rows] = await conn.query(
+    `SELECT DISTINCT INDEX_NAME AS indexName FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`,
+    [database, table]
+  )
+  return rows.map((row) => row.indexName || row.INDEX_NAME)
+}
+
+function statementPreview(statement, limit = 160) {
+  const compact = String(statement).replace(/\s+/g, ' ').trim()
+  return compact.length > limit ? `${compact.slice(0, limit)} …` : compact
+}
+
+/** 把失败语句包装成可定位的错误：文件 + 第几条 + SQL 片段 + MySQL 错误码 */
+function buildStatementError({ file, index, total, statement, error, executedBefore = 0 }) {
+  const lines = [
+    `${file} 第 ${index + 1}/${total} 条语句执行失败`,
+    `  SQL: ${statementPreview(statement)}`,
+    `  MySQL: ${error.code || 'UNKNOWN'}${error.errno ? ` (${error.errno})` : ''} ${error.sqlMessage || error.message}`
+  ]
+  if (executedBefore > 0) {
+    lines.push(`  本次已成功执行 ${executedBefore} 条语句；DDL 不可回滚，请据此判断是否需要从备份恢复`)
+  }
+  const wrapped = new Error(lines.join('\n'))
+  wrapped.dbInit = {
+    file,
+    index,
+    total,
+    statement: statementPreview(statement, 400),
+    code: error.code,
+    errno: error.errno,
+    executedBefore
+  }
+  return wrapped
+}
+
+async function createDatabase(conn, database) {
+  try {
+    await conn.query(`CREATE DATABASE IF NOT EXISTS \`${database}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+  } catch (error) {
+    if (!['ER_DBACCESS_DENIED_ERROR', 'ER_ACCESS_DENIED_ERROR', 'ER_SPECIFIC_ACCESS_DENIED_ERROR'].includes(error.code)) throw error
+    const account = process.env.MYSQL_USER || 'root'
+    const accountHost = process.env.MYSQL_HOST || '127.0.0.1'
+    const wrapped = new Error([
+      `创建数据库 ${database} 失败：账号 ${account} 没有建库权限`,
+      '请让 DBA 执行下面两句（只需一次），然后重跑 npm run db:init：',
+      `  CREATE DATABASE \`${database}\` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`,
+      `  GRANT ALL PRIVILEGES ON \`${database}\`.* TO '${account}'@'${accountHost}';`,
+      '应用账号只需该库范围内的权限，不需要任何全局权限或 SUPER。'
+    ].join('\n'))
+    wrapped.cause = error
+    throw wrapped
+  }
+}
+
+/** 执行完整建表脚本（仅在库内没有任何本系统表时调用） */
+async function applySchema(conn, schemaSql, log) {
+  const statements = splitSqlStatements(schemaSql)
+    .filter((statement) => !/^(USE|CREATE\s+DATABASE)\b/i.test(statement))
+  if (statements.some((statement) => /^DROP\s+DATABASE\b/i.test(statement))) {
+    throw new Error('schema.sql 中出现 DROP DATABASE，初始化已中止（本工具不会删除数据库）')
+  }
+  let executed = 0
+  for (let index = 0; index < statements.length; index += 1) {
+    try {
+      await conn.query(statements[index])
+      executed += 1
+    } catch (error) {
+      throw buildStatementError({ file: 'schema.sql', index, total: statements.length, statement: statements[index], error, executedBefore: executed })
+    }
+  }
+  log(`已执行完整建表脚本 schema.sql（${executed} 条语句）`)
+  return executed
+}
+
+/**
+ * 历史遗留唯一键的跳过规则（保持既有迁移顺序语义）：
+ * 数据库一旦升级到「带轮次/次数」的唯一键，再补建旧的三列/四列唯一键会与历史多轮数据冲突，
+ * 旧键在 v12/v13/v14 中本来就会被删除，因此直接跳过而不是让 DDL 报 1062。
+ */
+function shouldSkipLegacyIndex(statement, indexState) {
+  if (/ADD\s+UNIQUE\s+KEY\s+`?uk_interview_batch_student_lab`?/i.test(statement)) {
+    return indexState.interviews.some((name) => name === 'uk_interview_attempt' || name === 'uk_interview_round_attempt')
+  }
+  if (/ADD\s+UNIQUE\s+KEY\s+`?uk_interview_attempt`?/i.test(statement)) {
+    return indexState.interviews.includes('uk_interview_round_attempt')
+  }
+  if (/ADD\s+UNIQUE\s+KEY\s+`?uk_intend_batch_student_lab`?/i.test(statement)) {
+    return indexState.admissionIntentions.includes('uk_intend_round')
+  }
+  return false
+}
+
+/** 按 v2 → vN 顺序逐条执行增量迁移；只忽略「对象已存在」，数据类错误一律抛出 */
+async function applyMigrations(conn, migrations, indexState) {
+  let executed = 0
+  let skipped = 0
+  for (const migration of migrations) {
+    const statements = splitSqlStatements(migration.sql)
+      .filter((statement) => !/^USE\b/i.test(statement))
+    for (let index = 0; index < statements.length; index += 1) {
+      const statement = statements[index]
+      if (shouldSkipLegacyIndex(statement, indexState)) {
+        skipped += 1
+        continue
+      }
+      try {
+        await conn.query(statement)
+        executed += 1
+      } catch (error) {
+        if (IGNORABLE_MIGRATION_CODES.has(error.code)) {
+          skipped += 1
+          continue
+        }
+        throw buildStatementError({
+          file: migration.file,
+          index,
+          total: statements.length,
+          statement,
+          error,
+          executedBefore: executed
+        })
+      }
+    }
+  }
+  return { executed, skipped }
+}
+
+/**
+ * 初始化数据库（npm run db:init）：建库 → 建表 → 增量迁移
+ *
+ * 三种互斥判定（依据 information_schema 的实际表，而不是「库是否存在」）：
+ *   1. 数据库不存在                → 建库 + 执行完整 schema.sql
+ *   2. 库存在但本系统表 0 张        → 执行完整 schema.sql（库内没有可丢的业务数据）
+ *   3. 库存在且已有本系统表         → 只按 v2..vN 顺序执行增量迁移，绝不执行 schema.sql
+ *
+ * 安全边界：不 DROP DATABASE；只有「本系统表 0 张」时才执行含 DROP TABLE 的 schema.sql；
+ *           已有业务表时若缺基础表，直接报错退出，不做任何破坏性补齐。
+ */
+async function initDatabase(options = {}) {
   const mysql = require('mysql2/promise')
-  const database = process.env.MYSQL_DATABASE || 'lab_match'
-  if (!/^[A-Za-z0-9_]+$/.test(database)) throw new Error('MYSQL_DATABASE 只能包含字母、数字和下划线')
-  const rootConn = await mysql.createConnection({
-    host: process.env.MYSQL_HOST || '127.0.0.1',
-    port: Number(process.env.MYSQL_PORT || 3306),
-    user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || '',
+  const log = typeof options.log === 'function' ? options.log : () => {}
+  const { host, port, user, password, database } = dbConfig()
+  if (!DB_NAME_PATTERN.test(database)) throw new Error('MYSQL_DATABASE 只能包含字母、数字和下划线')
+
+  const schemaSql = readDatabaseFile('schema.sql')
+  const schemaTables = createTableNames(schemaSql)
+  if (!schemaTables.length) throw new Error('schema.sql 中没有解析到 CREATE TABLE 语句，初始化已中止')
+
+  const migrations = migrationFileList().map((item) => ({ ...item, sql: readDatabaseFile(item.file) }))
+  const knownTables = new Set([...schemaTables, ...migrations.flatMap((item) => createTableNames(item.sql))])
+
+  const conn = await mysql.createConnection({
+    host,
+    port,
+    user,
+    password,
     multipleStatements: true,
     charset: 'utf8mb4'
   })
+
+  const result = {
+    database,
+    endpoint: `${host}:${port}`,
+    mode: '',
+    createdDatabase: false,
+    tablesBefore: 0,
+    systemTablesBefore: 0,
+    schemaStatements: 0,
+    migrationFiles: migrations.map((item) => item.file),
+    migrationStatements: 0,
+    skippedStatements: 0,
+    tablesAfter: 0,
+    tables: []
+  }
+
   try {
-    const [dbRows] = await rootConn.query(
+    const [schemaRows] = await conn.query(
       'SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = ?', [database]
     )
-    const schemaFile = path.join(__dirname, '../../database/schema.sql')
-    const prerequisiteMigrations = ['migration_v2.sql', 'migration_v3.sql', 'migration_v6.sql', 'migration_v7.sql', 'migration_v8.sql', 'migration_v9.sql', 'migration_v10.sql', 'migration_v11.sql', 'migration_v12.sql', 'migration_v13.sql', 'migration_v14.sql']
-    const studentMigration = fs.readFileSync(path.join(__dirname, '../../database/migration_v4.sql'), 'utf8')
-    const reviewMigration = fs.readFileSync(path.join(__dirname, '../../database/migration_v5.sql'), 'utf8')
-    const created = !dbRows.length
-    if (created) {
-      // 全新数据库：直接执行完整建表脚本
-      await rootConn.query(fs.readFileSync(schemaFile, 'utf8')
-        .replace(/(CREATE DATABASE IF NOT EXISTS |^USE )lab_match\b/gm, (_match, prefix) => prefix + '`' + database + '`'))
+    const databaseExists = schemaRows.length > 0
+    let existingTables = []
+    if (databaseExists) {
+      await conn.query(`USE \`${database}\``)
+      existingTables = await listBaseTables(conn, database)
     }
-    // 已存在数据库：只执行增量迁移（schema.sql 中的 DROP 不得执行）
-    await rootConn.query(`USE \`${database}\``)
-    const [attemptIndexes] = await rootConn.query("SHOW INDEX FROM interviews WHERE Key_name IN ('uk_interview_attempt', 'uk_interview_round_attempt')")
-    const [roundIndexes] = await rootConn.query("SHOW INDEX FROM interviews WHERE Key_name = 'uk_interview_round_attempt'")
-    const [admissionRoundIndexes] = await rootConn.query("SHOW INDEX FROM admission_intentions WHERE Key_name = 'uk_intend_round'")
-    const migrationSql = prerequisiteMigrations.map(file => fs.readFileSync(path.join(__dirname, '../../database', file), 'utf8')).join('\n')
-    // 逐条执行，已存在的列/表/索引错误忽略，保证脚本可重复执行
-    const statements = migrationSql.replace(/^\s*--[^\r\n]*/gm, '')
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s && !/^USE\s/i.test(s))
-    for (const statement of statements) {
-      if (attemptIndexes.length && /ADD UNIQUE KEY uk_interview_batch_student_lab\b/.test(statement)) continue
-      if (roundIndexes.length && /ADD UNIQUE KEY uk_interview_attempt\b/.test(statement)) continue
-      if (admissionRoundIndexes.length && /ADD UNIQUE KEY uk_intend_batch_student_lab\b/.test(statement)) continue
-      try {
-        await rootConn.query(statement)
-      } catch (err) {
-        if (!['ER_DUP_FIELDNAME', 'ER_DUP_KEYNAME', 'ER_FK_DUP_NAME', 'ER_TABLE_EXISTS_ERROR'].includes(err.code)) throw err
+    const existingSystemTables = existingTables.filter((table) => knownTables.has(table))
+    result.tablesBefore = existingTables.length
+    result.systemTablesBefore = existingSystemTables.length
+
+    if (!databaseExists) {
+      result.mode = 'created'
+      await createDatabase(conn, database)
+      result.createdDatabase = true
+      await conn.query(`USE \`${database}\``)
+      log(`数据库 ${database} 不存在，已新建`)
+    } else if (existingSystemTables.length === 0) {
+      result.mode = 'schema'
+      log(`数据库 ${database} 已存在但没有本系统业务表，按首次建表处理`)
+    } else {
+      result.mode = 'migrate'
+      log(`数据库 ${database} 已存在且已有 ${existingSystemTables.length} 张业务表，只执行增量迁移`)
+    }
+
+    if (result.mode !== 'migrate') {
+      // 执行含 DROP TABLE 的脚本前再确认一次，防止判定与实际不符时误删
+      const recheck = (await listBaseTables(conn, database)).filter((table) => knownTables.has(table))
+      if (recheck.length) {
+        throw new Error(`数据库中已存在本系统表（${recheck.join(', ')}），已中止执行完整建表脚本以避免误删数据`)
+      }
+      result.schemaStatements = await applySchema(conn, schemaSql, log)
+    } else {
+      const missingBase = schemaTables.filter((table) => !existingTables.includes(table))
+      if (missingBase.length) {
+        throw new Error([
+          `数据库 ${database} 已存在但不完整：缺少基础表 ${missingBase.join(', ')}`,
+          '为避免误删既有数据，本次不会执行含 DROP TABLE 的完整建表脚本，也没有自动替换或删除任何表。',
+          '处理建议：',
+          `  · 若该库可以丢弃：由 DBA 执行 DROP DATABASE \`${database}\`; 后重新运行 npm run db:init`,
+          '  · 若需保留数据：从备份恢复，或人工补齐上述基础表后再执行'
+        ].join('\n'))
       }
     }
-    await rootConn.query(studentMigration)
-    await rootConn.query(reviewMigration)
-    return { created }
+
+    // 索引现状（information_schema 查询，表不存在时为空数组，不会抛 1146）
+    const indexState = {
+      interviews: await listIndexNames(conn, database, 'interviews'),
+      admissionIntentions: await listIndexNames(conn, database, 'admission_intentions')
+    }
+    const applied = await applyMigrations(conn, migrations, indexState)
+    result.migrationStatements = applied.executed
+    result.skippedStatements = applied.skipped
+
+    const after = await listBaseTables(conn, database)
+    result.tablesAfter = after.length
+    result.tables = after
+    const missing = REQUIRED_TABLES.filter((table) => !after.includes(table))
+    if (missing.length) {
+      throw new Error(`初始化结束但缺少 ${missing.length} 张表：${missing.join(', ')}；请检查 schema.sql 与迁移是否被跳过`)
+    }
+    return result
   } finally {
-    await rootConn.end()
+    await conn.end()
   }
 }
 
@@ -311,5 +656,18 @@ async function close() {
 module.exports = {
   enabled, loadStore, saveStore, initDatabase, ping, close,
   // 导出内部工具便于单元自检
-  __internals: { snakeToCamel, camelToSnake, rowToRecord, recordToRow, getTableSchema }
+  __internals: {
+    snakeToCamel,
+    camelToSnake,
+    rowToRecord,
+    recordToRow,
+    getTableSchema,
+    splitSqlStatements,
+    createTableNames,
+    migrationFileList,
+    listBaseTables,
+    listIndexNames,
+    REQUIRED_TABLES,
+    IGNORABLE_MIGRATION_CODES
+  }
 }
